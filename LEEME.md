@@ -87,3 +87,34 @@ Almacén Digital, y si cambias reglas de una app, edítalas aquí y vuelve a cop
     npm test
 
 Córrelos antes de cada `firebase deploy --only firestore:rules`.
+
+## Deploy automático desde GitHub
+
+`.github/workflows/firebase.yml` corre los tests de reglas en cada pull
+request y, cuando se aceptan cambios en `main`, despliega `firestore.rules`
+y las 8 Cloud Functions de Mi Comunidad. Nombra cada función por su nombre,
+así que nunca borra ni toca las de Mercado Ciudadano ni Almacén Digital.
+También se puede lanzar a mano: pestaña **Actions → Firebase → Run workflow**.
+
+Configuración (una sola vez):
+
+1. Google Cloud Console → proyecto `mercado-ciudadano` → **IAM y administración
+   → Cuentas de servicio → Crear cuenta de servicio** (ej. `github-deploy`).
+2. Dale estos roles:
+   - Firebase Rules Admin
+   - Cloud Functions Admin
+   - Service Account User
+   - Cloud Scheduler Admin (por la tarea diaria de vencimientos)
+   - Artifact Registry Writer y Cloud Build Editor (para compilar las functions)
+
+   Si un deploy falla por un permiso, el error indica qué rol falta.
+3. En esa cuenta: **Claves → Agregar clave → JSON**. Se descarga un archivo.
+4. GitHub → repositorio → **Settings → Secrets and variables → Actions →
+   New repository secret**, nombre `FIREBASE_SERVICE_ACCOUNT`, y pega el
+   contenido completo del JSON.
+5. **Borra el JSON de tu computador.** Solo debe vivir en el secret de GitHub.
+
+`firebase.json`, `.firebaserc` y `functions/package.json` ahora están en el
+repositorio. Si los tuyos locales tienen otras versiones de `firebase-admin`
+o `firebase-functions`, reemplaza `functions/package.json` por el tuyo y
+regenera `functions/package-lock.json` con `npm install`.
