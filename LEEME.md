@@ -106,9 +106,12 @@ Configuración (una sola vez):
    - Service Account User
    - Cloud Scheduler Admin (por la tarea diaria de vencimientos)
    - Artifact Registry Writer y Cloud Build Editor (para compilar las functions)
+   - Firebase Viewer (el deploy lee la configuración del proyecto)
 
    Si un deploy falla por un permiso, el error indica qué rol falta.
 3. En esa cuenta: **Claves → Agregar clave → JSON**. Se descarga un archivo.
+   Antes de usarlo, revisa que `"client_email"` sea el de esta cuenta (no el
+   de `firebase-adminsdk` ni el de otra cuenta con nombre parecido).
 4. GitHub → repositorio → **Settings → Secrets and variables → Actions →
    New repository secret**, nombre `FIREBASE_SERVICE_ACCOUNT`, y pega el
    contenido completo del JSON.
