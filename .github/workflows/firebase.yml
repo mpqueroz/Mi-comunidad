@@ -1,5 +1,6 @@
 # Prueba las reglas de Firestore en cada pull request y, al aceptar cambios
-# en main, despliega reglas y Cloud Functions de Mi Comunidad a Firebase.
+# en main, despliega la página (hosting del sitio mi-comunidad-md), las
+# reglas y las Cloud Functions de Mi Comunidad a Firebase.
 #
 # Requiere el secret FIREBASE_SERVICE_ACCOUNT (Settings → Secrets and
 # variables → Actions) con el JSON de una cuenta de servicio. Ver LEEME.md.
@@ -12,6 +13,7 @@ on:
       - "firestore.rules"
       - "functions/**"
       - "tests/**"
+      - "public/**"
       - "firebase.json"
       - ".github/workflows/firebase.yml"
   push:
@@ -19,6 +21,7 @@ on:
     paths:
       - "firestore.rules"
       - "functions/**"
+      - "public/**"
       - "firebase.json"
       - ".github/workflows/firebase.yml"
   workflow_dispatch:
@@ -76,8 +79,10 @@ jobs:
         run: npm ci
       # El proyecto es compartido con Mercado Ciudadano y Almacén Digital:
       # se nombran las functions de Mi Comunidad una por una para que el
-      # deploy nunca borre ni toque las de las otras apps.
-      - name: Deploy de reglas y functions
+      # deploy nunca borre ni toque las de las otras apps, y el hosting va
+      # solo al sitio mi-comunidad-md (firebase.json). Las functions que no
+      # cambiaron se saltan solas.
+      - name: Deploy de página, reglas y functions
         run: >
           npx --yes firebase-tools@14 deploy --non-interactive
-          --only "firestore:rules,functions:crearCuentaMiComunidad,functions:restablecerClaveMiComunidad,functions:crearComunidadMiComunidad,functions:crearReservaMiComunidad,functions:definirPreguntaSecretaMiComunidad,functions:verificarPreguntaSecretaMiComunidad,functions:migrarRespuestasSecretasMiComunidad,functions:actualizarVencimientosMiComunidad"
+          --only "hosting,firestore:rules,functions:crearCuentaMiComunidad,functions:restablecerClaveMiComunidad,functions:crearComunidadMiComunidad,functions:crearReservaMiComunidad,functions:definirPreguntaSecretaMiComunidad,functions:verificarPreguntaSecretaMiComunidad,functions:migrarRespuestasSecretasMiComunidad,functions:actualizarVencimientosMiComunidad"

@@ -91,8 +91,13 @@ Córrelos antes de cada `firebase deploy --only firestore:rules`.
 ## Deploy automático desde GitHub
 
 `.github/workflows/firebase.yml` corre los tests de reglas en cada pull
-request y, cuando se aceptan cambios en `main`, despliega `firestore.rules`
-y las 8 Cloud Functions de Mi Comunidad. Nombra cada función por su nombre,
+request y, cuando se aceptan cambios en `main`, despliega la página
+(`public/` → sitio `mi-comunidad-md`), `firestore.rules` y las 8 Cloud
+Functions de Mi Comunidad.
+
+La carpeta `public/` del repositorio es la que se publica **completa**:
+todo lo que no esté ahí (la demo, `jsQR.min.js`) desaparece del sitio al
+desplegar. Por eso la app, la demo y el lector de QR viven en `public/`. Nombra cada función por su nombre,
 así que nunca borra ni toca las de Mercado Ciudadano ni Almacén Digital.
 También se puede lanzar a mano: pestaña **Actions → Firebase → Run workflow**.
 
@@ -106,9 +111,13 @@ Configuración (una sola vez):
    - Service Account User
    - Cloud Scheduler Admin (por la tarea diaria de vencimientos)
    - Artifact Registry Writer y Cloud Build Editor (para compilar las functions)
+   - Firebase Viewer (el deploy lee la configuración del proyecto)
+   - Firebase Hosting Admin (para publicar la página)
 
    Si un deploy falla por un permiso, el error indica qué rol falta.
 3. En esa cuenta: **Claves → Agregar clave → JSON**. Se descarga un archivo.
+   Antes de usarlo, revisa que `"client_email"` sea el de esta cuenta (no el
+   de `firebase-adminsdk` ni el de otra cuenta con nombre parecido).
 4. GitHub → repositorio → **Settings → Secrets and variables → Actions →
    New repository secret**, nombre `FIREBASE_SERVICE_ACCOUNT`, y pega el
    contenido completo del JSON.
