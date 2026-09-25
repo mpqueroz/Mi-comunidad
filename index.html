@@ -1929,6 +1929,36 @@ td, .stat-number, .rc-monto, .cj-monto{ font-variant-numeric:tabular-nums; }
 .fx-details .form-group:last-child{ padding-bottom:12px; }
 .fx-lock-box{ border:1px dashed var(--border); border-radius:12px; padding:16px; background:var(--dashed-bg); }
 
+
+/* CONCILIACIÓN BANCARIA */
+
+.conc-alerta{ display:flex; gap:10px; align-items:flex-start; border-radius:12px; padding:12px 14px; font-size:13px; line-height:1.45; margin-bottom:16px; }
+.conc-alerta .ic, .conc-alerta svg{ flex:0 0 auto; width:18px; height:18px; margin-top:1px; }
+.conc-alerta.is-ok{ background:var(--badge-green-bg); color:var(--badge-green-text); }
+.conc-alerta.is-error{ background:var(--badge-red-bg); color:var(--badge-red-text); }
+.conc-stats{ grid-template-columns:repeat(3, minmax(0,1fr)); }
+.conc-stats .stat-number{ font-variant-numeric:tabular-nums; font-size:clamp(18px, 2.4vw, 26px); overflow-wrap:anywhere; }
+.conc-auto{ display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap; background:var(--primary-light); border:1px solid var(--primary); border-radius:12px; padding:12px 14px; margin-bottom:16px; font-size:13px; }
+.conc-estado{ white-space:nowrap; }
+.conc-tabla{ min-width:760px; }
+.conc-monto{ text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; font-weight:600; }
+.conc-monto.is-in{ color:var(--success); }
+.conc-monto.is-out{ color:var(--danger); }
+.conc-columnas{ display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin-top:10px; }
+.conc-mov{ background:var(--surface-muted); border-radius:12px; padding:14px; display:grid; gap:4px; font-size:13px; }
+.conc-mov-monto{ font-size:24px; font-weight:800; font-variant-numeric:tabular-nums; }
+.conc-mov-monto.is-in{ color:var(--success); }
+.conc-mov-monto.is-out{ color:var(--danger); }
+.conc-cand{ display:flex; gap:10px; align-items:flex-start; border:1px solid var(--border); border-radius:12px; padding:10px 12px; margin-bottom:8px; cursor:pointer; font-size:13px; }
+.conc-cand:has(input:checked){ border-color:var(--primary); background:var(--primary-light); }
+.conc-cand input, .conc-opt input{ margin-top:3px; width:auto; }
+.conc-dif{ border:1px solid var(--accent); border-radius:12px; padding:12px 14px; margin-top:8px; font-size:13px; }
+.conc-opt{ display:flex; gap:8px; align-items:flex-start; padding:4px 0; cursor:pointer; }
+
+@media (max-width: 700px){
+    .conc-stats{ grid-template-columns:repeat(2, minmax(0,1fr)); }
+    .conc-stats .stat-number{ font-size:18px; }
+}
 </style>
 </head>
 
@@ -2134,6 +2164,7 @@ td, .stat-number, .rc-monto, .cj-monto{ font-variant-numeric:tabular-nums; }
 ================================ */
 
 const ICONS = {
+    "upload": `<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /> <polyline points="17 8 12 3 7 8" /> <line x1="12" x2="12" y1="3" y2="15" />`,
     "chevron-right": `<path d="m9 18 6-6-6-6" />`,
     "package": `<path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z" /> <path d="M12 22V12" /> <polyline points="3.29 7 12 12 20.71 7" /> <path d="m7.5 4.27 9 5.15" />`,
     "ban": `<circle cx="12" cy="12" r="10" /> <path d="M4.929 4.929 19.07 19.071" />`,
@@ -2440,6 +2471,12 @@ let proveedoresDirectorioUnsub = null;
 let mantencionesUnsub = null;
 let vehiculosRegistradosUnsub = null;
 let accesosUnsub = null;
+
+// Conciliación bancaria (solo administración).
+let movimientosBancariosUnsub = null;
+let importacionesBancariasUnsub = null;
+let historialConciliacionUnsub = null;
+let saldosAFavorUnsub = null;
 
 // notificacionesUnsub: colección completa (admin/conserjería) o la consulta
 // "paraTodos" (residente); notificacionesDeptoUnsub: solo para residente,
@@ -3162,16 +3199,19 @@ async function generarCobroMensual(monto, vencimiento){
 }
 
 
-async function marcarGastoPagado(id){
+// opciones (las usa la conciliación bancaria): fechaPago y metodoPago del
+// banco, y silencioso para no mostrar un toast por cada movimiento.
+// Devuelve el id del ingreso creado en Contabilidad (o null si falló).
+async function marcarGastoPagado(id, opciones = {}){
 
     const gasto = gastosComunes.find(g => g.id === id);
 
     if(!gasto){
-        return;
+        return null;
     }
 
-    gasto.fechaPago = (gasto.pagoInformado && gasto.pagoInformado.fecha) || hoyISO();
-    gasto.metodoPago = textoMetodoPago(gasto, "Registrado por administración");
+    gasto.fechaPago = opciones.fechaPago || (gasto.pagoInformado && gasto.pagoInformado.fecha) || hoyISO();
+    gasto.metodoPago = textoMetodoPago(gasto, opciones.metodoPago || "Registrado por administración");
     gasto.estado = "Pagado";
 
     renderAdmin();
@@ -3186,10 +3226,10 @@ async function marcarGastoPagado(id){
     } catch(err){
         console.error(err);
         showToast("No se pudo guardar el pago. Revisa tu conexión.");
-        return;
+        return null;
     }
 
-    await registrarMovimientoContable({
+    const contableId = await registrarMovimientoContable({
         tipo:"Ingreso",
         categoria:"Gasto común",
         descripcion:`Gasto común depto ${gasto.depto} · ${periodoLabel(gasto.periodo)}`,
@@ -3207,7 +3247,11 @@ async function marcarGastoPagado(id){
         paraTodos:false
     });
 
-    showToast("Pago registrado para el depto " + gasto.depto);
+    if(!opciones.silencioso){
+        showToast("Pago registrado para el depto " + gasto.depto);
+    }
+
+    return contableId;
 
 }
 
@@ -3395,6 +3439,1367 @@ function renderPagosPorConfirmar(){
 
 
 /* ================================
+   CONCILIACIÓN BANCARIA (V1: cartola en Excel/CSV, sin conexión al banco)
+
+   El administrador sube la cartola que descarga de su banco. La app:
+     1) lee el archivo (leerArchivoCartola -> filas -> detectarColumnasCartola
+        -> interpretarCartola), sin importar el banco: detecta sola la fila de
+        encabezados y las columnas Fecha / Descripción / Cargo / Abono / Saldo
+        (o una sola columna Monto con signo), y el admin puede corregirlas;
+     2) guarda cada movimiento en movimientosBancarios con un id
+        determinístico (idMovimientoBancario), así subir dos veces la misma
+        cartola, o una que se superpone con la anterior, no duplica nada;
+     3) para cada movimiento pendiente busca coincidencias
+        (buscarCoincidencias) contra lo que ya está en la app:
+          - abonos: gastos comunes y multas sin pagar (o "Por confirmar"),
+            e ingresos ya registrados en Contabilidad;
+          - cargos: egresos registrados en Contabilidad (sueldos,
+            mantenciones, proveedores, manuales).
+        Nivel "exacta" (monto igual y depto/proveedor identificado), "probable"
+        (solo el monto calza, o el depto calza con otro monto) o "sin".
+
+   Conciliar un abono contra una deuda la marca pagada con el flujo de
+   siempre (marcarGastoPagado / marcarMultaPagada, que crean el ingreso en
+   Contabilidad), con la fecha del banco. Si el abono es mayor que la deuda,
+   la diferencia se registra como saldo a favor (o abono al próximo período)
+   o queda marcada "por revisar". Cada conciliación y cada reversión quedan
+   en historialConciliacion, que las reglas hacen de solo-agregar.
+
+   Las funciones "puras" de lectura y coincidencias (entre los marcadores
+   CONCILIACION-PURAS) no tocan variables globales ni el DOM, para poder
+   probarlas aparte (tests/conciliacion.test.js).
+================================ */
+
+let movimientosBancarios = [];
+let importacionesBancarias = [];
+let historialConciliacion = [];
+let saldosAFavor = [];
+
+let conciliacionPeriodo = null;
+let conciliacionFiltro = "Todos";
+let cartolaEnProceso = null;
+let xlsxCargando = null;
+
+/* CONCILIACION-PURAS:INICIO */
+
+function normalizarTextoConc(texto){
+    return String(texto == null ? "" : texto)
+        .normalize("NFD").replace(/[̀-ͯ]/g, "")
+        .toUpperCase().replace(/\s+/g, " ").trim();
+}
+
+// "$ 1.234.567", "-85.000", "(85.000)", "85000,00", 85000 -> entero (CLP).
+function parsearMontoConc(valor){
+    if(valor === null || valor === undefined || valor === ""){
+        return 0;
+    }
+    if(typeof valor === "number"){
+        return isFinite(valor) ? Math.round(valor) : 0;
+    }
+    let texto = String(valor).trim();
+    if(!texto){
+        return 0;
+    }
+    let negativo = false;
+    if(/^\(.*\)$/.test(texto)){
+        negativo = true;
+        texto = texto.slice(1, -1);
+    }
+    texto = texto.replace(/[$\s]|CLP/gi, "");
+    if(texto.endsWith("-")){
+        negativo = true;
+        texto = texto.slice(0, -1);
+    }
+    if(texto.startsWith("-")){
+        negativo = !negativo;
+        texto = texto.slice(1);
+    } else if(texto.startsWith("+")){
+        texto = texto.slice(1);
+    }
+    if(texto.includes(",") && texto.includes(".")){
+        // El separador que aparece último es el decimal.
+        if(texto.lastIndexOf(",") > texto.lastIndexOf(".")){
+            texto = texto.replace(/\./g, "").replace(",", ".");
+        } else {
+            texto = texto.replace(/,/g, "");
+        }
+    } else if(texto.includes(",")){
+        // "85,50" es decimal; "85,000" o "1,234,567" son miles.
+        texto = /,\d{1,2}$/.test(texto) && (texto.match(/,/g) || []).length === 1
+            ? texto.replace(",", ".")
+            : texto.replace(/,/g, "");
+    } else if(texto.includes(".")){
+        // En Chile el punto es separador de miles ("85.000"); solo se
+        // trata como decimal si hay uno y trae 1-2 dígitos ("85.5").
+        texto = /\.\d{1,2}$/.test(texto) && (texto.match(/\./g) || []).length === 1
+            ? texto
+            : texto.replace(/\./g, "");
+    }
+    const n = parseFloat(texto);
+    if(!isFinite(n)){
+        return 0;
+    }
+    return Math.round(negativo ? -n : n);
+}
+
+function isoConc(y, m, d){
+    if(y < 100){
+        y += 2000;
+    }
+    const fecha = new Date(Date.UTC(y, m - 1, d));
+    if(fecha.getUTCFullYear() !== y || fecha.getUTCMonth() !== m - 1 || fecha.getUTCDate() !== d){
+        return null;
+    }
+    return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+// dd/mm/aaaa, dd-mm-aa, aaaa-mm-dd, número de serie de Excel o Date.
+// anioPorDefecto se usa en cartolas que traen solo "dd/mm".
+function parsearFechaConc(valor, anioPorDefecto){
+    if(valor === null || valor === undefined || valor === ""){
+        return null;
+    }
+    if(valor instanceof Date){
+        return isNaN(valor) ? null : isoConc(valor.getFullYear(), valor.getMonth() + 1, valor.getDate());
+    }
+    if(typeof valor === "number"){
+        // Serie de Excel: días desde 1899-12-30.
+        if(valor < 20000 || valor > 80000){
+            return null;
+        }
+        const d = new Date(Math.round((valor - 25569) * 86400000));
+        return isoConc(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+    }
+    const texto = String(valor).trim();
+    let m = texto.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+    if(m){
+        return isoConc(+m[1], +m[2], +m[3]);
+    }
+    m = texto.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})\b/);
+    if(m){
+        return isoConc(+m[3], +m[2], +m[1]);
+    }
+    m = texto.match(/^(\d{1,2})[-/.](\d{1,2})$/);
+    if(m && anioPorDefecto){
+        return isoConc(anioPorDefecto, +m[2], +m[1]);
+    }
+    return null;
+}
+
+// CSV o texto con ; , o tabulador como separador (el que más aparezca en
+// las primeras líneas). Respeta comillas.
+function parsearCSVConc(texto){
+    texto = String(texto || "").replace(/^﻿/, "");
+    const muestra = texto.split(/\r?\n/).slice(0, 30).join("\n");
+    const candidatos = [";", ",", "\t"];
+    const sep = candidatos
+        .map(c => ({c, n: muestra.split(c).length}))
+        .sort((a, b) => b.n - a.n)[0].c;
+
+    const filas = [];
+    let fila = [];
+    let celda = "";
+    let enComillas = false;
+    for(let i = 0; i < texto.length; i++){
+        const ch = texto[i];
+        if(enComillas){
+            if(ch === '"'){
+                if(texto[i + 1] === '"'){
+                    celda += '"';
+                    i++;
+                } else {
+                    enComillas = false;
+                }
+            } else {
+                celda += ch;
+            }
+        } else if(ch === '"'){
+            enComillas = true;
+        } else if(ch === sep){
+            fila.push(celda);
+            celda = "";
+        } else if(ch === "\n" || ch === "\r"){
+            if(ch === "\r" && texto[i + 1] === "\n"){
+                i++;
+            }
+            fila.push(celda);
+            filas.push(fila);
+            fila = [];
+            celda = "";
+        } else {
+            celda += ch;
+        }
+    }
+    if(celda !== "" || fila.length){
+        fila.push(celda);
+        filas.push(fila);
+    }
+    return filas.filter(f => f.some(c => String(c).trim() !== ""));
+}
+
+const COLUMNAS_CARTOLA = [
+    {campo:"fecha", label:"Fecha", patron:/^FECHA( (CONTABLE|OPERACION|MOVIMIENTO|TRANSACCION))?$|^FECHA\b/},
+    {campo:"descripcion", label:"Descripción", patron:/DESCRIP|GLOSA|DETALLE|CONCEPTO|MOVIMIENTO|TRANSACCION|NARRATIVA/},
+    {campo:"cargo", label:"Cargo", patron:/CARGO|DEBE|DEBITO|GIRO|EGRESO|RETIRO/},
+    {campo:"abono", label:"Abono", patron:/ABONO|HABER|CREDITO|DEPOSITO|INGRESO/},
+    {campo:"monto", label:"Monto (con signo)", patron:/^MONTO|IMPORTE|^VALOR/},
+    {campo:"saldo", label:"Saldo", patron:/SALDO/}
+];
+
+// Busca la fila de encabezados en las primeras 40 filas (muchas cartolas
+// traen antes el nombre del banco, el titular, el período, etc.) y
+// propone qué columna es cada campo. Devuelve null si no la encuentra.
+function detectarColumnasCartola(filas){
+    for(let i = 0; i < Math.min(filas.length, 40); i++){
+        const celdas = filas[i].map(normalizarTextoConc);
+        const mapa = {};
+        COLUMNAS_CARTOLA.forEach(col => {
+            const idx = celdas.findIndex((c, j) =>
+                c && col.patron.test(c) && !Object.values(mapa).includes(j));
+            if(idx >= 0){
+                mapa[col.campo] = idx;
+            }
+        });
+        const tieneMontos = (mapa.cargo !== undefined && mapa.abono !== undefined) || mapa.monto !== undefined;
+        if(mapa.fecha !== undefined && tieneMontos){
+            // Si hay Cargo y Abono, la columna "Monto" sobra (y viceversa).
+            if(mapa.cargo !== undefined && mapa.abono !== undefined){
+                delete mapa.monto;
+            }
+            return {filaEncabezado: i, mapa: mapa, encabezados: filas[i].map(c => String(c).trim())};
+        }
+    }
+    return null;
+}
+
+// Convierte las filas de datos en movimientos {fecha, descripcion, monto,
+// saldo} en orden cronológico (las cartolas suelen venir del más nuevo al
+// más antiguo). monto > 0 es abono (ingreso), < 0 es cargo (egreso).
+function interpretarCartola(filas, filaEncabezado, mapa){
+    const datos = filas.slice(filaEncabezado + 1);
+    const anioPorDefecto = new Date().getFullYear();
+    const movimientos = [];
+    let omitidas = 0;
+
+    datos.forEach(fila => {
+        const fecha = parsearFechaConc(fila[mapa.fecha], anioPorDefecto);
+        let monto = 0;
+        if(mapa.cargo !== undefined && mapa.abono !== undefined){
+            const cargo = Math.abs(parsearMontoConc(fila[mapa.cargo]));
+            const abono = Math.abs(parsearMontoConc(fila[mapa.abono]));
+            monto = abono - cargo;
+        } else if(mapa.monto !== undefined){
+            monto = parsearMontoConc(fila[mapa.monto]);
+        }
+        if(!fecha || !monto){
+            // Filas de "Saldo inicial", totales, separadores, etc.
+            if(fila.some(c => String(c).trim() !== "")){
+                omitidas++;
+            }
+            return;
+        }
+        const saldoTexto = mapa.saldo !== undefined ? fila[mapa.saldo] : "";
+        movimientos.push({
+            fecha: fecha,
+            descripcion: String(mapa.descripcion !== undefined ? (fila[mapa.descripcion] || "") : "").trim().replace(/\s+/g, " "),
+            monto: monto,
+            saldo: saldoTexto === "" || saldoTexto === undefined || saldoTexto === null ? null : parsearMontoConc(saldoTexto)
+        });
+    });
+
+    if(movimientos.length > 1 && movimientos[0].fecha > movimientos[movimientos.length - 1].fecha){
+        movimientos.reverse();
+    }
+
+    // Período: el mes con más movimientos del archivo.
+    const porMes = {};
+    movimientos.forEach(m => {
+        porMes[m.fecha.slice(0, 7)] = (porMes[m.fecha.slice(0, 7)] || 0) + 1;
+    });
+    const periodo = Object.keys(porMes).sort((a, b) => porMes[b] - porMes[a])[0] || null;
+
+    return {movimientos, omitidas, periodo};
+}
+
+function hashTextoConc(texto){
+    let h = 0x811c9dc5;
+    for(let i = 0; i < texto.length; i++){
+        h ^= texto.charCodeAt(i);
+        h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return h.toString(36);
+}
+
+// Mismo movimiento => mismo id, para que reimportar no duplique. "n"
+// distingue dos movimientos idénticos el mismo día (dos transferencias
+// iguales sin saldo): se cuenta cuántas veces apareció ya esa combinación.
+function idMovimientoBancario(m, n){
+    const base = [m.fecha, m.monto, normalizarTextoConc(m.descripcion), m.saldo == null ? "" : m.saldo, n].join("|");
+    return `${m.fecha}_${m.monto < 0 ? "c" : "a"}${Math.abs(m.monto)}_${hashTextoConc(base)}`;
+}
+
+function diasEntreConc(a, b){
+    return Math.abs((Date.parse(a + "T00:00:00Z") - Date.parse(b + "T00:00:00Z")) / 86400000);
+}
+
+// Departamentos que la glosa del banco menciona: "DEPTO 305", "DPTO. 305",
+// "DEP305", "D-305", o un número de depto conocido suelto ("TRANSF 305"),
+// o el apellido de un residente ("TRANSF JUAN PEREZ").
+function deptosEnDescripcion(descripcion, residentes){
+    const texto = normalizarTextoConc(descripcion);
+    const conocidos = residentes.map(r => String(r.depto).toUpperCase());
+    const encontrados = new Set();
+
+    const explicito = /\b(?:DEPARTAMENTO|DEPTO|DPTO|DEPT|DEP|DTO|D)\.?\s*[-#Nº°:]*\s*(\d{1,4}[A-Z]?)\b/g;
+    let m;
+    while((m = explicito.exec(texto))){
+        encontrados.add(m[1]);
+    }
+    if(!encontrados.size){
+        texto.split(/[^A-Z0-9]+/).forEach(tok => {
+            if(conocidos.includes(tok)){
+                encontrados.add(tok);
+            }
+        });
+    }
+    if(!encontrados.size){
+        residentes.forEach(r => {
+            const partes = normalizarTextoConc(r.nombre).split(" ").filter(p => p.length >= 4);
+            const apellido = partes.length > 1 ? partes[partes.length - 1] : null;
+            if(apellido && new RegExp("\\b" + apellido + "\\b").test(texto)){
+                encontrados.add(String(r.depto).toUpperCase());
+            }
+        });
+    }
+    // Solo deptos que existen en la comunidad (evita "D 2026" de una fecha).
+    return [...encontrados].filter(d => !conocidos.length || conocidos.includes(d));
+}
+
+function palabrasClaveConc(texto){
+    const vacias = ["TRANSFERENCIA", "TRANSF", "PAGO", "CARGO", "ABONO", "CUENTA", "SERVICIOS", "SERVICIO", "EMPRESA", "ELECTRONICA", "DESDE", "HACIA", "PARA", "BANCO", "LTDA", "SPA"];
+    return normalizarTextoConc(texto).split(/[^A-Z0-9]+/)
+        .filter(p => p.length >= 4 && !vacias.includes(p) && !/^\d+$/.test(p));
+}
+
+// Candidatos para conciliar un movimiento bancario, ordenados del mejor al
+// peor, y el nivel de coincidencia del mejor:
+//   exacta   -> se puede conciliar con un toque (o en bloque)
+//   probable -> hay que revisarlo (monto calza pero no se sabe el depto, o
+//               el depto calza con otro monto)
+//   sin      -> nada calza: asignarlo a mano o registrarlo como ingreso/egreso
+// datos: {gastos, multas, contables, residentes, contablesUsados:Set}
+function buscarCoincidencias(mov, datos){
+    const candidatos = [];
+    const monto = Math.abs(mov.monto);
+    const texto = normalizarTextoConc(mov.descripcion);
+    const usados = datos.contablesUsados || new Set();
+
+    if(mov.monto > 0){
+        const deptos = deptosEnDescripcion(mov.descripcion, datos.residentes || []);
+
+        const deudas = [
+            ...(datos.gastos || []).filter(g => g.estado !== "Pagado")
+                .map(g => ({tipo:"gasto", id:g.id, depto:String(g.depto), monto:g.monto,
+                    etiqueta:"Gasto común " + (g.periodoLabel || g.periodo), pagoInformado:g.pagoInformado, periodo:g.periodo})),
+            ...(datos.multas || []).filter(m => m.estado !== "Pagada")
+                .map(m => ({tipo:"multa", id:m.id, depto:String(m.depto), monto:m.monto,
+                    etiqueta:"Multa: " + m.tipoMultaNombre, pagoInformado:m.pagoInformado}))
+        ];
+
+        deudas.forEach(d => {
+            const deptoCalza = deptos.includes(d.depto.toUpperCase());
+            const montoCalza = d.monto === monto;
+            const ref = d.pagoInformado && d.pagoInformado.referencia
+                ? normalizarTextoConc(d.pagoInformado.referencia) : "";
+            const refCalza = ref.length >= 4 && texto.includes(ref);
+            if(!montoCalza && !deptoCalza && !refCalza){
+                return;
+            }
+            // Un abono menor que la deuda no la salda: no se ofrece.
+            if(monto < d.monto){
+                return;
+            }
+            let puntaje = 0;
+            if(montoCalza){ puntaje += 50; }
+            if(deptoCalza){ puntaje += 40; }
+            if(refCalza){ puntaje += 50; }
+            if(d.pagoInformado && d.pagoInformado.fecha && diasEntreConc(d.pagoInformado.fecha, mov.fecha) <= 3){
+                puntaje += 10;
+            }
+            // Deudas más antiguas primero ante empate (se paga lo vencido).
+            candidatos.push(Object.assign({}, d, {
+                puntaje, deptoCalza, montoCalza, refCalza,
+                diferencia: monto - d.monto
+            }));
+        });
+
+        (datos.contables || []).filter(c => c.tipo === "Ingreso" && !usados.has(c.id)).forEach(c => {
+            if(c.monto !== monto || diasEntreConc(c.fecha, mov.fecha) > 7){
+                return;
+            }
+            const deptoCalza = !!c.depto && deptos.includes(String(c.depto).toUpperCase());
+            candidatos.push({tipo:"contable", id:c.id, depto:c.depto || null, monto:c.monto,
+                etiqueta:"Ingreso registrado: " + c.descripcion, puntaje: 45 + (deptoCalza ? 40 : 0) - diasEntreConc(c.fecha, mov.fecha),
+                deptoCalza, montoCalza:true, refCalza:false, diferencia:0});
+        });
+    } else {
+        const claves = palabrasClaveConc(mov.descripcion);
+        (datos.contables || []).filter(c => c.tipo === "Egreso" && !usados.has(c.id)).forEach(c => {
+            const dias = diasEntreConc(c.fecha, mov.fecha);
+            if(c.monto !== monto || dias > 15){
+                return;
+            }
+            const textoContable = normalizarTextoConc(c.descripcion + " " + (c.categoria || ""));
+            const nombreCalza = claves.some(p => textoContable.includes(p));
+            candidatos.push({tipo:"contable", id:c.id, depto:null, monto:c.monto,
+                etiqueta:c.categoria + ": " + c.descripcion,
+                puntaje: 50 + (nombreCalza ? 40 : 0) + (dias <= 7 ? 5 : 0) - dias,
+                deptoCalza:false, nombreCalza, montoCalza:true, refCalza:false, diferencia:0});
+        });
+    }
+
+    candidatos.sort((a, b) => b.puntaje - a.puntaje || String(a.periodo || "").localeCompare(String(b.periodo || "")));
+
+    const mejor = candidatos[0];
+    let nivel = "sin";
+    if(mejor){
+        const identificado = mejor.deptoCalza || mejor.refCalza || mejor.nombreCalza;
+        const empate = candidatos[1] && candidatos[1].puntaje === mejor.puntaje;
+        nivel = mejor.montoCalza && identificado && !empate ? "exacta" : "probable";
+    }
+    return {nivel, candidatos};
+}
+
+// Resumen del período para el tablero. saldoBanco: saldo del último
+// movimiento (o saldo inicial + movimientos si la cartola no trae saldo).
+// saldoSistema: saldo inicial del período según el banco + ingresos -
+// egresos registrados en Contabilidad con fecha de ese período.
+function resumenConciliacion(movs, contables, niveles){
+    const orden = [...movs].sort((a, b) => a.fecha.localeCompare(b.fecha) || (a.orden || 0) - (b.orden || 0));
+    const primero = orden[0];
+    const ultimo = orden[orden.length - 1];
+    const saldoInicial = primero && primero.saldo != null ? primero.saldo - primero.monto : 0;
+    const saldoBanco = ultimo && ultimo.saldo != null
+        ? ultimo.saldo
+        : saldoInicial + orden.reduce((s, m) => s + m.monto, 0);
+    const periodo = primero ? primero.fecha.slice(0, 7) : null;
+    const neto = contables
+        .filter(c => periodo && String(c.fecha || "").slice(0, 7) === periodo)
+        .reduce((s, c) => s + (c.tipo === "Ingreso" ? c.monto : -c.monto), 0);
+    const saldoSistema = saldoInicial + neto;
+
+    const conciliados = movs.filter(m => m.estado === "Conciliado").length;
+    const pendientes = movs.filter(m => m.estado !== "Conciliado" && niveles[m.id] !== "sin").length;
+    const sinCoincidencia = movs.filter(m => m.estado !== "Conciliado" && niveles[m.id] === "sin").length;
+    const diferenciasPorRevisar = movs.filter(m => m.estado === "Conciliado" && m.destinoDiferencia === "revisar").length;
+
+    return {
+        saldoInicial, saldoBanco, saldoSistema,
+        diferencia: saldoBanco - saldoSistema,
+        total: movs.length, conciliados, pendientes,
+        diferencias: sinCoincidencia + diferenciasPorRevisar,
+        sinCoincidencia, diferenciasPorRevisar
+    };
+}
+
+/* CONCILIACION-PURAS:FIN */
+
+
+function nombreQuienConcilia(){
+    return (auth.currentUser && auth.currentUser.displayName) || community.adminNombre || "Administración";
+}
+
+function datosParaCoincidencias(){
+    return {
+        gastos: gastosComunes.map(g => Object.assign({}, g, {periodoLabel: g.periodo ? periodoLabel(g.periodo) : ""})),
+        multas: multas,
+        contables: movimientosContables,
+        residentes: residentesDirectorio,
+        contablesUsados: new Set(movimientosBancarios
+            .filter(m => m.estado === "Conciliado" && m.asociado)
+            .flatMap(m => m.asociado.contableIds || []))
+    };
+}
+
+function periodosConciliacion(){
+    return [...new Set(movimientosBancarios.map(m => m.periodo))].filter(Boolean).sort().reverse();
+}
+
+function cargarXLSX(){
+    if(window.XLSX){
+        return Promise.resolve();
+    }
+    if(xlsxCargando){
+        return xlsxCargando;
+    }
+    xlsxCargando = new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = "https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js";
+        script.onload = () => resolve();
+        script.onerror = () => {
+            xlsxCargando = null;
+            reject(new Error("No se pudo cargar el lector de Excel."));
+        };
+        document.head.appendChild(script);
+    });
+    return xlsxCargando;
+}
+
+// Devuelve las filas del archivo como arreglo de arreglos de celdas.
+async function leerArchivoCartola(archivo){
+    const nombre = archivo.name.toLowerCase();
+    if(nombre.endsWith(".csv") || nombre.endsWith(".txt")){
+        const buffer = await archivo.arrayBuffer();
+        let texto = new TextDecoder("utf-8").decode(buffer);
+        // Muchos bancos exportan en Windows-1252 (Latin-1): si UTF-8 dejó
+        // caracteres de reemplazo, se relee con esa codificación.
+        if(texto.includes("�")){
+            texto = new TextDecoder("windows-1252").decode(buffer);
+        }
+        return parsearCSVConc(texto);
+    }
+    await cargarXLSX();
+    const libro = window.XLSX.read(await archivo.arrayBuffer(), {type:"array", cellDates:true});
+    const hoja = libro.Sheets[libro.SheetNames[0]];
+    return window.XLSX.utils.sheet_to_json(hoja, {header:1, raw:true, defval:""});
+}
+
+
+function renderAdminConciliacion(){
+
+    const periodos = periodosConciliacion();
+
+    if(!periodos.length){
+        return `
+            <div class="page-header">
+                <div>
+                    <h3 style="font-size:16px">Conciliación bancaria</h3>
+                    <p style="font-size:13px">Conoce dónde está cada peso de la comunidad.</p>
+                </div>
+            </div>
+            <div class="card">
+                <div class="empty">
+                    <div class="empty-icon">${icon('landmark')}</div>
+                    <h3 style="margin-bottom:8px;color:var(--text)">Sube tu primera cartola</h3>
+                    <p style="max-width:460px;margin:0 auto 18px;line-height:1.5">
+                        Descarga la cartola de la cuenta de la comunidad desde tu banco (Excel o CSV)
+                        y súbela aquí. Mi Comunidad relaciona cada abono con el departamento que pagó
+                        y cada cargo con el egreso registrado, y te muestra lo que falta revisar.
+                    </p>
+                    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+                        <button class="primary-btn" style="width:auto;padding:12px 20px" onclick="abrirImportarCartola()">
+                            ${icon('upload')} Importar movimientos bancarios
+                        </button>
+                        <button class="outline-btn" style="width:auto" onclick="descargarPlantillaCartola()">
+                            Descargar planilla de ejemplo
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    if(!conciliacionPeriodo || !periodos.includes(conciliacionPeriodo)){
+        conciliacionPeriodo = periodos[0];
+    }
+
+    const datos = datosParaCoincidencias();
+    const movs = movimientosBancarios.filter(m => m.periodo === conciliacionPeriodo);
+    const coincidencias = {};
+    const niveles = {};
+    movs.forEach(m => {
+        if(m.estado !== "Conciliado"){
+            coincidencias[m.id] = buscarCoincidencias(m, datos);
+            niveles[m.id] = coincidencias[m.id].nivel;
+        }
+    });
+    const r = resumenConciliacion(movs, movimientosContables, niveles);
+    const exactas = movs.filter(m => niveles[m.id] === "exacta" && coincidencias[m.id].candidatos[0].diferencia === 0);
+
+    const alerta = r.diferencia === 0
+        ? `<div class="conc-alerta is-ok">${icon('circle-check')}<div><strong>Cuenta conciliada.</strong> El saldo bancario coincide con el saldo registrado en Mi Comunidad.${r.pendientes + r.sinCoincidencia ? ` Quedan ${esc(r.pendientes + r.sinCoincidencia)} movimiento(s) por asociar.` : ""}</div></div>`
+        : `<div class="conc-alerta is-error">${icon('triangle-alert')}<div><strong>Existe una diferencia de ${esc(formatCLP(Math.abs(r.diferencia)))} que requiere revisión.</strong> El banco muestra ${esc(r.diferencia > 0 ? "más" : "menos")} dinero que lo registrado en Contabilidad para este período.</div></div>`;
+
+    const filtros = ["Todos", "Pendientes", "Conciliados", "Ingresos", "Egresos"];
+    const visibles = movs
+        .filter(m => {
+            if(conciliacionFiltro === "Pendientes"){ return m.estado !== "Conciliado"; }
+            if(conciliacionFiltro === "Conciliados"){ return m.estado === "Conciliado"; }
+            if(conciliacionFiltro === "Ingresos"){ return m.monto > 0; }
+            if(conciliacionFiltro === "Egresos"){ return m.monto < 0; }
+            return true;
+        })
+        .sort((a, b) => a.fecha.localeCompare(b.fecha) || (a.orden || 0) - (b.orden || 0));
+
+    const filas = visibles.map(m => {
+        let estadoHtml;
+        let asociadoTexto;
+        let accion;
+        if(m.estado === "Conciliado"){
+            const porRevisar = m.destinoDiferencia === "revisar";
+            estadoHtml = `<span class="badge conc-estado ${esc(porRevisar ? "badge-yellow" : "badge-green")}" title="${esc(porRevisar ? "Conciliado con diferencia por revisar" : "Conciliado")}">${esc(porRevisar ? "Diferencia" : "Conciliado")}</span>`;
+            asociadoTexto = m.asociado ? m.asociado.etiqueta : "—";
+            accion = `<button class="outline-btn" onclick="abrirAsociarMovimiento('${escJs(m.id)}')">Ver</button>`;
+        } else {
+            const c = coincidencias[m.id];
+            const mejor = c.candidatos[0];
+            if(c.nivel === "exacta"){
+                estadoHtml = `<span class="badge badge-green conc-estado">Exacta</span>`;
+                asociadoTexto = mejor.etiqueta + (mejor.depto ? " · Depto " + mejor.depto : "");
+                accion = mejor.diferencia === 0
+                    ? `<button class="primary-btn" style="width:auto;padding:8px 14px" onclick="conciliarSugerido('${escJs(m.id)}')">Conciliar</button>`
+                    : `<button class="outline-btn" onclick="abrirAsociarMovimiento('${escJs(m.id)}')">Revisar</button>`;
+            } else if(c.nivel === "probable"){
+                estadoHtml = `<span class="badge badge-yellow conc-estado">Probable</span>`;
+                asociadoTexto = "¿" + mejor.etiqueta + (mejor.depto ? " · Depto " + mejor.depto : "") + "?";
+                accion = `<button class="outline-btn" onclick="abrirAsociarMovimiento('${escJs(m.id)}')">Revisar</button>`;
+            } else {
+                estadoHtml = `<span class="badge badge-red conc-estado">Sin coincidencia</span>`;
+                asociadoTexto = "—";
+                accion = `<button class="outline-btn" onclick="abrirAsociarMovimiento('${escJs(m.id)}')">Asignar</button>`;
+            }
+        }
+        return `
+            <tr>
+                <td style="white-space:nowrap">${esc(formatFecha(m.fecha).slice(0, 5))}</td>
+                <td>${esc(m.descripcion || "(sin glosa)")}</td>
+                <td class="conc-monto ${esc(m.monto > 0 ? "is-in" : "is-out")}">${esc(m.monto > 0 ? "+" : "-")}${esc(formatCLP(Math.abs(m.monto)))}</td>
+                <td>${esc(m.monto > 0 ? "Ingreso" : "Egreso")}</td>
+                <td style="font-size:13px">${esc(asociadoTexto)}</td>
+                <td>${estadoHtml}</td>
+                <td>${accion}</td>
+            </tr>
+        `;
+    }).join("");
+
+    const historialHtml = historialConciliacion
+        .filter(h => h.periodo === conciliacionPeriodo)
+        .slice(0, 15)
+        .map(h => `
+            <div class="list-item">
+                <div class="list-content">
+                    <div class="list-title">${esc(h.accion === "revertir" ? "Conciliación revertida" : "Conciliado")} · ${esc(h.monto > 0 ? "+" : "-")}${esc(formatCLP(Math.abs(h.monto)))} · ${esc(h.asociado || "—")}</div>
+                    <div class="list-meta">${esc(h.por)} · ${esc(formatUltimoAcceso(h.ts))}${h.automatico ? " · automática" : ""}${h.nota ? " · " + esc(h.nota) : ""}</div>
+                </div>
+            </div>
+        `).join("");
+
+    const saldosHtml = saldosAFavor
+        .filter(s => s.estado !== "Aplicado")
+        .map(s => `
+            <div class="list-item">
+                <div class="list-content">
+                    <div class="list-title">Depto ${esc(s.depto)} · ${esc(formatCLP(s.monto))}</div>
+                    <div class="list-meta">${esc(s.destino)} · desde el pago del ${esc(formatFecha(s.fechaOrigen))}</div>
+                </div>
+            </div>
+        `).join("");
+
+    return `
+        <div class="page-header">
+            <div>
+                <h3 style="font-size:16px">Conciliación bancaria · ${esc(periodoLabel(conciliacionPeriodo))}</h3>
+                <p style="font-size:13px">Conoce dónde está cada peso de la comunidad.</p>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                ${periodos.length > 1 ? `
+                    <select id="concPeriodo" class="form-control" aria-label="Período" onchange="setConciliacionPeriodo(this.value)" style="width:auto">
+                        ${periodos.map(p => `<option value="${esc(p)}" ${p === conciliacionPeriodo ? "selected" : ""}>${esc(periodoLabel(p))}</option>`).join("")}
+                    </select>
+                ` : ""}
+                <button class="primary-btn" style="width:auto;padding:10px 16px" onclick="abrirImportarCartola()">
+                    ${icon('upload')} Importar movimientos bancarios
+                </button>
+            </div>
+        </div>
+
+        ${alerta}
+
+        <section class="stats conc-stats">
+            <div class="stat-card"><div class="stat-number">${esc(formatCLP(r.saldoBanco))}</div><div class="stat-label">Saldo según banco</div></div>
+            <div class="stat-card"><div class="stat-number">${esc(formatCLP(r.saldoSistema))}</div><div class="stat-label" title="Saldo inicial del período según el banco + ingresos − egresos registrados en Contabilidad">Saldo según sistema</div></div>
+            <div class="stat-card"><div class="stat-number">${esc(r.total)}</div><div class="stat-label">Movimientos bancarios</div></div>
+            <div class="stat-card"><div class="stat-number" style="color:var(--success)">${esc(r.conciliados)}</div><div class="stat-label">Conciliados</div></div>
+            <div class="stat-card"><div class="stat-number" style="${esc(r.pendientes ? "color:var(--badge-yellow-text)" : "")}">${esc(r.pendientes)}</div><div class="stat-label">Pendientes de revisar</div></div>
+            <div class="stat-card"><div class="stat-number" style="${esc(r.diferencias ? "color:var(--danger)" : "")}">${esc(r.diferencias)}</div><div class="stat-label">Diferencias</div></div>
+        </section>
+
+        ${exactas.length ? `
+            <div class="conc-auto">
+                <div><strong>${esc(exactas.length)} coincidencia(s) exacta(s)</strong> listas para conciliar: el monto y el departamento (o el proveedor) calzan.</div>
+                <button class="primary-btn" style="width:auto;padding:10px 16px" onclick="conciliarExactas()">Conciliar las ${esc(exactas.length)} ahora</button>
+            </div>
+        ` : ""}
+
+        <div class="admin-tabs" style="margin-bottom:12px">
+            <div class="tab-group"><div class="tab-group-items">
+                ${filtros.map(f => `
+                    <button class="admin-tab ${esc(conciliacionFiltro === f ? "active" : "")}" onclick="setConciliacionFiltro('${escJs(f)}')">${esc(f)}</button>
+                `).join("")}
+            </div></div>
+        </div>
+
+        <div class="table-wrap">
+            <table class="conc-tabla">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Movimiento</th>
+                        <th style="text-align:right">Monto</th>
+                        <th>Tipo</th>
+                        <th>Asociado a</th>
+                        <th>Estado</th>
+                        <th>Acción</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${filas || '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:25px">No hay movimientos con este filtro.</td></tr>'}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="hm-grid" style="margin-top:20px">
+            <div class="card">
+                <div class="card-header"><h3>Historial de conciliación</h3></div>
+                <div class="card-body">${historialHtml || '<p style="color:var(--muted);font-size:13px">Todavía no hay movimientos conciliados en este período.</p>'}</div>
+            </div>
+            <div class="card">
+                <div class="card-header"><h3>Saldos a favor</h3></div>
+                <div class="card-body">${saldosHtml || '<p style="color:var(--muted);font-size:13px">No hay saldos a favor registrados.</p>'}</div>
+            </div>
+        </div>
+    `;
+}
+
+function setConciliacionPeriodo(periodo){
+    conciliacionPeriodo = periodo;
+    renderAdmin();
+}
+
+function setConciliacionFiltro(filtro){
+    conciliacionFiltro = filtro;
+    renderAdmin();
+}
+
+function descargarPlantillaCartola(){
+    descargarCSV("cartola_ejemplo.csv",
+        ["Fecha", "Descripción", "Cargo", "Abono", "Saldo"],
+        [
+            ["01/09/2026", "SALDO INICIAL", "", "", 5000000],
+            ["02/09/2026", "TRANSFERENCIA DEPTO 302", "", 95000, 5095000],
+            ["04/09/2026", "TRANSFERENCIA SERVICIOS ASEO", 650000, "", 4445000],
+            ["05/09/2026", "TRANSFERENCIA ELECTRONICA", "", 80000, 4525000]
+        ]);
+}
+
+
+/* ---- Importar cartola ---- */
+
+function abrirImportarCartola(){
+    cartolaEnProceso = null;
+    openModal("importarCartola");
+}
+
+async function alElegirArchivoCartola(input){
+    const archivo = input.files && input.files[0];
+    const zona = document.getElementById("mCartolaResultado");
+    if(!archivo || !zona){
+        return;
+    }
+    zona.innerHTML = `<p style="color:var(--muted);font-size:13px">Leyendo ${esc(archivo.name)}...</p>`;
+    try {
+        const filas = await leerArchivoCartola(archivo);
+        const deteccion = detectarColumnasCartola(filas);
+        cartolaEnProceso = {
+            archivo: archivo.name,
+            filas: filas,
+            filaEncabezado: deteccion ? deteccion.filaEncabezado : 0,
+            mapa: deteccion ? deteccion.mapa : {},
+            detectada: !!deteccion
+        };
+        pintarVistaPreviaCartola();
+    } catch(err){
+        console.error(err);
+        cartolaEnProceso = null;
+        zona.innerHTML = `<div class="conc-alerta is-error">${icon('triangle-alert')}<div>No se pudo leer el archivo. Sube la cartola en formato Excel (.xlsx) o CSV, tal como la descargas del banco.</div></div>`;
+    }
+}
+
+function cambiarColumnaCartola(campo, valor){
+    if(!cartolaEnProceso){
+        return;
+    }
+    if(valor === ""){
+        delete cartolaEnProceso.mapa[campo];
+    } else {
+        cartolaEnProceso.mapa[campo] = parseInt(valor, 10);
+    }
+    pintarVistaPreviaCartola();
+}
+
+function cambiarFilaEncabezadoCartola(valor){
+    if(!cartolaEnProceso){
+        return;
+    }
+    cartolaEnProceso.filaEncabezado = Math.max(0, parseInt(valor, 10) - 1 || 0);
+    pintarVistaPreviaCartola();
+}
+
+function pintarVistaPreviaCartola(){
+    const zona = document.getElementById("mCartolaResultado");
+    const c = cartolaEnProceso;
+    if(!zona || !c){
+        return;
+    }
+    const encabezados = (c.filas[c.filaEncabezado] || []).map((h, i) => String(h).trim() || "Columna " + (i + 1));
+    const r = interpretarCartola(c.filas, c.filaEncabezado, c.mapa);
+    c.resultado = r;
+
+    const ya = new Set(movimientosBancarios.map(m => m.id));
+    const conteo = {};
+    const nuevos = r.movimientos.filter(m => {
+        const clave = m.fecha + "|" + m.monto + "|" + m.descripcion + "|" + m.saldo;
+        conteo[clave] = (conteo[clave] || 0) + 1;
+        return !ya.has(idMovimientoBancario(m, conteo[clave]));
+    }).length;
+
+    const selector = (campo, label) => `
+        <div class="form-group" style="margin:0">
+            <label>${esc(label)}</label>
+            <select class="form-control" onchange="cambiarColumnaCartola('${escJs(campo)}', this.value)">
+                <option value="">— No tiene —</option>
+                ${encabezados.map((h, i) => `<option value="${esc(i)}" ${c.mapa[campo] === i ? "selected" : ""}>${esc(h)}</option>`).join("")}
+            </select>
+        </div>
+    `;
+
+    const ingresos = r.movimientos.filter(m => m.monto > 0).length;
+    const egresos = r.movimientos.length - ingresos;
+    const valido = r.movimientos.length > 0;
+
+    zona.innerHTML = `
+        ${valido ? `
+            <div class="conc-alerta is-ok">${icon('circle-check')}<div><strong>${esc(r.movimientos.length)} movimientos encontrados</strong> (${esc(ingresos)} abonos, ${esc(egresos)} cargos)${r.periodo ? " · " + esc(periodoLabel(r.periodo)) : ""}.
+            ${nuevos < r.movimientos.length ? `<br>${esc(r.movimientos.length - nuevos)} ya estaban importados y no se duplicarán.` : ""}</div></div>
+        ` : `
+            <div class="conc-alerta is-error">${icon('triangle-alert')}<div>No encontramos movimientos con estas columnas. Revisa abajo qué columna corresponde a cada dato.</div></div>
+        `}
+
+        <details ${c.detectada && valido ? "" : "open"} style="margin-top:12px">
+            <summary style="cursor:pointer;font-size:13px;font-weight:600">Columnas del archivo${c.detectada ? " (detectadas automáticamente)" : ""}</summary>
+            <div class="conc-columnas">
+                <div class="form-group" style="margin:0">
+                    <label>Fila de encabezados</label>
+                    <input class="form-control" type="number" min="1" value="${esc(c.filaEncabezado + 1)}" onchange="cambiarFilaEncabezadoCartola(this.value)">
+                </div>
+                ${selector("fecha", "Fecha")}
+                ${selector("descripcion", "Descripción")}
+                ${selector("cargo", "Cargo")}
+                ${selector("abono", "Abono")}
+                ${selector("monto", "Monto (si no hay Cargo/Abono)")}
+                ${selector("saldo", "Saldo")}
+            </div>
+        </details>
+
+        ${valido ? `
+            <div class="table-wrap" style="margin-top:12px">
+                <table>
+                    <thead><tr><th>Fecha</th><th>Descripción</th><th style="text-align:right">Monto</th><th style="text-align:right">Saldo</th></tr></thead>
+                    <tbody>
+                        ${r.movimientos.slice(0, 5).map(m => `
+                            <tr>
+                                <td>${esc(formatFecha(m.fecha))}</td>
+                                <td>${esc(m.descripcion)}</td>
+                                <td class="conc-monto ${esc(m.monto > 0 ? "is-in" : "is-out")}">${esc(m.monto > 0 ? "+" : "-")}${esc(formatCLP(Math.abs(m.monto)))}</td>
+                                <td style="text-align:right">${esc(m.saldo == null ? "—" : formatCLP(m.saldo))}</td>
+                            </tr>
+                        `).join("")}
+                    </tbody>
+                </table>
+            </div>
+            ${r.movimientos.length > 5 ? `<p style="font-size:12px;color:var(--muted);margin-top:6px">Y ${esc(r.movimientos.length - 5)} más.</p>` : ""}
+        ` : ""}
+    `;
+}
+
+async function procesarCartola(){
+    const c = cartolaEnProceso;
+    if(!c || !c.resultado || !c.resultado.movimientos.length){
+        showToast("Primero elige un archivo con movimientos");
+        return;
+    }
+
+    const ref = refComunidadActual();
+    const ya = new Set(movimientosBancarios.map(m => m.id));
+    const conteo = {};
+    const ahora = Date.now();
+    const importacionRef = ref.collection("importacionesBancarias").doc();
+    const porGuardar = [];
+
+    c.resultado.movimientos.forEach((m, i) => {
+        const clave = m.fecha + "|" + m.monto + "|" + m.descripcion + "|" + m.saldo;
+        conteo[clave] = (conteo[clave] || 0) + 1;
+        const id = idMovimientoBancario(m, conteo[clave]);
+        if(ya.has(id)){
+            return;
+        }
+        porGuardar.push({id, datos:{
+            fecha: m.fecha,
+            descripcion: m.descripcion.slice(0, 300),
+            monto: m.monto,
+            saldo: m.saldo,
+            periodo: m.fecha.slice(0, 7),
+            orden: ahora + i,
+            estado: "Pendiente",
+            importacionId: importacionRef.id,
+            ts: ahora
+        }});
+    });
+
+    try {
+        for(let i = 0; i < porGuardar.length; i += 400){
+            const lote = db.batch();
+            porGuardar.slice(i, i + 400).forEach(p => lote.set(ref.collection("movimientosBancarios").doc(p.id), p.datos));
+            await lote.commit();
+        }
+        await importacionRef.set({
+            archivo: c.archivo.slice(0, 200),
+            periodo: c.resultado.periodo,
+            cantidad: c.resultado.movimientos.length,
+            nuevos: porGuardar.length,
+            por: nombreQuienConcilia(),
+            porUid: currentUid,
+            ts: ahora
+        });
+    } catch(err){
+        console.error(err);
+        showToast("No se pudieron guardar los movimientos. Revisa tu conexión.");
+        return;
+    }
+
+    conciliacionPeriodo = c.resultado.periodo;
+    conciliacionFiltro = "Todos";
+    cartolaEnProceso = null;
+    closeModal();
+    adminTab = "conciliacion";
+    renderAdmin();
+    showToast(porGuardar.length
+        ? `${porGuardar.length} movimientos importados`
+        : "Esos movimientos ya estaban importados");
+}
+
+
+/* ---- Conciliar ---- */
+
+// Deja registro del movimiento conciliado y del historial en un mismo lote.
+async function guardarConciliacion(mov, asociado, extra, automatico){
+    const ref = refComunidadActual();
+    const ahora = Date.now();
+    const lote = db.batch();
+    lote.update(ref.collection("movimientosBancarios").doc(mov.id), Object.assign({
+        estado: "Conciliado",
+        asociado: asociado,
+        conciliadoPor: nombreQuienConcilia(),
+        conciliadoPorUid: currentUid,
+        conciliadoEn: ahora,
+        automatico: !!automatico
+    }, extra || {}));
+    lote.set(ref.collection("historialConciliacion").doc(), {
+        accion: "conciliar",
+        movimientoId: mov.id,
+        fecha: mov.fecha,
+        monto: mov.monto,
+        descripcion: mov.descripcion,
+        asociado: asociado.etiqueta + (asociado.depto ? " · Depto " + asociado.depto : ""),
+        depto: asociado.depto || null,
+        periodo: mov.periodo,
+        nota: (extra && extra.notaDiferencia) || "",
+        automatico: !!automatico,
+        por: nombreQuienConcilia(),
+        porUid: currentUid,
+        ts: ahora
+    });
+    await lote.commit();
+}
+
+// candidato: uno de buscarCoincidencias(). destino: qué hacer con la
+// diferencia si el abono es mayor que la deuda ("proximo" | "saldo" | "revisar").
+async function conciliarConCandidato(mov, candidato, destino, automatico){
+    const contableIds = [];
+    let extra = {};
+
+    if(candidato.tipo === "gasto" || candidato.tipo === "multa"){
+        const opciones = {fechaPago: mov.fecha, metodoPago: "Transferencia (cartola bancaria)", silencioso: true};
+        const contableId = candidato.tipo === "gasto"
+            ? await marcarGastoPagado(candidato.id, opciones)
+            : await marcarMultaPagada(candidato.id, opciones);
+        if(!contableId){
+            throw new Error("No se pudo registrar el pago de la deuda.");
+        }
+        contableIds.push(contableId);
+    } else if(candidato.tipo === "contable"){
+        contableIds.push(candidato.id);
+    }
+
+    const diferencia = Math.abs(mov.monto) - candidato.monto;
+    if(diferencia > 0){
+        if(destino === "proximo" || destino === "saldo"){
+            const destinoTexto = destino === "proximo" ? "Abono al próximo período" : "Saldo a favor";
+            const idContable = await registrarMovimientoContable({
+                tipo: "Ingreso",
+                categoria: "Saldo a favor",
+                descripcion: `${destinoTexto} depto ${candidato.depto} (pago del ${formatFecha(mov.fecha)})`,
+                monto: diferencia,
+                fecha: mov.fecha,
+                origen: "Conciliación",
+                depto: candidato.depto
+            });
+            if(idContable){
+                contableIds.push(idContable);
+            }
+            await refComunidadActual().collection("saldosAFavor").add({
+                depto: candidato.depto,
+                monto: diferencia,
+                destino: destinoTexto,
+                estado: "Disponible",
+                movimientoId: mov.id,
+                fechaOrigen: mov.fecha,
+                por: nombreQuienConcilia(),
+                ts: Date.now()
+            });
+            extra = {diferencia, destinoDiferencia: destino, notaDiferencia: `${formatCLP(diferencia)} como ${destinoTexto.toLowerCase()}`};
+        } else {
+            extra = {diferencia, destinoDiferencia: "revisar", notaDiferencia: `Diferencia de ${formatCLP(diferencia)} por revisar`};
+        }
+    }
+
+    await guardarConciliacion(mov, {
+        tipo: candidato.tipo,
+        id: candidato.id,
+        depto: candidato.depto || null,
+        etiqueta: candidato.etiqueta,
+        contableIds: contableIds
+    }, extra, automatico);
+    return contableIds;
+}
+
+async function conciliarSugerido(id){
+    const mov = movimientosBancarios.find(m => m.id === id);
+    if(!mov || mov.estado === "Conciliado"){
+        return;
+    }
+    const c = buscarCoincidencias(mov, datosParaCoincidencias());
+    if(c.nivel !== "exacta" || c.candidatos[0].diferencia !== 0){
+        abrirAsociarMovimiento(id);
+        return;
+    }
+    try {
+        await conciliarConCandidato(mov, c.candidatos[0], null, false);
+        showToast("Movimiento conciliado");
+    } catch(err){
+        console.error(err);
+        showToast("No se pudo conciliar. Revisa tu conexión.");
+    }
+}
+
+async function conciliarExactas(){
+    const pendientes = movimientosBancarios
+        .filter(m => m.periodo === conciliacionPeriodo && m.estado !== "Conciliado")
+        .sort((a, b) => a.fecha.localeCompare(b.fecha) || (a.orden || 0) - (b.orden || 0));
+    let hechas = 0;
+    for(const mov of pendientes){
+        // Se recalcula en cada vuelta: una deuda recién saldada ya no
+        // puede usarse para el movimiento siguiente.
+        const c = buscarCoincidencias(mov, datosParaCoincidencias());
+        if(c.nivel !== "exacta" || c.candidatos[0].diferencia !== 0){
+            continue;
+        }
+        try {
+            const contableIds = await conciliarConCandidato(mov, c.candidatos[0], null, true);
+            // Reflejo local inmediato (sin esperar el snapshot) para que la
+            // vuelta siguiente no vuelva a ofrecer lo que se acaba de usar.
+            mov.estado = "Conciliado";
+            mov.asociado = {contableIds: contableIds};
+            hechas++;
+        } catch(err){
+            console.error(err);
+            showToast("Se detuvo la conciliación automática. Revisa tu conexión.");
+            break;
+        }
+    }
+    renderAdmin();
+    if(hechas){
+        showToast(`${hechas} movimiento(s) conciliado(s) automáticamente`);
+    }
+}
+
+async function revertirConciliacion(id){
+    const mov = movimientosBancarios.find(m => m.id === id);
+    if(!mov || mov.estado !== "Conciliado"){
+        return;
+    }
+    if(!window.confirm("¿Revertir esta conciliación? El movimiento vuelve a quedar pendiente. Los pagos ya registrados en Gastos comunes y Contabilidad no se deshacen.")){
+        return;
+    }
+    const ref = refComunidadActual();
+    const lote = db.batch();
+    lote.update(ref.collection("movimientosBancarios").doc(mov.id), {
+        estado: "Pendiente",
+        asociado: null,
+        diferencia: null,
+        destinoDiferencia: null,
+        conciliadoPor: null,
+        conciliadoPorUid: null,
+        conciliadoEn: null,
+        automatico: false
+    });
+    lote.set(ref.collection("historialConciliacion").doc(), {
+        accion: "revertir",
+        movimientoId: mov.id,
+        fecha: mov.fecha,
+        monto: mov.monto,
+        descripcion: mov.descripcion,
+        asociado: mov.asociado ? mov.asociado.etiqueta : "",
+        depto: mov.asociado ? mov.asociado.depto || null : null,
+        periodo: mov.periodo,
+        nota: "",
+        automatico: false,
+        por: nombreQuienConcilia(),
+        porUid: currentUid,
+        ts: Date.now()
+    });
+    try {
+        await lote.commit();
+    } catch(err){
+        console.error(err);
+        showToast("No se pudo revertir. Revisa tu conexión.");
+        return;
+    }
+    closeModal();
+    showToast("Conciliación revertida");
+}
+
+
+/* ---- Asociar movimiento (modal) ---- */
+
+function abrirAsociarMovimiento(id){
+    openModal("asociarMovimiento", {id: id, busqueda: ""});
+    const mov = movimientosBancarios.find(m => m.id === id);
+    // Un movimiento ya conciliado solo se consulta (o se revierte).
+    document.getElementById("modalSaveBtn").classList.toggle("hidden", !mov || mov.estado === "Conciliado");
+    document.getElementById("modalCancelBtn").textContent = mov && mov.estado === "Conciliado" ? "Cerrar" : "Cancelar";
+    actualizarDiferenciaAsociar();
+}
+
+function candidatosManualesIngreso(mov, busqueda){
+    const texto = normalizarTextoConc(busqueda);
+    if(!texto){
+        return [];
+    }
+    const monto = Math.abs(mov.monto);
+    const deudas = [
+        ...gastosComunes.filter(g => g.estado !== "Pagado")
+            .map(g => ({tipo:"gasto", id:g.id, depto:String(g.depto), monto:g.monto, etiqueta:"Gasto común " + periodoLabel(g.periodo), periodo:g.periodo})),
+        ...multas.filter(m => m.estado !== "Pagada")
+            .map(m => ({tipo:"multa", id:m.id, depto:String(m.depto), monto:m.monto, etiqueta:"Multa: " + m.tipoMultaNombre, periodo:""}))
+    ];
+    return deudas
+        .filter(d => normalizarTextoConc(d.depto).startsWith(texto) ||
+            normalizarTextoConc(nombreResidente(d.depto)).includes(texto))
+        .filter(d => d.monto <= monto)
+        .sort((a, b) => String(a.depto).localeCompare(String(b.depto), "es", {numeric:true}) || String(a.periodo).localeCompare(String(b.periodo)))
+        .slice(0, 12)
+        .map(d => Object.assign(d, {diferencia: monto - d.monto}));
+}
+
+function htmlAsociarMovimiento(ctx){
+    const mov = movimientosBancarios.find(m => m.id === ctx.id);
+    if(!mov){
+        return "<p>Este movimiento ya no existe.</p>";
+    }
+    const esIngreso = mov.monto > 0;
+    const cabecera = `
+        <div class="conc-mov">
+            <div class="conc-mov-monto ${esc(esIngreso ? "is-in" : "is-out")}">${esc(esIngreso ? "+" : "-")}${esc(formatCLP(Math.abs(mov.monto)))}</div>
+            <div>${esc(formatFecha(mov.fecha))} · ${esc(esIngreso ? "Abono" : "Cargo")}</div>
+            <div style="font-weight:600">${esc(mov.descripcion || "(sin glosa)")}</div>
+        </div>
+    `;
+
+    if(mov.estado === "Conciliado"){
+        return `
+            ${cabecera}
+            <div class="conc-alerta ${esc(mov.destinoDiferencia === "revisar" ? "is-error" : "is-ok")}">${icon(mov.destinoDiferencia === "revisar" ? 'triangle-alert' : 'circle-check')}<div>
+                <strong>Asociado a:</strong> ${esc(mov.asociado ? mov.asociado.etiqueta : "—")}${mov.asociado && mov.asociado.depto ? " · Depto " + esc(mov.asociado.depto) : ""}
+                ${mov.diferencia ? `<br>Diferencia de ${esc(formatCLP(mov.diferencia))}: ${esc(mov.destinoDiferencia === "revisar" ? "por revisar" : mov.destinoDiferencia === "proximo" ? "abono al próximo período" : "saldo a favor")}.` : ""}
+            </div></div>
+            <p style="font-size:13px;color:var(--muted);margin:12px 0">
+                Conciliado por ${esc(mov.conciliadoPor || "—")} el ${esc(formatUltimoAcceso(mov.conciliadoEn))}${mov.automatico ? " (automática)" : ""}.
+            </p>
+            <button class="outline-btn" onclick="revertirConciliacion('${escJs(mov.id)}')">Revertir conciliación</button>
+        `;
+    }
+
+    const c = buscarCoincidencias(mov, datosParaCoincidencias());
+    const manuales = esIngreso ? candidatosManualesIngreso(mov, ctx.busqueda) : [];
+    const lista = [...c.candidatos];
+    manuales.forEach(m => {
+        if(!lista.some(x => x.tipo === m.tipo && x.id === m.id)){
+            lista.push(m);
+        }
+    });
+    ctx.lista = lista;
+
+    const opcion = (cand, i) => `
+        <label class="conc-cand">
+            <input type="radio" name="mConcCandidato" value="${esc(i)}" ${i === 0 && c.nivel !== "sin" ? "checked" : ""} onchange="actualizarDiferenciaAsociar()">
+            <div>
+                <div style="font-weight:600">${esc(cand.etiqueta)}${cand.depto ? " · Depto " + esc(cand.depto) : ""}</div>
+                <div style="font-size:12px;color:var(--muted)">
+                    ${cand.tipo === "contable" ? "Ya registrado en Contabilidad" : "Deuda"}: ${esc(formatCLP(cand.monto))}
+                    ${cand.diferencia ? ` · Diferencia: +${esc(formatCLP(cand.diferencia))}` : ""}
+                </div>
+            </div>
+        </label>
+    `;
+
+    return `
+        ${cabecera}
+
+        <p style="font-size:13px;margin:14px 0 8px;font-weight:600">¿Qué corresponde a este ${esc(esIngreso ? "pago" : "cargo")}?</p>
+
+        ${esIngreso ? `
+            <div class="form-group">
+                <input id="mConcBusqueda" class="form-control" type="text" inputmode="search" placeholder="Buscar departamento o residente..."
+                       value="${esc(ctx.busqueda)}" oninput="buscarEnAsociar(this.value)" autocomplete="off">
+            </div>
+        ` : ""}
+
+        <div id="mConcLista">
+            ${lista.length ? lista.map(opcion).join("") : `<p style="font-size:13px;color:var(--muted)">${esc(esIngreso ? "No hay deudas que calcen con este monto. Busca el departamento o regístralo como otro ingreso." : "No hay egresos registrados con este monto cerca de esta fecha.")}</p>`}
+            <label class="conc-cand">
+                <input type="radio" name="mConcCandidato" value="nuevo" ${!lista.length ? "checked" : ""} onchange="actualizarDiferenciaAsociar()">
+                <div>
+                    <div style="font-weight:600">Registrar como ${esc(esIngreso ? "otro ingreso" : "egreso nuevo")} en Contabilidad</div>
+                    <div style="font-size:12px;color:var(--muted)">${esc(esIngreso ? "Intereses, arriendo de espacios, aportes, etc." : "Un gasto que todavía no estaba registrado.")}</div>
+                </div>
+            </label>
+        </div>
+
+        <div id="mConcNuevo" class="${!lista.length ? "" : "hidden"}">
+            <div class="form-group">
+                <label>Categoría</label>
+                <select id="mConcCategoria" class="form-control">
+                    ${(esIngreso ? ["Otros ingresos", "Intereses", "Arriendo de espacios", "Aportes"] : ["Proveedores", "Servicios básicos", "Remuneraciones", "Mantención", "Comisiones bancarias", "Otros egresos"])
+                        .map(o => `<option>${esc(o)}</option>`).join("")}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Descripción</label>
+                <input id="mConcDescripcion" class="form-control" type="text" maxlength="120" value="${esc(mov.descripcion)}">
+            </div>
+        </div>
+
+        <div id="mConcDiferencia"></div>
+    `;
+}
+
+function buscarEnAsociar(valor){
+    if(modalMode !== "asociarMovimiento" || !modalContext){
+        return;
+    }
+    modalContext.busqueda = valor;
+    document.getElementById("modalBody").innerHTML = htmlAsociarMovimiento(modalContext);
+    const input = document.getElementById("mConcBusqueda");
+    if(input){
+        input.focus();
+        input.setSelectionRange(valor.length, valor.length);
+    }
+    actualizarDiferenciaAsociar();
+}
+
+function actualizarDiferenciaAsociar(){
+    const zona = document.getElementById("mConcDiferencia");
+    const nuevo = document.getElementById("mConcNuevo");
+    const elegido = document.querySelector('input[name="mConcCandidato"]:checked');
+    if(!zona || !modalContext){
+        return;
+    }
+    const valor = elegido ? elegido.value : null;
+    if(nuevo){
+        nuevo.classList.toggle("hidden", valor !== "nuevo");
+    }
+    const cand = valor !== null && valor !== "nuevo" ? modalContext.lista[parseInt(valor, 10)] : null;
+    if(!cand || !cand.diferencia){
+        zona.innerHTML = "";
+        return;
+    }
+    zona.innerHTML = `
+        <div class="conc-dif">
+            <p style="margin:0 0 8px"><strong>Pago recibido ${esc(formatCLP(cand.monto + cand.diferencia))}</strong> · Deuda ${esc(formatCLP(cand.monto))} · Diferencia <strong>+${esc(formatCLP(cand.diferencia))}</strong></p>
+            <p style="margin:0 0 8px;font-size:13px">¿Qué desea hacer con los ${esc(formatCLP(cand.diferencia))} restantes?</p>
+            <label class="conc-opt"><input type="radio" name="mConcDestino" value="proximo" checked> Abonar al próximo período</label>
+            <label class="conc-opt"><input type="radio" name="mConcDestino" value="saldo"> Registrar como saldo a favor</label>
+            <label class="conc-opt"><input type="radio" name="mConcDestino" value="revisar"> Revisar manualmente</label>
+        </div>
+    `;
+}
+
+async function guardarAsociarMovimiento(){
+    const mov = modalContext && movimientosBancarios.find(m => m.id === modalContext.id);
+    if(!mov || mov.estado === "Conciliado"){
+        closeModal();
+        return;
+    }
+    const elegido = document.querySelector('input[name="mConcCandidato"]:checked');
+    if(!elegido){
+        showToast("Elige a qué corresponde este movimiento");
+        return;
+    }
+
+    try {
+        if(elegido.value === "nuevo"){
+            const descripcion = document.getElementById("mConcDescripcion").value.trim();
+            const categoria = document.getElementById("mConcCategoria").value;
+            if(!descripcion){
+                showToast("Escribe una descripción");
+                return;
+            }
+            const idContable = await registrarMovimientoContable({
+                tipo: mov.monto > 0 ? "Ingreso" : "Egreso",
+                categoria: categoria,
+                descripcion: descripcion,
+                monto: Math.abs(mov.monto),
+                fecha: mov.fecha,
+                origen: "Conciliación"
+            });
+            if(!idContable){
+                return;
+            }
+            await guardarConciliacion(mov, {
+                tipo: "contable",
+                id: idContable,
+                depto: null,
+                etiqueta: categoria + ": " + descripcion,
+                contableIds: [idContable]
+            }, {}, false);
+        } else {
+            const cand = modalContext.lista[parseInt(elegido.value, 10)];
+            const destino = document.querySelector('input[name="mConcDestino"]:checked');
+            await conciliarConCandidato(mov, cand, destino ? destino.value : null, false);
+        }
+    } catch(err){
+        console.error(err);
+        showToast("No se pudo conciliar. Revisa tu conexión.");
+        return;
+    }
+
+    closeModal();
+    showToast("Movimiento conciliado");
+}
+
+
+/* ================================
    CONTABILIDAD
 
    Libro simple de ingresos y egresos del edificio. Tres módulos generan
@@ -3430,10 +4835,12 @@ async function registrarMovimientoContable(datos){
     }
 
     try {
-        await refComunidadActual().collection("movimientosContables").add(movimiento);
+        const ref = await refComunidadActual().collection("movimientosContables").add(movimiento);
+        return ref.id;
     } catch(err){
         console.error(err);
         showToast("No se pudo registrar el movimiento contable. Revisa tu conexión.");
+        return null;
     }
 
 }
@@ -3865,7 +5272,12 @@ async function iniciarSesionComunidad(comunidadId){
         {nombre:"proveedoresDirectorio", array:proveedoresDirectorio, setUnsub:u => proveedoresDirectorioUnsub = u},
         {nombre:"mantenciones", array:mantenciones, setUnsub:u => mantencionesUnsub = u},
         {nombre:"vehiculosRegistrados", array:vehiculosRegistrados, setUnsub:u => vehiculosRegistradosUnsub = u},
-        {nombre:"accesos", array:accesos, setUnsub:u => accesosUnsub = u}
+        {nombre:"accesos", array:accesos, setUnsub:u => accesosUnsub = u},
+        // Conciliación bancaria: solo administración las puede leer.
+        {nombre:"movimientosBancarios", array:movimientosBancarios, setUnsub:u => movimientosBancariosUnsub = u, soloAdmin:true},
+        {nombre:"importacionesBancarias", array:importacionesBancarias, setUnsub:u => importacionesBancariasUnsub = u, soloAdmin:true},
+        {nombre:"historialConciliacion", array:historialConciliacion, setUnsub:u => historialConciliacionUnsub = u, soloAdmin:true},
+        {nombre:"saldosAFavor", array:saldosAFavor, setUnsub:u => saldosAFavorUnsub = u, soloAdmin:true}
     ];
 
     // Bitácoras que crecen todos los días: administración y conserjería
@@ -3883,6 +5295,9 @@ async function iniciarSesionComunidad(comunidadId){
         // financiero) - ni siquiera lo intentamos leer para ese rol, para
         // no depender de que el catch de abajo la salve.
         if(modulo.nombre === "gastosComunes" && currentRole === "conserje"){
+            continue;
+        }
+        if(modulo.soloAdmin && currentRole !== "admin"){
             continue;
         }
 
@@ -3963,6 +5378,10 @@ function detenerListenersComunidad(){
     if(mantencionesUnsub){ mantencionesUnsub(); mantencionesUnsub = null; }
     if(vehiculosRegistradosUnsub){ vehiculosRegistradosUnsub(); vehiculosRegistradosUnsub = null; }
     if(accesosUnsub){ accesosUnsub(); accesosUnsub = null; }
+    if(movimientosBancariosUnsub){ movimientosBancariosUnsub(); movimientosBancariosUnsub = null; }
+    if(importacionesBancariasUnsub){ importacionesBancariasUnsub(); importacionesBancariasUnsub = null; }
+    if(historialConciliacionUnsub){ historialConciliacionUnsub(); historialConciliacionUnsub = null; }
+    if(saldosAFavorUnsub){ saldosAFavorUnsub(); saldosAFavorUnsub = null; }
     if(notificacionesUnsub){ notificacionesUnsub(); notificacionesUnsub = null; }
     if(notificacionesDeptoUnsub){ notificacionesDeptoUnsub(); notificacionesDeptoUnsub = null; }
     visitas.length = 0;
@@ -3984,6 +5403,11 @@ function detenerListenersComunidad(){
     mantenciones.length = 0;
     vehiculosRegistrados.length = 0;
     accesos.length = 0;
+    movimientosBancarios.length = 0;
+    importacionesBancarias.length = 0;
+    historialConciliacion.length = 0;
+    saldosAFavor.length = 0;
+    conciliacionPeriodo = null;
     notificaciones.length = 0;
     notifParaTodosCache.length = 0;
     notifDeptoCache.length = 0;
@@ -6431,6 +7855,7 @@ function renderAdmin(){
         {id:"finanzas", icon:"banknote", label:"Gastos comunes"},
         {id:"multas", icon:"siren", label:"Multas"},
         {id:"contabilidad", icon:"book-open", label:"Contabilidad"},
+        {id:"conciliacion", icon:"landmark", label:"Conciliación bancaria"},
         {id:"remuneraciones", icon:"receipt", label:"Remuneraciones"},
         {id:"proveedores", icon:"wrench", label:"Proveedores"},
         {id:"controlacceso", icon:"car", label:"Control de acceso"}
@@ -6439,11 +7864,11 @@ function renderAdmin(){
     // Agrupadas por tema (Comunidad / Finanzas / Operación) en una sola
     // línea con scroll horizontal, en vez de 9 botones que se partían en
     // dos filas.
-    const etiquetaCorta = {departamentos:"Residentes", controlacceso:"Accesos"};
+    const etiquetaCorta = {departamentos:"Residentes", controlacceso:"Accesos", conciliacion:"Conciliación"};
     const grupos = [
         {label:"", ids:["dashboard"]},
         {label:"Comunidad", ids:["departamentos", "conserjes"]},
-        {label:"Finanzas", ids:["finanzas", "multas", "contabilidad", "remuneraciones"]},
+        {label:"Finanzas", ids:["finanzas", "multas", "contabilidad", "conciliacion", "remuneraciones"]},
         {label:"Operación", ids:["proveedores", "controlacceso"]}
     ];
     const tabsHtml = grupos.map(g => `
@@ -6472,6 +7897,8 @@ function renderAdmin(){
         bodyHtml = renderAdminMultas();
     } else if(adminTab === "contabilidad"){
         bodyHtml = renderAdminContabilidad();
+    } else if(adminTab === "conciliacion"){
+        bodyHtml = renderAdminConciliacion();
     } else if(adminTab === "remuneraciones"){
         bodyHtml = renderAdminRemuneraciones();
     } else if(adminTab === "proveedores"){
@@ -7349,17 +8776,18 @@ function actualizarMontoSugeridoMulta(){
 }
 
 
-async function marcarMultaPagada(id){
+// Mismas opciones y retorno que marcarGastoPagado().
+async function marcarMultaPagada(id, opciones = {}){
 
     const multa = multas.find(m => m.id === id);
 
     if(!multa){
-        return;
+        return null;
     }
 
     multa.estado = "Pagada";
-    multa.fechaPago = (multa.pagoInformado && multa.pagoInformado.fecha) || hoyISO();
-    multa.metodoPago = textoMetodoPago(multa, "Registrado por administración");
+    multa.fechaPago = opciones.fechaPago || (multa.pagoInformado && multa.pagoInformado.fecha) || hoyISO();
+    multa.metodoPago = textoMetodoPago(multa, opciones.metodoPago || "Registrado por administración");
 
     renderAdmin();
 
@@ -7373,10 +8801,10 @@ async function marcarMultaPagada(id){
     } catch(err){
         console.error(err);
         showToast("No se pudo guardar el pago. Revisa tu conexión.");
-        return;
+        return null;
     }
 
-    await registrarMovimientoContable({
+    const contableId = await registrarMovimientoContable({
         tipo:"Ingreso",
         categoria:"Multa",
         descripcion:`Multa "${multa.tipoMultaNombre}" · Depto ${multa.depto}`,
@@ -7394,7 +8822,11 @@ async function marcarMultaPagada(id){
         paraTodos:false
     });
 
-    showToast("Pago de multa registrado para el depto " + multa.depto);
+    if(!opciones.silencioso){
+        showToast("Pago de multa registrado para el depto " + multa.depto);
+    }
+
+    return contableId;
 
 }
 
@@ -8657,7 +10089,9 @@ const modalTitles = {
     invitadoReserva:"Agregar invitado",
     visitaProgramada:"Avisar una visita",
     editarPropiedad:"Datos de la propiedad",
-    documento:"Nuevo documento"
+    documento:"Nuevo documento",
+    importarCartola:"Importar movimientos bancarios",
+    asociarMovimiento:"Asociar movimiento bancario"
 };
 
 
@@ -8689,7 +10123,9 @@ const modalSaveLabels = {
     invitadoReserva:"Agregar",
     visitaProgramada:"Guardar",
     editarPropiedad:"Guardar",
-    documento:"Publicar"
+    documento:"Publicar",
+    importarCartola:"Procesar conciliación",
+    asociarMovimiento:"Conciliar"
 };
 
 
@@ -8713,6 +10149,22 @@ function notifTone(nombreOEmoji){
 
 
 const modalFormBuilders = {
+
+    importarCartola: () => `
+        <p style="font-size:13px;color:var(--muted);margin:0 0 12px;line-height:1.5">
+            Sube la cartola de la cuenta de la comunidad tal como la descargas del banco.
+            Mi Comunidad detecta las columnas Fecha, Descripción, Cargo, Abono y Saldo.
+        </p>
+        <div class="form-group">
+            <label for="mCartolaArchivo">Archivo (Excel o CSV)</label>
+            <input id="mCartolaArchivo" class="form-control" type="file"
+                   accept=".xlsx,.xls,.csv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+                   onchange="alElegirArchivoCartola(this)">
+        </div>
+        <div id="mCartolaResultado"></div>
+    `,
+
+    asociarMovimiento: (ctx) => htmlAsociarMovimiento(ctx),
 
     solicitud: () => `
 
@@ -12392,6 +13844,14 @@ async function saveModal(){
 
         showToast("Multa aplicada al depto " + depto);
         renderAdmin();
+
+    } else if(modalMode === "importarCartola"){
+
+        await procesarCartola();
+
+    } else if(modalMode === "asociarMovimiento"){
+
+        await guardarAsociarMovimiento();
 
     } else if(modalMode === "movimientoContable"){
 

@@ -147,3 +147,43 @@ test("ultimoAcceso rechaza fechas inventadas o texto", async () => {
   await assertFails(residente().doc(BASE).update({ultimoAcceso: Date.now() + 365 * 86400000}));
   await assertFails(residente().doc(BASE).update({ultimoAcceso: "ayer"}));
 });
+
+// ---- conciliación bancaria ----
+
+const movBanco = {fecha: "2026-09-02", descripcion: "TRANSF DEPTO 101", monto: 85000, saldo: 100000,
+  periodo: "2026-09", orden: 1, estado: "Pendiente", importacionId: "i1", ts: 1};
+
+test("administración importa y concilia movimientos bancarios", async () => {
+  const db = adminDb();
+  const ref = db.doc(`${BASE}/movimientosBancarios/m1`);
+  await assertSucceeds(ref.set(movBanco));
+  await assertSucceeds(ref.update({estado: "Conciliado", asociado: {tipo: "gasto", id: "g1"}}));
+  await assertSucceeds(db.collection(`${BASE}/historialConciliacion`).add({
+    accion: "conciliar", movimientoId: "m1", porUid: "adm1", ts: 1}));
+  await assertSucceeds(db.collection(`${BASE}/saldosAFavor`).add({depto: "101", monto: 5000}));
+  await assertSucceeds(db.collection(`${BASE}/importacionesBancarias`).add({archivo: "c.csv"}));
+});
+
+test("NO se puede cambiar el monto ni borrar un movimiento bancario", async () => {
+  await env.withSecurityRulesDisabled((ctx) => ctx.firestore().doc(`${BASE}/movimientosBancarios/m1`).set(movBanco));
+  const ref = adminDb().doc(`${BASE}/movimientosBancarios/m1`);
+  await assertFails(ref.update({monto: 1}));
+  await assertFails(ref.delete());
+});
+
+test("el historial de conciliación es solo-agregar y a nombre propio", async () => {
+  await env.withSecurityRulesDisabled((ctx) => ctx.firestore().doc(`${BASE}/historialConciliacion/h1`).set({porUid: "adm1"}));
+  const db = adminDb();
+  await assertFails(db.doc(`${BASE}/historialConciliacion/h1`).update({por: "otro"}));
+  await assertFails(db.doc(`${BASE}/historialConciliacion/h1`).delete());
+  await assertFails(db.collection(`${BASE}/historialConciliacion`).add({porUid: "otro-uid"}));
+});
+
+test("conserjería y residentes NO ven la conciliación bancaria", async () => {
+  await env.withSecurityRulesDisabled((ctx) => ctx.firestore().doc(`${BASE}/movimientosBancarios/m1`).set(movBanco));
+  for (const db of [conserje(), residente()]) {
+    await assertFails(db.doc(`${BASE}/movimientosBancarios/m1`).get());
+    await assertFails(db.collection(`${BASE}/movimientosBancarios`).add(movBanco));
+    await assertFails(db.collection(`${BASE}/saldosAFavor`).get());
+  }
+});

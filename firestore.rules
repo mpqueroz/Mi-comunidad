@@ -616,6 +616,45 @@ service cloud.firestore {
         allow update, delete: if false;
       }
 
+      // ---- Conciliación bancaria (solo administración) ----
+      // Movimientos leídos de la cartola que sube el admin. Se crean
+      // "Pendiente" y al conciliarse guardan a qué se asociaron. No se
+      // borran: una cartola mal subida se revierte movimiento a movimiento
+      // y todo queda en el historial.
+      match /movimientosBancarios/{id} {
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin() &&
+                         request.resource.data.estado == "Pendiente" &&
+                         request.resource.data.monto is int &&
+                         request.resource.data.fecha is string;
+        allow update: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin() &&
+                         request.resource.data.fecha == resource.data.fecha &&
+                         request.resource.data.monto == resource.data.monto &&
+                         request.resource.data.descripcion == resource.data.descripcion;
+        allow delete: if false;
+      }
+
+      // Registro de cada archivo importado.
+      match /importacionesBancarias/{id} {
+        allow read, create: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        allow update, delete: if false;
+      }
+
+      // Historial de auditoría: solo se agregan entradas, a nombre de quien
+      // las crea. Nadie (ni administración) puede editarlas ni borrarlas.
+      match /historialConciliacion/{id} {
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin() &&
+                         request.resource.data.porUid == request.auth.uid;
+        allow update, delete: if false;
+      }
+
+      // Saldos a favor que nacen de un pago mayor que la deuda.
+      match /saldosAFavor/{id} {
+        allow read, create, update: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        allow delete: if false;
+      }
+
       // Remuneraciones del personal (sueldos de conserjes) - dato de
       // administración interna, solo administración lo ve y gestiona.
       match /remuneraciones/{id} {

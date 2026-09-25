@@ -382,6 +382,61 @@ pestaña actual de administración: residentes, gastos comunes, multas,
 libro contable o remuneraciones. `celdaCSV()` antepone `'` a los textos
 que empiezan con `= + - @` para evitar inyección de fórmulas en Excel.
 
+## Conciliación bancaria (V1: cartola en Excel/CSV)
+
+Pestaña **Finanzas → Conciliación** de administración
+(`renderAdminConciliacion()`). Sin conexión al banco: el administrador sube
+la cartola que descarga de su banco y la app hace el resto.
+
+- **Lectura** (`leerArchivoCartola` → `detectarColumnasCartola` →
+  `interpretarCartola`): CSV (`;` `,` o tabulador, UTF-8 o Windows-1252) o
+  Excel (SheetJS, cargado desde su CDN recién al elegir un .xlsx). Encuentra
+  sola la fila de encabezados en las primeras 40 filas y las columnas
+  Fecha / Descripción / Cargo / Abono / Saldo, o una sola columna Monto con
+  signo; el admin puede corregir el mapeo en el mismo modal. Montos en formato
+  chileno (`85.000`, `$ 1.234.567`, `(650.000)`), fechas `dd/mm/aaaa`,
+  `aaaa-mm-dd` o serie de Excel. Deja los movimientos en orden cronológico.
+- **Sin duplicados**: cada movimiento se guarda en `movimientosBancarios` con
+  un id determinístico (`idMovimientoBancario`: fecha + monto + glosa + saldo +
+  n.º de repetición), así reimportar la misma cartola o una superpuesta no
+  duplica nada.
+- **Coincidencias** (`buscarCoincidencias`, se calculan en vivo, no se
+  guardan): un abono se compara con gastos comunes y multas sin pagar (o
+  "Por confirmar") y con ingresos ya registrados en Contabilidad; un cargo, con
+  egresos de Contabilidad (±15 días). El depto se reconoce en la glosa
+  ("DEPTO 305", "DPTO. 305", un número de depto suelto o el apellido del
+  residente) y el N° de operación del pago informado también cuenta.
+  - **Exacta**: monto igual y depto/operación/proveedor identificado, sin
+    empate. Se concilia con un toque, o todas juntas con "Conciliar las N".
+  - **Probable**: solo calza el monto, o el depto calza con un monto mayor, o
+    hay dos deudas iguales (el admin elige el mes).
+  - **Sin coincidencia**: se asigna a mano (buscador por depto o residente) o
+    se registra como ingreso/egreso nuevo en Contabilidad.
+  - Un abono **menor** que la deuda no se ofrece contra ella (no hay pagos
+    parciales en V1).
+- **Conciliar** una deuda la marca pagada con el flujo de siempre
+  (`marcarGastoPagado`/`marcarMultaPagada`, con la fecha del banco), que crea el
+  ingreso en Contabilidad. Si el abono supera la deuda, la diferencia se
+  registra como "Abono al próximo período" o "Saldo a favor" (`saldosAFavor` +
+  ingreso contable "Saldo a favor") o queda "por revisar".
+- **Tablero**: saldo según banco (saldo del último movimiento) vs. saldo según
+  sistema (saldo inicial del período según la cartola + ingresos − egresos de
+  Contabilidad con fecha de ese período). Si difieren, alerta roja con el monto.
+- **Auditoría**: cada conciliación y cada reversión agrega una entrada en
+  `historialConciliacion` (quién, cuándo, qué, a qué se asoció). Las reglas la
+  hacen de solo-agregar y a nombre de quien la crea. Revertir deja el movimiento
+  pendiente pero no deshace el pago ya registrado en Gastos comunes/Contabilidad.
+- **Reglas**: las 4 colecciones (`movimientosBancarios`,
+  `importacionesBancarias`, `historialConciliacion`, `saldosAFavor`) son solo
+  de administración; un movimiento bancario no se puede borrar ni cambiar su
+  fecha, monto o glosa.
+- **Tests**: `tests/conciliacion.test.js` prueba lectura y coincidencias
+  tomando el bloque `CONCILIACION-PURAS` directo de `index.html`.
+
+Pendiente para una V2: cierre mensual, pagos parciales, aplicar
+automáticamente los saldos a favor al generar el cobro siguiente y conexión
+directa con el banco.
+
 ## Multas internas
 
 Administración configura un catálogo de tipos de multa (`tiposMulta` -
