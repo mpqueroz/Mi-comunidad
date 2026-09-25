@@ -1,4 +1,12 @@
 {
+  "hosting": {
+    "site": "mi-comunidad-md",
+    "public": "public",
+    "ignore": [
+      "**/.*",
+      "**/node_modules/**"
+    ]
+  },
   "firestore": {
     "rules": "firestore.rules"
   },

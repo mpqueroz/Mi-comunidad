@@ -8,7 +8,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+const html = fs.readFileSync(path.join(__dirname, "..", "public", "index.html"), "utf8");
 const bloque = html.split("/* CONCILIACION-PURAS:INICIO */")[1].split("/* CONCILIACION-PURAS:FIN */")[0];
 const C = new Function(bloque + `; return {parsearMontoConc, parsearFechaConc, parsearCSVConc,
   detectarColumnasCartola, interpretarCartola, idMovimientoBancario, deptosEnDescripcion,
