@@ -67,6 +67,10 @@ jobs:
       - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      # Muestra solo el correo de la cuenta de servicio (no la llave), para
+      # saber con qué cuenta se autentica el deploy si falla un permiso.
+      - name: Cuenta de servicio en uso
+        run: 'echo "Deploy como: $(jq -r .client_email "$GOOGLE_APPLICATION_CREDENTIALS")"'
       - name: Instalar dependencias de functions
         working-directory: functions
         run: npm ci
