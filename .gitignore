@@ -1,0 +1,21 @@
+# Credenciales - NUNCA deben subirse a un repositorio ni viajar en un zip
+# compartido. Si alguna vez existió una copia de estos archivos en un
+# commit anterior, hay que rotar la clave/contraseña, no solo borrarla.
+serviceAccountKey.json
+functions/serviceAccountKey.json
+*.serviceAccountKey.json
+
+# Dependencias (se reinstalan con npm install / firebase deploy)
+node_modules/
+functions/node_modules/
+
+# Artefactos locales de Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+pubsub-debug.log
+
+# Sistema operativo / editor
+.DS_Store
+Thumbs.db
