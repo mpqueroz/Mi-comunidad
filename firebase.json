@@ -1,0 +1,19 @@
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "*.local",
+        "serviceAccountKey.json",
+        "*.serviceAccountKey.json",
+        "crear-superadmin.js",
+        "restablecer-clave.js"
+      ]
+    }
+  ]
+}

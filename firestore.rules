@@ -1,0 +1,694 @@
+rules_version = '2';
+
+// ============================================================
+// Reglas de Firestore del proyecto mercado-ciudadano
+//
+// Este proyecto de Firebase es COMPARTIDO por 3 apps de Marcelo:
+//   1. Mercado Ciudadano  (colecciones: usuarios, anuncios)
+//   2. Almacén Digital    (colecciones: stores, userStores)
+//   3. Mi Comunidad       (colecciones: mi_comunidad_*)
+//
+// Firebase admite UN SOLO archivo de reglas por proyecto: al hacer
+// `firebase deploy --only firestore:rules` desde CUALQUIERA de las 3
+// apps, se reemplazan las reglas de TODAS. Por eso este archivo debe
+// ser siempre el mismo en las 3 carpetas: si cambias reglas de una app,
+// edítalas aquí y copia este archivo a las otras dos.
+//
+// Las funciones de Mi Comunidad llevan el prefijo "mc" y las de Almacén
+// Digital viven dentro de su bloque, para que ningún nombre choque.
+// ============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =================================================================
+    // MERCADO CIUDADANO
+    // (transcrito desde la versión que estaba publicada antes del
+    // deploy de Mi Comunidad - sin cambios de lógica)
+    // =================================================================
+
+    match /usuarios/{userId} {
+      allow read: if true;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && request.auth.uid == userId;
+      allow delete: if false;
+
+      match /notificaciones/{notifId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow create: if request.auth != null;
+        allow update: if request.auth != null && request.auth.uid == userId
+                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['leido']);
+        allow delete: if false;
+      }
+    }
+
+    match /anuncios/{anuncioId} {
+      allow read: if true;
+
+      allow create: if request.auth != null
+                    && request.resource.data.autorUid == request.auth.uid
+                    && request.resource.data.aprobado == false;
+
+      allow update: if
+        (request.auth != null && request.auth.token.email == 'mpqueroz@gmail.com')
+        ||
+        (request.auth != null
+          && request.auth.uid == resource.data.autorUid
+          && request.resource.data.autorUid == resource.data.autorUid
+          && (request.resource.data.aprobado == resource.data.aprobado || request.resource.data.aprobado == false))
+        ||
+        (request.auth != null
+          && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['ratingCount','ratingSuma','ratingPromedio','reportCount']));
+
+      allow delete: if request.auth != null &&
+        (request.auth.uid == resource.data.autorUid ||
+         request.auth.token.email == 'mpqueroz@gmail.com');
+
+      match /valoraciones/{valoracionId} {
+        allow read: if true;
+        allow create: if request.auth != null
+                      && request.auth.uid == request.resource.data.autorUid
+                      && get(/databases/$(database)/documents/anuncios/$(anuncioId)/contactos/$(request.auth.uid)).data.confirmado == true;
+        allow update, delete: if false;
+      }
+
+      match /contactos/{clienteUid} {
+        allow read: if request.auth != null
+                    && (request.auth.uid == clienteUid
+                        || get(/databases/$(database)/documents/anuncios/$(anuncioId)).data.autorUid == request.auth.uid);
+        allow create: if request.auth != null
+                      && request.auth.uid == clienteUid
+                      && request.resource.data.confirmado == false;
+        allow update: if request.auth != null
+                      && get(/databases/$(database)/documents/anuncios/$(anuncioId)).data.autorUid == request.auth.uid
+                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['confirmado','fechaConfirmacion']);
+        allow delete: if false;
+      }
+
+      match /reportes/{reporteId} {
+        allow read: if request.auth != null && request.auth.token.email == 'mpqueroz@gmail.com';
+        allow create: if request.auth != null && request.auth.uid == request.resource.data.autorUid;
+        allow update, delete: if false;
+      }
+    }
+
+    // =================================================================
+    // ALMACÉN DIGITAL
+    // (transcrito desde la versión publicada antes. Único cambio: la
+    // función esAdmin() pasó a llamarse esAdminAlmacen() para que no
+    // choque con la de Mi Comunidad.)
+    // =================================================================
+
+    function esDueno(storeId) {
+      return request.auth != null && request.auth.uid == storeId;
+    }
+    function esMiembroEquipo(storeId) {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/stores/$(storeId)/team/$(request.auth.uid));
+    }
+    function rolEquipo(storeId) {
+      return get(/databases/$(database)/documents/stores/$(storeId)/team/$(request.auth.uid)).data.role;
+    }
+    // Correo del administrador de la plataforma: único que puede ver y
+    // aprobar/rechazar TODOS los negocios registrados (no solo el suyo).
+    function esAdminAlmacen() {
+      return request.auth != null && request.auth.token.email == 'mpqueroz@gmail.com';
+    }
+
+    // Apunta cada cuenta (uid) al negocio al que pertenece, su rol, y si es
+    // dueño, el estado de aprobación (pending/approved/rejected).
+    match /userStores/{uid} {
+      allow read: if (request.auth != null && request.auth.uid == uid) || esAdminAlmacen();
+      allow create: if request.auth != null &&
+        ( (request.auth.uid == uid && request.resource.data.storeId == uid && request.resource.data.role == 'owner')
+          || esDueno(request.resource.data.storeId) );
+      allow update: if esAdminAlmacen() || esDueno(resource.data.storeId);
+      allow delete: if esDueno(resource.data.storeId) || esAdminAlmacen();
+    }
+
+    // Documento legado (formato antiguo, de un solo bloque). Solo lo usa el
+    // proceso de migración automática, que corre como el propio dueño.
+    match /stores/{storeId} {
+      allow read, write: if esDueno(storeId);
+    }
+
+    match /stores/{storeId}/team/{uid} {
+      allow read: if esDueno(storeId) || (request.auth != null && request.auth.uid == uid);
+      allow write: if esDueno(storeId);
+    }
+
+    // Nombre del negocio y logo - el vendedor solo necesita LEERLO (para que
+    // el comprobante impreso se vea correcto), no puede modificarlo.
+    // El contador de folio ("counters") sí lo puede escribir el vendedor,
+    // porque necesita asignarle un número a cada venta que registra.
+    // El nombre del "cajero actual" (dentro de "general") también lo puede
+    // cambiar el vendedor - es un dato de turno, no de configuración del negocio.
+    match /stores/{storeId}/settings/{docId} {
+      allow read: if esDueno(storeId) || esMiembroEquipo(storeId);
+      allow create: if esDueno(storeId) ||
+        (docId == 'counters' && esMiembroEquipo(storeId) && rolEquipo(storeId) == 'vendedor') ||
+        (docId == 'general' && esMiembroEquipo(storeId) && rolEquipo(storeId) == 'vendedor'
+          && request.resource.data.keys().hasOnly(['currentCashierName']));
+      allow update: if esDueno(storeId) ||
+        (docId == 'counters' && esMiembroEquipo(storeId) && rolEquipo(storeId) == 'vendedor') ||
+        (docId == 'general' && esMiembroEquipo(storeId) && rolEquipo(storeId) == 'vendedor'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentCashierName']));
+      allow delete: if esDueno(storeId);
+    }
+
+    match /stores/{storeId}/products/{productId} {
+      allow read: if esDueno(storeId) || esMiembroEquipo(storeId);
+      allow create, delete: if esDueno(storeId);
+      // El vendedor solo puede bajar el stock (nunca precio, costo, nombre,
+      // ni subir el stock) - así puede vender sin poder tocar la contabilidad.
+      allow update: if esDueno(storeId) ||
+        ( esMiembroEquipo(storeId) && rolEquipo(storeId) == 'vendedor'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock'])
+          && request.resource.data.stock <= resource.data.stock );
+    }
+
+    match /stores/{storeId}/sales/{saleId} {
+      // Solo el dueño puede LEER las ventas (ahí vive el costo y el margen).
+      // El vendedor solo puede crearlas - registra la venta pero no ve el historial.
+      allow read, update, delete: if esDueno(storeId);
+      allow create: if esDueno(storeId) || (esMiembroEquipo(storeId) && rolEquipo(storeId) == 'vendedor');
+    }
+
+    match /stores/{storeId}/purchases/{purchaseId} {
+      allow read, write: if esDueno(storeId);
+    }
+
+    match /stores/{storeId}/expenses/{expenseId} {
+      allow read, write: if esDueno(storeId);
+    }
+
+    // =================================================================
+    // MI COMUNIDAD
+    // =================================================================
+
+    // ---------------- Funciones de Mi Comunidad ----------------
+    // Van DENTRO de "match /databases/{database}/documents": fuera de ese
+    // bloque la variable `database` no existe, y mcEsComunidadActiva() - que
+    // usa get() - fallaba siempre, bloqueando TODA la lectura de datos de Mi
+    // Comunidad (por eso no se podía iniciar sesión).
+    // Todo lo de Mi Comunidad exige primero que el token tenga
+    // app == "mi_comunidad" (claim que pone la Cloud Function al crear
+    // la cuenta), así no se cruza con usuarios de las otras apps.
+
+    function mcEsMiComunidad() {
+      return request.auth != null && request.auth.token.get("app", "") == "mi_comunidad";
+    }
+
+    function mcRol() {
+      return request.auth.token.get("role", "");
+    }
+
+    function mcComunidadIdToken() {
+      // .get(): el superadmin NO tiene comunidadId en su token; leerlo con
+      // .comunidadId hacía fallar la regla y bloqueaba su panel.
+      return request.auth.token.get("comunidadId", "");
+    }
+
+    function mcMiDepto() {
+      return request.auth.token.get("depto", "");
+    }
+
+    function mcEsAdmin() {
+      return mcEsMiComunidad() && mcRol() == "admin";
+    }
+
+    function mcEsConserje() {
+      return mcEsMiComunidad() && mcRol() == "conserje";
+    }
+
+    function mcEsResidente() {
+      return mcEsMiComunidad() && mcRol() == "residente";
+    }
+
+    function mcEsDeEstaComunidad(comunidadId) {
+      return mcEsMiComunidad() && mcComunidadIdToken() == comunidadId;
+    }
+
+    // "Suspendida" es el kill-switch comercial: una comunidad que dejó de
+    // pagar, o que aún no se activa formalmente, no debe poder seguir
+    // operando. Se consulta el propio doc de la comunidad (un get() extra por
+    // evaluación de regla) en vez de confiar en el token, porque el estado lo
+    // cambia el superadmin editando el documento, no un custom claim que
+    // obligaría a reautenticar a todo el mundo.
+    function mcEsComunidadActiva(comunidadId) {
+      // .get('estado', 'Activa'): si el documento de la comunidad no tiene el
+      // campo "estado" (comunidades creadas antes de que existiera), se
+      // considera activa. Leer un campo inexistente con .estado hace fallar
+      // la regla completa y bloqueaba TODA la app para ese edificio.
+      return get(/databases/$(database)/documents/mi_comunidad_comunidades/$(comunidadId)).data.get('estado', 'Activa') != "Suspendida";
+    }
+
+    // Úsese en TODO el contenido operativo (las subcolecciones). El doc de la
+    // propia comunidad es la única excepción: su lectura NO pasa por acá (sigue
+    // siendo esDeEstaComunidad a secas, más abajo) para que la app pueda leer
+    // el campo "estado" y avisar "servicio suspendido" en vez de un
+    // permission-denied genérico durante el login.
+    function mcEsDeEstaComunidadActiva(comunidadId) {
+      return mcEsDeEstaComunidad(comunidadId) && mcEsComunidadActiva(comunidadId);
+    }
+
+    // Un residente informando un pago: solo puede cambiar "estado" a
+    // "Por confirmar" y agregar "pagoInformado" con datos acotados.
+    function mcPagoInformadoValido() {
+      let p = request.resource.data.pagoInformado;
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(["estado", "pagoInformado"]) &&
+             request.resource.data.estado == "Por confirmar" &&
+             p is map &&
+             p.keys().hasOnly(["metodo", "fecha", "referencia", "informadoEn"]) &&
+             p.metodo in ["Transferencia", "Depósito", "Efectivo en conserjería", "Otro"] &&
+             p.fecha is string && p.fecha.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$") &&
+             p.referencia is string && p.referencia.size() <= 60 &&
+             p.informadoEn is int;
+    }
+
+    // El superadmin no pertenece a ningún edificio (no tiene comunidadId en su
+    // token): administra la plataforma completa - todas las comunidades.
+    function mcEsSuperAdmin() {
+      return mcEsMiComunidad() && mcRol() == "superadmin";
+    }
+
+
+
+    // ---- Comunidad (datos generales del edificio) ----
+    match /mi_comunidad_comunidades/{comunidadId} {
+
+      // Cualquier rol de Mi Comunidad que pertenezca a esta comunidad puede
+      // leerla -incluso si está suspendida: así la app puede leer "estado"
+      // y mostrar un mensaje claro en vez de un permission-denied genérico
+      // durante el login- y el superadmin puede leer/listar todas (panel
+      // "Comunidades").
+      allow read: if mcEsDeEstaComunidad(comunidadId) || mcEsSuperAdmin();
+
+      // Solo administración (de esta comunidad, y solo si sigue activa) o
+      // el superadmin pueden editar los datos generales del edificio.
+      // Crear una comunidad nueva se hace SOLO vía Cloud Function
+      // (crearComunidadMiComunidad, Admin SDK), nunca directo desde el
+      // cliente. Eliminar una comunidad tampoco existe como acción del
+      // cliente - solo Firebase Console o Admin SDK.
+      allow delete: if false;
+
+      // Excepción puntual: CUALQUIER rol de una comunidad activa (no solo
+      // admin) puede actualizar el campo ultimoAcceso - es el "ping" que
+      // alimenta la columna Actividad del panel de superadmin. Se acota
+      // por campo (affectedKeys().hasOnly) para que esa apertura no sirva
+      // para tocar ningún otro dato de la comunidad.
+      allow update: if mcEsSuperAdmin() ||
+                       (mcEsAdmin() && mcEsDeEstaComunidadActiva(comunidadId)) ||
+                       (mcEsDeEstaComunidadActiva(comunidadId) &&
+                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ultimoAcceso']) &&
+                        // Solo un timestamp (ms) cercano a la hora real: sin esto se
+                        // podía escribir cualquier valor (una fecha futura, un texto)
+                        // y falsear la columna Actividad del panel de superadmin. El
+                        // margen de 15 min tolera relojes de dispositivos desfasados.
+                        request.resource.data.ultimoAcceso is int &&
+                        math.abs(request.resource.data.ultimoAcceso - request.time.toMillis()) < 15 * 60 * 1000);
+
+      allow create: if false;
+
+      // ---- Residentes (una ficha por departamento, doc id = uid del residente) ----
+      match /residentes/{uid} {
+
+        // Admin y conserjería necesitan ver todas las fichas (control de acceso total).
+        // Un residente solo puede leer su propia ficha.
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) &&
+                       (mcEsAdmin() || mcEsConserje() || (mcEsResidente() && request.auth.uid == uid));
+
+        // Crear/eliminar cuentas de residentes SOLO vía Cloud Function (Admin SDK),
+        // nunca directo desde el cliente.
+        allow create, delete: if false;
+
+        // Un residente puede actualizar su propia ficha (agregar familiares,
+        // personas sin acceso, pregunta secreta), pero NO puede tocar los
+        // campos de identificación/administración de su propio documento
+        // (depto, nombre, rut, telefono, estado, ni los datos de propiedad
+        // que gestiona administración) - eso evita que reescriba su propia
+        // ficha para, por ejemplo, aparecer con otro depto. Admin puede
+        // editar cualquier campo de cualquier ficha. Conserjería NO puede
+        // modificar fichas, solo consultarlas.
+        // La respuesta secreta ya no vive en la ficha (ver /secretos): ningún
+        // cliente puede crear ni cambiar el campo respuestaSecreta.
+        allow update: if mcEsDeEstaComunidadActiva(comunidadId) &&
+                         request.resource.data.get('respuestaSecreta', null) == resource.data.get('respuestaSecreta', null) &&
+                         (mcEsAdmin() ||
+                          // Lista BLANCA, no negra: el residente solo puede tocar
+                          // familiares y restringidos (lo único que la app le deja
+                          // editar). Antes se enumeraban los campos prohibidos, y
+                          // cualquier campo no listado - o uno nuevo inventado -
+                          // quedaba abierto. Las listas tienen un tope para que no
+                          // se pueda inflar el documento hasta el límite de 1 MB.
+                          (mcEsResidente() && request.auth.uid == uid &&
+                           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['familiares', 'restringidos']) &&
+                           request.resource.data.get('familiares', []) is list &&
+                           request.resource.data.get('familiares', []).size() <= 50 &&
+                           request.resource.data.get('restringidos', []) is list &&
+                           request.resource.data.get('restringidos', []).size() <= 50));
+      }
+
+      // ---- Respuestas secretas (hash scrypt, doc id = uid del residente) ----
+      // Cerrada por completo a los clientes: solo las Cloud Functions
+      // definirPreguntaSecretaMiComunidad / verificarPreguntaSecretaMiComunidad
+      // (Admin SDK) leen y escriben aquí. Ni administración puede leerla.
+      match /secretos/{uid} {
+        allow read, write: if false;
+      }
+
+      // ---- Conserjes (doc id = uid del conserje) ----
+      match /conserjes/{uid} {
+
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje());
+
+        allow create, delete: if false;
+
+        allow update: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+      }
+
+      // ---- Módulos operativos del día a día ----
+      // Antes vivían en localStorage (cada dispositivo con su propia copia,
+      // sin sincronizar); ahora viven acá para que lo que un residente
+      // registra en su celular lo vea conserjería en su propio equipo, y
+      // viceversa. Todos comparten el mismo criterio: administración y
+      // conserjería ven y gestionan todo lo de su comunidad; un residente
+      // solo ve lo de su propio departamento.
+
+      // Visitas ya ingresadas - las crea conserjería (directo, o al marcar
+      // el ingreso de una visita programada por el residente).
+      match /visitas/{id} {
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) &&
+                       (mcEsAdmin() || mcEsConserje() || (mcEsResidente() && resource.data.depto == mcMiDepto()));
+        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje());
+        allow update, delete: if false;
+      }
+
+      // Visitas que un residente avisa con anticipación - las crea el
+      // propio residente para SU departamento; conserjería/admin las leen
+      // todas y marcan el ingreso (lo que a su vez crea el doc de arriba).
+      match /visitasProgramadas/{id} {
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) &&
+                       (mcEsAdmin() || mcEsConserje() || (mcEsResidente() && resource.data.depto == mcMiDepto()));
+        allow create: if mcEsDeEstaComunidadActiva(comunidadId) &&
+                         mcEsResidente() && request.resource.data.depto == mcMiDepto();
+        allow update: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje());
+        allow delete: if mcEsDeEstaComunidadActiva(comunidadId) &&
+                         ((mcEsResidente() && resource.data.depto == mcMiDepto()) || mcEsAdmin());
+      }
+
+      // Bitácora de ingreso/salida de vehículos - la crea conserjería.
+      match /vehiculos/{id} {
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) &&
+                       (mcEsAdmin() || mcEsConserje() || (mcEsResidente() && resource.data.depto == mcMiDepto()));
+        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje());
+        allow update, delete: if false;
+      }
+
+      // Encomiendas - las registra conserjería; el propio residente puede
+      // marcar la suya como retirada desde su dashboard.
+      // Encomiendas - "Entregado" es un estado final e inmutable a
+      // propósito (ver ARCHITECTURE.md): una vez que el conserje confirma
+      // el retiro con el código/QR del residente, NADIE puede volver a
+      // tocar ese documento, ni siquiera administración. El residente
+      // nunca escribe directo acá - solo lee (para ver el estado y su
+      // propio código/QR); quien confirma el retiro es siempre la persona
+      // de conserjería que tiene al residente físicamente enfrente.
+      match /encomiendas/{id} {
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) &&
+                       (mcEsAdmin() || mcEsConserje() || (mcEsResidente() && resource.data.depto == mcMiDepto()));
+
+        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje()) &&
+                         request.resource.data.estado == "Recibido";
+
+        // Solo las 3 transiciones que existen en la app, y cada una
+        // acotada a sus campos: depto, código y qrToken no se pueden
+        // reescribir después de registrada la encomienda.
+        //   Recibido → En proceso de entrega   (iniciarProcesoEntrega)
+        //   En proceso de entrega → Recibido   (closeModal, revertir)
+        //   En proceso de entrega → Entregado  (confirmarEntregaEncomienda)
+        allow update: if mcEsDeEstaComunidadActiva(comunidadId) &&
+                         (mcEsAdmin() || mcEsConserje()) &&
+                         (
+                           (resource.data.estado == "Recibido" &&
+                            request.resource.data.estado == "En proceso de entrega" &&
+                            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado'])) ||
+                           (resource.data.estado == "En proceso de entrega" &&
+                            request.resource.data.estado == "Recibido" &&
+                            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado'])) ||
+                           (resource.data.estado == "En proceso de entrega" &&
+                            request.resource.data.estado == "Entregado" &&
+                            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado', 'retiradoPor', 'confirmadoPor', 'entregadoEn']))
+                         );
+
+        allow delete: if false;
+      }
+
+      // Contador para el código correlativo de encomiendas (PAQ-2026-000458).
+      // Un documento por año, incrementado con una transacción desde el
+      // cliente al registrar un paquete - por eso necesita permiso de
+      // escritura para admin/conserje, igual que la propia colección de
+      // encomiendas.
+      match /contadores/{id} {
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje());
+        // Solo se puede avanzar de a 1 (lo que hace generarCodigoEncomienda):
+        // antes se podía reiniciar o bajar el contador y repetir códigos PAQ-.
+        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje()) &&
+                         request.resource.data.keys().hasOnly(['valor']) &&
+                         request.resource.data.valor == 1;
+        allow update: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje()) &&
+                         request.resource.data.keys().hasOnly(['valor']) &&
+                         request.resource.data.valor == resource.data.get('valor', 0) + 1;
+        allow delete: if false;
+      }
+
+      // Reservas de espacios comunes (quincho, centro de eventos, piscina,
+      // gimnasio) - la validación de morosidad (no reservar con gastos
+      // comunes atrasados) depende de consultar OTRA colección
+      // (gastosComunes), algo que estas reglas no pueden verificar de forma
+      // segura sin conocer de antemano el id exacto del documento. Por eso
+      // la creación se mueve por completo a la Cloud Function
+      // crearReservaMiComunidad (Admin SDK, valida la morosidad Y que el
+      // bloque elegido no esté ya tomado, de forma atómica con una
+      // transacción) - el cliente ya no escribe reservas directo a
+      // Firestore.
+      //
+      // La lectura es SOLO para admin, conserjería y el propio depto: acá
+      // vive el detalle completo (quién reservó y su lista de invitados),
+      // que no debe verlo el resto del edificio. La disponibilidad
+      // ("¿está libre?") que sí necesita ver todo el mundo vive aparte, en
+      // bloquesOcupados, justo abajo - sin nombre, depto ni invitados.
+      match /reservas/{id} {
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) &&
+                       (mcEsAdmin() || mcEsConserje() || (mcEsResidente() && resource.data.depto == mcMiDepto()));
+        allow create: if false;
+        allow update: if mcEsDeEstaComunidadActiva(comunidadId) &&
+                         mcEsResidente() && resource.data.depto == mcMiDepto() &&
+                         request.resource.data.depto == resource.data.depto &&
+                         request.resource.data.lugar == resource.data.lugar &&
+                         request.resource.data.fecha == resource.data.fecha &&
+                         request.resource.data.hora == resource.data.hora &&
+                         request.resource.data.bloqueId == resource.data.bloqueId &&
+                         request.resource.data.estado == resource.data.estado;
+        allow delete: if false;
+      }
+
+      // Marcador de disponibilidad, sin datos personales: un documento por
+      // fecha+bloque que EXISTE si ese bloque ya está tomado, sin decir por
+      // quién. Lo escribe únicamente la Cloud Function (dentro de la misma
+      // transacción que crea la reserva real) - por eso "allow write: false"
+      // acá; nadie escribe esto directo desde el cliente, ni admin.
+      match /bloquesOcupados/{id} {
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId);
+        allow write: if false;
+      }
+
+      // Bloques horarios reservables por espacio (ej: Quincho → "Mañana
+      // 10:00-14:00"). Los define administración; toda la comunidad los
+      // lee (residentes para elegir al reservar, conserjería para
+      // responder "¿hay disponible?" sin tener que abrir su perfil).
+      match /bloquesReserva/{id} {
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId);
+        allow create, update, delete: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+      }
+
+      // Gastos comunes - los genera administración; el propio residente
+      // puede marcar el suyo como pagado (pago simulado, sin pasarela real
+      // todavía). No se expone a conserjería (dato financiero). El update
+      // del residente está acotado por campo: solo puede fijar estado en
+      // "Pagado" y completar fechaPago/metodoPago - no puede cambiar monto,
+      // depto, periodo ni vencimiento del cobro.
+      match /gastosComunes/{id} {
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) &&
+                       (mcEsAdmin() || (mcEsResidente() && resource.data.depto == mcMiDepto()));
+        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        allow update: if mcEsDeEstaComunidadActiva(comunidadId) &&
+                         (mcEsAdmin() ||
+                          // El residente ya NO puede marcar su gasto como pagado: solo
+                          // INFORMAR un pago (estado "Por confirmar" + pagoInformado).
+                          // Lo confirma administración.
+                          (mcEsResidente() &&
+                           resource.data.depto == mcMiDepto() &&
+                           resource.data.estado in ["Pendiente", "Atrasado"] &&
+                           mcPagoInformadoValido()));
+        allow delete: if false;
+      }
+
+      // Catálogo de tipos de multa interna (ej. "Ruidos molestos") que
+      // administración define y puede activar/desactivar - toda la
+      // comunidad lo lee (el residente necesita ver el nombre de su
+      // propia multa, conserjería también puede consultarlo).
+      match /tiposMulta/{id} {
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId);
+        allow create, update, delete: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+      }
+
+      // Multas aplicadas a un departamento - mismo patrón que
+      // gastosComunes: administración las crea, el residente solo puede
+      // marcar la suya propia como pagada (pago simulado), sin poder
+      // tocar el monto, el tipo ni la fecha.
+      match /multas/{id} {
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) &&
+                       (mcEsAdmin() || mcEsConserje() || (mcEsResidente() && resource.data.depto == mcMiDepto()));
+        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        allow update: if mcEsDeEstaComunidadActiva(comunidadId) &&
+                         (mcEsAdmin() ||
+                          (mcEsResidente() &&
+                           resource.data.depto == mcMiDepto() &&
+                           resource.data.estado == "Pendiente" &&
+                           mcPagoInformadoValido()));
+        allow delete: if false;
+      }
+
+      // ---- Segunda tanda de módulos operativos (antes en localStorage) ----
+      // Mismo criterio de fondo que arriba: administración ve y gestiona
+      // todo; conserjería ve lo que necesita para su labor operativa;
+      // un residente solo ve/toca lo de su propio departamento.
+
+      // Avisos de administración a toda la comunidad - solo administración
+      // publica, cualquier rol de la comunidad los lee. Sin edición/borrado
+      // (tampoco existe esa opción en la app hoy).
+      match /avisos/{id} {
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje() || mcEsResidente());
+        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        allow update, delete: if false;
+      }
+
+      // Solicitudes/incidencias: el residente reporta las suyas, conserjería
+      // reporta a nombre de cualquier depto; administración y conserjería
+      // ven todas para dar seguimiento, un residente solo ve las de su
+      // propio depto. Avanzar el estado (Pendiente → En proceso → Resuelto)
+      // lo hacen admin o conserjería desde la ficha del departamento.
+      match /incidencias/{id} {
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) &&
+                       (mcEsAdmin() || mcEsConserje() || (mcEsResidente() && resource.data.depto == mcMiDepto()));
+        allow create: if mcEsDeEstaComunidadActiva(comunidadId) &&
+                         ((mcEsResidente() && request.resource.data.depto == mcMiDepto() && request.resource.data.origen == "Residente") ||
+                          (mcEsConserje() && request.resource.data.origen == "Conserjería"));
+        allow update: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje());
+        allow delete: if false;
+      }
+
+      // Documentos de la comunidad (reglamento, actas, comunicados) - los
+      // publica/quita administración, cualquier rol de la comunidad los lee
+      // y descarga.
+      match /documentos/{id} {
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje() || mcEsResidente());
+        allow create, delete: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        allow update: if false;
+      }
+
+      // Libro contable (ingresos/egresos) - dato financiero, solo lo lee
+      // administración. La mayoría de los movimientos los crea admin
+      // (manual, o automático al pagar remuneraciones/mantenciones); la
+      // única excepción es el ingreso que se genera cuando un RESIDENTE
+      // paga su propio gasto común desde su panel (pagarGastoComun) - se
+      // le permite crear ESE movimiento puntual, acotado por reglas para
+      // que no pueda inventar un ingreso/egreso arbitrario: solo un
+      // "Ingreso" de categoría "Gasto común", marcado "Automático", y
+      // atribuido a su propio departamento.
+      match /movimientosContables/{id} {
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        // Solo administración: los ingresos por gasto común o multa se
+        // registran al CONFIRMAR el pago, ya no cuando el residente lo informa.
+        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        allow update, delete: if false;
+      }
+
+      // Remuneraciones del personal (sueldos de conserjes) - dato de
+      // administración interna, solo administración lo ve y gestiona.
+      match /remuneraciones/{id} {
+        allow read, create, update: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        allow delete: if false;
+      }
+
+      // Directorio de proveedores/contratistas - lo gestiona administración.
+      match /proveedoresDirectorio/{id} {
+        allow read, create: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        allow update, delete: if false;
+      }
+
+      // Mantenciones programadas a proveedores - las gestiona administración.
+      match /mantenciones/{id} {
+        allow read, create, update: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        allow delete: if false;
+      }
+
+      // Catálogo de vehículos recurrentes/sospechosos - lo alimentan y
+      // consultan tanto administración como conserjería (conserjería puede
+      // marcar un vehículo sospechoso directamente desde su panel); borrar
+      // de la lista queda solo para administración (única UI de borrado).
+      match /vehiculosRegistrados/{id} {
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje());
+        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje());
+        allow update: if false;
+        allow delete: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+      }
+
+      // Bitácora general de accesos (visitas sin depto fijo: delivery,
+      // proveedores puntuales, etc.) - la registra conserjería, la
+      // consultan administración y conserjería.
+      match /accesos/{id} {
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje());
+        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje());
+        allow update, delete: if false;
+      }
+
+      // Notificaciones - reemplazan lo que antes vivía en localStorage de
+      // cada dispositivo. Un mismo aviso puede llegarle a varias personas
+      // a la vez (paraTodos, o todos los residentes de un depto), así que
+      // "leída" no es un booleano único sino un arreglo leidaPor con el
+      // uid de cada quien ya la vio. Administración y conserjería pueden
+      // generar cualquiera (aviso, encomienda, pago, alerta); un residente
+      // solo las de su propio depto (ver el create). La lectura queda
+      // acotada por depto más abajo. El único update permitido es agregar el propio uid a
+      // leidaPor: no se puede tocar ningún otro campo, ni marcar como
+      // leído por otra persona, ni "desleer" a alguien.
+      match /notificaciones/{id} {
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) &&
+                       (mcEsAdmin() || mcEsConserje() ||
+                        (mcEsResidente() && (resource.data.paraTodos == true || resource.data.depto == mcMiDepto())));
+
+        // Un residente solo puede crear notificaciones de SU departamento
+        // (hoy: "Pago informado, por confirmar"). Antes podía crear una con
+        // paraTodos:true y mandarle un aviso falso a todo el edificio.
+        allow create: if mcEsDeEstaComunidadActiva(comunidadId) &&
+                         request.resource.data.leidaPor == [] &&
+                         (mcEsAdmin() || mcEsConserje() ||
+                          (mcEsResidente() &&
+                           request.resource.data.paraTodos == false &&
+                           request.resource.data.depto == mcMiDepto()));
+
+        allow update: if mcEsDeEstaComunidadActiva(comunidadId) &&
+                         (mcEsAdmin() || mcEsConserje() ||
+                          (mcEsResidente() && (resource.data.paraTodos == true || resource.data.depto == mcMiDepto()))) &&
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['leidaPor']) &&
+                         request.resource.data.leidaPor.hasAll(resource.data.leidaPor) &&
+                         request.resource.data.leidaPor.hasOnly(resource.data.leidaPor.concat([request.auth.uid]));
+
+        allow delete: if false;
+      }
+    }
+  }
+}
