@@ -59,6 +59,12 @@ export function itemsOn(k) {
   for (const p of list("planes")) {
     if (p.fecha === k) out.push({kind: "plan", icon: "🎉", time: p.hora || "", title: p.titulo, sub: p.lugar || "", ref: p});
   }
+  for (const c of list("colegio")) {
+    if (c.fecha === k && !c.hecho) {
+      const icon = {prueba: "📚", materiales: "✂️", recordatorio: "📌"}[c.tipo] || "📝";
+      out.push({kind: "colegio", icon, title: `${nameOf(c.para)}: ${c.titulo}`, sub: c.asignatura || "", who: [c.para], ref: c});
+    }
+  }
   for (const p of list("pedidos")) {
     if (p.fecha === k && p.estado !== "recibido") {
       out.push({kind: "pedido", icon: "📦", title: `Llega: ${p.descripcion || p.tienda}`, sub: [p.tienda, rango(p)].filter(Boolean).join(" · "), ref: p});

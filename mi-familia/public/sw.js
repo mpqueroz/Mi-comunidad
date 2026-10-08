@@ -3,13 +3,13 @@
 
 importScripts("js/config.js");
 
-const CACHE = "mi-familia-v1";
+const CACHE = "mi-familia-v2";
 const ASSETS = [
   "./", "index.html", "manifest.webmanifest", "css/app.css",
   "js/config.js", "js/app.js", "js/state.js", "js/logic.js", "js/util.js",
   "js/store-local.js", "js/store-firebase.js",
   "js/views/hoy.js", "js/views/muro.js", "js/views/casa.js", "js/views/cuidado.js",
-  "js/views/momentos.js", "js/views/familia.js",
+  "js/views/momentos.js", "js/views/familia.js", "js/views/colegio.js",
   "icons/icon.svg", "icons/icon-192.png",
   "vendor/leaflet/leaflet.js", "vendor/leaflet/leaflet.css", "vendor/qrcode.js",
 ];

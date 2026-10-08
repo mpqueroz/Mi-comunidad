@@ -60,6 +60,7 @@ const COLS = {
   fijados: {},
   compras: {},
   tareas: {},
+  colegio: {orderBy: ["createdAt", "desc"], limit: 300},
   eventos: {},
   cuentas: {},
   mascotas: {},

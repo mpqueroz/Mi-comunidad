@@ -131,6 +131,15 @@ exports.onFamiliaCreado = onDocumentCreated("families/{fid}/{col}/{id}", async (
     case "eventos":
       if (!d.quienes?.length) return;
       return notify(fid, members, {title: `📅 ${who} agendó algo`, body: `${d.titulo} · ${d.fecha}${d.hora ? " " + d.hora : ""}`, path: "#/casa/calendario", only: d.quienes, except: d.by});
+    case "colegio": {
+      if (d.by === d.para) return; // lo anotó el mismo hijo/a
+      const tipo = {prueba: "📚 Prueba", materiales: "✂️ Materiales", recordatorio: "📌 Recordatorio"}[d.tipo] || "📝 Tarea";
+      return notify(fid, members, {
+        title: `🎒 ${who} te envió: ${tipo}`,
+        body: `${d.asignatura ? d.asignatura + ": " : ""}${d.titulo}${d.fecha ? ` · para el ${d.fecha.slice(8)}/${d.fecha.slice(5, 7)}` : ""}`,
+        path: "#/casa/colegio", only: [d.para], tag: "colegio-" + event.params.id,
+      });
+    }
     case "fotos":
       return; // las fotos no notifican (serían demasiadas)
     default:
@@ -166,6 +175,11 @@ exports.onFamiliaActualizado = onDocumentUpdated("families/{fid}/{col}/{id}", as
         except: [after.resueltoBy], urgent: true, tag: "sos-" + event.params.id});
     }
     return;
+  }
+
+  if (col === "colegio" && !before.hecho && after.hecho && after.by !== after.hechoBy) {
+    const members = await familyMembers(fid);
+    return notify(fid, members, {title: `✅ ${nameIn(members, after.hechoBy)} terminó`, body: after.titulo, only: [after.by], path: "#/casa/colegio"});
   }
 
   if (col === "avisos" && !before.encargado && after.encargado && after.encargado !== after.by) {
@@ -234,7 +248,8 @@ exports.resumenDiario = onSchedule({schedule: "30 7 * * *", timeZone: TZ}, async
 
   for (const fam of families.docs) {
     const fid = fam.id;
-    const [members, pedidos, eventos, cuentas, mascotas, planes, tareas] = await Promise.all([
+    const manana = dayKeyTZ(new Date(Date.now() + 864e5));
+    const [members, pedidos, eventos, cuentas, mascotas, planes, tareas, colegio] = await Promise.all([
       familyMembers(fid),
       db.collection(`families/${fid}/pedidos`).where("fecha", "==", k).get(),
       db.collection(`families/${fid}/eventos`).get(),
@@ -242,7 +257,10 @@ exports.resumenDiario = onSchedule({schedule: "30 7 * * *", timeZone: TZ}, async
       db.collection(`families/${fid}/mascotas`).get(),
       db.collection(`families/${fid}/planes`).where("fecha", "==", k).get(),
       db.collection(`families/${fid}/tareas`).get(),
+      db.collection(`families/${fid}/colegio`).where("hecho", "==", false).get(),
     ]);
+    const escolar = colegio.docs.map((d) => d.data()).filter((c) => c.fecha === k || c.fecha === manana);
+    const tipoTxt = (c) => ({prueba: "prueba de", materiales: "llevar", recordatorio: ""}[c.tipo] ?? "tarea de");
     const comunes = [];
     for (const p of pedidos.docs.map((d) => d.data()).filter((p) => p.estado !== "recibido")) {
       comunes.push(`📦 Llega ${p.descripcion || p.tienda}`);
@@ -265,7 +283,11 @@ exports.resumenDiario = onSchedule({schedule: "30 7 * * *", timeZone: TZ}, async
       const mias = tareas.docs.map((d) => d.data())
         .filter((t) => turnoDe(t, k, ids) === m.id && !(t.frecuencia === "semanal" && new Date(k + "T12:00:00Z").getUTCDay() !== 1))
         .map((t) => `${t.emoji || "✅"} Te toca: ${t.titulo}`);
-      const lines = [...comunes, ...(["admin", "adulto"].includes(m.role) ? cuentasHoy : []), ...mias];
+      const adulto = ["admin", "adulto"].includes(m.role);
+      const cole = escolar
+        .filter((c) => c.para === m.id || adulto)
+        .map((c) => `🎒 ${c.para === m.id ? "" : nameIn(members, c.para) + ", "}${c.fecha === k ? "hoy" : "mañana"}: ${[tipoTxt(c), c.tipo === "materiales" ? c.titulo : c.asignatura || c.titulo].filter(Boolean).join(" ")}`);
+      const lines = [...comunes, ...(adulto ? cuentasHoy : []), ...cole, ...mias];
       if (!lines.length) continue;
       await notify(fid, members, {title: "☀️ Hoy en la familia", body: lines.join(" · "), only: [m.id], tag: "resumen"});
     }

@@ -13,7 +13,7 @@ rápido; se puede mover a su propio repositorio cuando quieras.
 |---|---|
 | **Hoy** | Resumen del día: quién está fuera, ánimo de cada uno, pedidos que llegan, eventos, cuentas vencidas, tareas que te tocan, cumpleaños, pregunta del día, "un día como hoy" |
 | **Muro** | Avisos para todos con prioridad y **"✋ Yo me encargo"**; **pedidos** con día, horario, n° de seguimiento y quién lo recibe; **fijados** (WiFi, pediatra, gásfiter…) |
-| **Casa** | **Lista de compras** en vivo, **tareas con turnos** que rotan solos, **calendario** (eventos repetidos, cumpleaños, cuentas, vacunas), **cuentas** del mes (solo adultos), **mascotas** (comida, vacunas, "¿quién le dio comida?") |
+| **Casa** | **Colegio**: los adultos envían tareas, pruebas, materiales y recordatorios a cada hijo/a (le llega una notificación, se ve cuándo lo vio y cuándo lo terminó; el resumen diario recuerda lo de mañana); **lista de compras** en vivo, **tareas con turnos** que rotan solos, **calendario** (eventos repetidos, cumpleaños, cuentas, vacunas), **cuentas** del mes (solo adultos), **mascotas** (comida, vacunas, "¿quién le dio comida?") |
 | **Cuidado** | **Salí / Llegué** con **llegada segura** (alerta si no llegas a la hora), **ubicación en vivo temporal** y mapa, **SOS** con ubicación, **fichas médicas**, teléfonos de emergencia |
 | **Momentos** | **Álbum privado**, **pregunta del día** (ves las respuestas al responder), **votaciones**, **planes** (quién va y qué lleva), **gracias**, **ánimo** y **no molestar** |
 | **Perfil** | Invitar (código, link, QR y WhatsApp), roles, **vista simple** con letra grande para abuelos, notificaciones, varias familias |

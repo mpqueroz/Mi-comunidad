@@ -1,22 +1,28 @@
-// Casa: lista de compras, tareas con turnos, calendario, cuentas por
+// Casa: lista de compras, colegio, tareas con turnos, calendario, cuentas por
 // pagar y mascotas.
 
 import {esc, ago, dayKey, monthKey, fmtDay, fmtMoney, parseDay, addDays, MESES, DIAS, pad, openForm, confirmar, toast, linkify} from "../util.js";
 import {S, A, F, C, rerender, list, members, nameOf, avatar, add, upd, del, canDelete, isAdult, subnav, empty, findById} from "../state.js";
 import {itemsOn, TIPOS, turnoDe, tareaHecha, proximosTurnos, periodKey, estadoCuenta} from "../logic.js";
+import * as colegio from "./colegio.js";
 
 export function render(sub = "compras") {
-  const items = [["compras", "🛒 Compras"], ["tareas", "🧹 Tareas"], ["calendario", "📅 Calendario"]];
+  const items = [["compras", "🛒 Compras"], ["colegio", "🎒 Colegio"], ["tareas", "🧹 Tareas"], ["calendario", "📅 Calendario"]];
   if (isAdult()) items.push(["cuentas", "🧾 Cuentas"]);
   items.push(["mascotas", "🐾 Mascotas"]);
   const nav = subnav("casa", sub, items);
   switch (sub) {
+    case "colegio": return nav + colegio.render();
     case "tareas": return nav + tareas();
     case "calendario": return nav + calendario();
     case "cuentas": return nav + (isAdult() ? cuentas() : "");
     case "mascotas": return nav + mascotas();
     default: return nav + compras();
   }
+}
+
+export function after(sub) {
+  if (sub === "colegio") colegio.after();
 }
 
 // ---------- compras ----------

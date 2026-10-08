@@ -32,7 +32,7 @@ service cloud.firestore {
     function commonCols() {
       return ['avisos', 'pedidos', 'fijados', 'compras', 'tareas', 'eventos', 'cuentas',
               'mascotas', 'fotos', 'votaciones', 'respuestas', 'planes', 'gracias',
-              'animos', 'salidas', 'sos'];
+              'animos', 'salidas', 'sos', 'colegio'];
     }
     // Solo adultos pueden escribirlas (y, en el caso de cuentas, leerlas).
     function adultCols() {

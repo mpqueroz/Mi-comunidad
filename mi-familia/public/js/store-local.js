@@ -5,7 +5,7 @@
 
 import {randomId, dayKey, addDays, compressImage, blobToDataURL, local, session} from "./util.js";
 
-const KEY = "mi_familia_demo_v1";
+const KEY = "mi_familia_demo_v2";
 const PERSONA = "mi_familia_demo_persona";
 const DEL = {__del: true};
 
@@ -314,6 +314,18 @@ function seed() {
             {by: P, createdAt: 2, titulo: "Pasear a Toby", emoji: "🐕", frecuencia: "diaria", rotacion: [S, P, J], inicio: d(-3),
               hechas: {[d(0)]: S}},
             {by: J, createdAt: 3, titulo: "Regar las plantas", emoji: "🪴", frecuencia: "semanal", rotacion: [R, S], inicio: d(-21), hechas: {}},
+          ]),
+          colegio: mk([
+            {by: P, createdAt: h(-20), para: S, tipo: "prueba", asignatura: "Matemática", titulo: "Prueba de fracciones y decimales",
+              fecha: d(1), notas: "Estudiar unidad 3 y la guía que mandó la profe", hecho: false, vistoAt: h(-18)},
+            {by: P, createdAt: h(-2), para: S, tipo: "materiales", asignatura: "Artes", titulo: "Cartulina negra, tijeras y pegamento en barra",
+              fecha: d(1), notas: "", hecho: false, vistoAt: null},
+            {by: J, createdAt: h(-5), para: S, tipo: "tarea", asignatura: "Historia", titulo: "Línea de tiempo de la Independencia de Chile",
+              fecha: d(3), notas: "En hoja de bloc, con 8 hitos mínimo", hecho: false, vistoAt: h(-4)},
+            {by: S, createdAt: h(-30), para: S, tipo: "tarea", asignatura: "Inglés", titulo: "Workbook págs. 24–25",
+              fecha: d(0), notas: "", hecho: true, hechoAt: h(-3), hechoBy: S, vistoAt: h(-30)},
+            {by: P, createdAt: h(-48), para: S, tipo: "recordatorio", asignatura: "", titulo: "Llevar autorización firmada para la salida al museo",
+              fecha: d(2), notas: "Está en el refrigerador 🧲", hecho: false, vistoAt: h(-40)},
           ]),
           eventos: mk([
             {by: P, createdAt: 1, titulo: "Dentista Sofía", fecha: d(1), hora: "16:30", tipo: "salud", quienes: [S, P], repetir: "no", notas: ""},

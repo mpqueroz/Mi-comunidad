@@ -35,7 +35,8 @@ function quickActions() {
       : `<button class="qa" data-act="sali"><span>🚶</span>Salí</button>`}
     <button class="qa" data-act="nuevoAviso"><span>📣</span>Aviso</button>
     <button class="qa" data-act="pickMood"><span>${esc(me().mood || "🙂")}</span>Mi ánimo</button>
-    <a class="qa" href="#/casa/compras"><span>🛒</span>Compras</a>
+    ${isAdult() ? `<a class="qa" href="#/casa/compras"><span>🛒</span>Compras</a>`
+      : `<a class="qa" href="#/casa/colegio"><span>🎒</span>Colegio</a>`}
   </div>`;
 }
 
@@ -66,7 +67,7 @@ function todayList({sinAvisos = false} = {}) {
   }
 
   for (const it of itemsOn(k)) {
-    if (it.kind === "pedido") continue;
+    if (it.kind === "pedido" || it.kind === "colegio") continue; // ya listados arriba
     rows.push(`<div class="li ${it.done ? "done" : ""}"><span class="ic">${it.icon}</span><div class="grow"><b>${esc(it.title)}</b>
       <div class="small muted">${[it.time, it.sub].filter(Boolean).map(esc).join(" · ")}${it.who?.length ? " · " + it.who.map((u) => avatar(u, "xs")).join("") : ""}</div></div></div>`);
   }
@@ -76,6 +77,19 @@ function todayList({sinAvisos = false} = {}) {
     if (!e.paid && e.dd != null && e.dd < 0 && isAdult()) {
       rows.push(`<a class="li bad" href="#/casa/cuentas"><span class="ic">${esc(c.emoji || "🧾")}</span><div class="grow"><b>${esc(c.nombre)}: ${esc(e.label)}</b></div></a>`);
     }
+  }
+
+  // Colegio: lo mío (si soy hijo/a) y, para adultos, lo urgente de los hijos.
+  const manana = dayKey(addDays(new Date(), 1));
+  for (const c of list("colegio")) {
+    if (c.hecho || !c.fecha || c.fecha > manana) continue;
+    if (c.para !== uid && !isAdult()) continue;
+    const mio = c.para === uid;
+    const icon = {prueba: "📚", materiales: "✂️", recordatorio: "📌"}[c.tipo] || "📝";
+    const cuando = c.fecha < k ? "Atrasado" : c.fecha === k ? "Hoy" : "Mañana";
+    rows.push(`<a class="li ${c.fecha < k ? "warn" : ""}" href="#/casa/colegio"><span class="ic">${icon}</span><div class="grow">
+      <b>${mio ? "" : esc(nameOf(c.para)) + ": "}${esc(c.titulo)}</b>
+      <div class="small muted">🎒 ${cuando}${c.asignatura ? " · " + esc(c.asignatura) : ""}${!mio && c.by !== c.para ? (c.vistoAt ? " · 👀 visto" : " · aún no lo ve") : ""}</div></div></a>`);
   }
 
   for (const t of list("tareas")) {

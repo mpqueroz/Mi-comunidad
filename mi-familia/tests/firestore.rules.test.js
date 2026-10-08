@@ -195,3 +195,22 @@ test("users/{uid} es privado", async () => {
   await assertSucceeds(hija().doc("users/hija").set({familias: {[F]: "Familia"}, fcmTokens: ["t"]}));
   await assertFails(mama().doc("users/hija").get());
 });
+
+// ---------- colegio ----------
+
+test("un adulto envía una tarea al hijo/a y el hijo/a la marca vista y lista", async () => {
+  const ref = mama().collection(`${BASE}/colegio`).doc("t1");
+  await assertSucceeds(ref.set({by: "mama", para: "hija", tipo: "prueba", titulo: "Fracciones", fecha: "2026-10-09", hecho: false}));
+  await assertSucceeds(hija().doc(`${BASE}/colegio/t1`).update({vistoAt: 1}));
+  await assertSucceeds(hija().doc(`${BASE}/colegio/t1`).update({hecho: true, hechoAt: 2, hechoBy: "hija"}));
+  await assertFails(hija().doc(`${BASE}/colegio/t1`).update({by: "hija"}));
+});
+
+test("el hijo/a anota sus propias tareas, pero no a nombre de otro", async () => {
+  await assertSucceeds(hija().collection(`${BASE}/colegio`).add({by: "hija", para: "hija", tipo: "tarea", titulo: "Inglés", hecho: false}));
+  await assertFails(hija().collection(`${BASE}/colegio`).add({by: "mama", para: "hija", tipo: "tarea", titulo: "x", hecho: false}));
+});
+
+test("alguien de fuera no ve las tareas del colegio", async () => {
+  await assertFails(extrano().collection(`${BASE}/colegio`).get());
+});
