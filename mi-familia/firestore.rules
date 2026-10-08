@@ -1,0 +1,127 @@
+rules_version = '2';
+
+// Reglas de Mi Familia. La regla de oro: solo los miembros de una familia
+// ven y escriben lo de esa familia. Los roles (admin / adulto / nino) viven
+// en families/{fid}/members/{uid}.role y nadie puede subirse el rol solo.
+//
+// Tests: mi-familia/tests (npm test). Córrelos antes de cada deploy.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+    function memberPath(fid) {
+      return /databases/$(database)/documents/families/$(fid)/members/$(request.auth.uid);
+    }
+    function isMember(fid) {
+      return signedIn() && exists(memberPath(fid));
+    }
+    function role(fid) {
+      return get(memberPath(fid)).data.role;
+    }
+    function isAdmin(fid) {
+      return isMember(fid) && role(fid) == 'admin';
+    }
+    function isAdult(fid) {
+      return isMember(fid) && role(fid) in ['admin', 'adulto'];
+    }
+
+    // Colecciones "comunes" de cada familia. Todas llevan `by` (quién la creó).
+    function commonCols() {
+      return ['avisos', 'pedidos', 'fijados', 'compras', 'tareas', 'eventos', 'cuentas',
+              'mascotas', 'fotos', 'votaciones', 'respuestas', 'planes', 'gracias',
+              'animos', 'salidas', 'sos'];
+    }
+    // Solo adultos pueden escribirlas (y, en el caso de cuentas, leerlas).
+    function adultCols() {
+      return ['fijados', 'cuentas'];
+    }
+
+    function validInvite(fid, code, newRole) {
+      let ref = /databases/$(database)/documents/invites/$(code);
+      return code is string && exists(ref)
+        && get(ref).data.familyId == fid
+        && get(ref).data.role == newRole
+        && get(ref).data.expiresAt > request.time.toMillis();
+    }
+
+    // ---------- usuario (solo el dueño) ----------
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // ---------- invitaciones ----------
+    // Se leen de a una conociendo el código (no se pueden listar).
+    match /invites/{code} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn()
+        && request.resource.data.by == request.auth.uid
+        && request.resource.data.familyName is string
+        && request.resource.data.expiresAt is number
+        && request.resource.data.expiresAt <= request.time.toMillis() + 8 * 86400000
+        && ((request.resource.data.role in ['adulto', 'nino'] && isAdult(request.resource.data.familyId))
+            || (request.resource.data.role == 'admin' && isAdmin(request.resource.data.familyId)));
+      allow delete: if signedIn() && resource.data.by == request.auth.uid;
+    }
+
+    // ---------- familia ----------
+    match /families/{fid} {
+      allow read: if isMember(fid);
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0;
+      allow update: if isAdmin(fid) && request.resource.data.ownerUid == resource.data.ownerUid;
+      allow delete: if false;
+
+      // Miembros: el perfil de cada persona.
+      match /members/{uid} {
+        allow read: if isMember(fid);
+        // Entrar: quien creó la familia (como admin) o con una invitación válida.
+        allow create: if signedIn() && request.auth.uid == uid && (
+          (get(/databases/$(database)/documents/families/$(fid)).data.ownerUid == uid
+            && request.resource.data.role == 'admin')
+          || validInvite(fid, request.resource.data.get('invite', ''), request.resource.data.role)
+        );
+        allow update: if isAdmin(fid)
+          // cada uno edita su perfil, pero no su rol
+          || (request.auth.uid == uid && isMember(fid) && request.resource.data.role == resource.data.role)
+          // los adultos pueden completar la ficha médica de cualquiera
+          || (isAdult(fid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['medical']));
+        // salir de la familia, o que un admin te saque
+        allow delete: if (signedIn() && request.auth.uid == uid) || isAdmin(fid);
+      }
+
+      // Ubicación en vivo: solo su dueño la escribe.
+      match /ubicaciones/{uid} {
+        allow read: if isMember(fid);
+        allow write: if isMember(fid) && request.auth.uid == uid;
+      }
+
+      // Todo lo demás (avisos, compras, salidas, SOS, fotos...).
+      match /{col}/{id} {
+        allow read: if col in commonCols() && isMember(fid)
+          && (!(col in adultCols()) || isAdult(fid));
+        allow create: if col in commonCols() && isMember(fid)
+          && request.resource.data.by == request.auth.uid
+          && (!(col in adultCols()) || isAdult(fid))
+          // una respuesta por persona y por día
+          && (col != 'respuestas' || id == request.resource.data.fecha + '_' + request.auth.uid);
+        // Entre familia se colabora: cualquiera marca "comprado", "yo me
+        // encargo", vota, etc. Lo que no se puede es cambiar el autor.
+        allow update: if col in commonCols() && isMember(fid)
+          && request.resource.data.by == resource.data.by
+          && (!(col in adultCols()) || isAdult(fid))
+          && (col != 'respuestas' || resource.data.by == request.auth.uid);
+        allow delete: if col in commonCols() && isMember(fid)
+          && (!(col in adultCols()) || isAdult(fid))
+          && (resource.data.by == request.auth.uid
+              || isAdmin(fid)
+              || (col == 'salidas' && resource.data.quien == request.auth.uid));
+      }
+    }
+  }
+}

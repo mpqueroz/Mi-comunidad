@@ -1,0 +1,79 @@
+# Mi Familia: prueba las reglas de Firestore en cada pull request que toque
+# mi-familia/ y, al aceptar cambios en main, despliega a su propio proyecto
+# de Firebase (separado de Mi Comunidad).
+#
+# El deploy solo corre si existe el secret FIREBASE_SERVICE_ACCOUNT_FAMILIA
+# (ver mi-familia/LEEME.md). Mientras no exista, el job se salta sin fallar.
+
+name: Mi Familia
+
+on:
+  pull_request:
+    paths:
+      - "mi-familia/**"
+      - ".github/workflows/mi-familia.yml"
+  push:
+    branches: [main]
+    paths:
+      - "mi-familia/**"
+      - ".github/workflows/mi-familia.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: mi-familia-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    name: Tests de reglas (Mi Familia)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Instalar dependencias
+        working-directory: mi-familia/tests
+        run: npm ci
+      - name: Correr tests en el emulador
+        working-directory: mi-familia/tests
+        run: npm test
+      - name: Revisar que las functions cargan
+        working-directory: mi-familia/functions
+        run: |
+          npm ci
+          node -e 'require("./index.js")'
+
+  deploy:
+    name: Deploy de Mi Familia
+    needs: tests
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    env:
+      HAS_SECRET: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_FAMILIA != '' }}
+    steps:
+      - name: ¿Está configurado?
+        if: env.HAS_SECRET != 'true'
+        run: echo "Falta el secret FIREBASE_SERVICE_ACCOUNT_FAMILIA; no se despliega (ver mi-familia/LEEME.md)."
+      - uses: actions/checkout@v4
+        if: env.HAS_SECRET == 'true'
+      - uses: actions/setup-node@v4
+        if: env.HAS_SECRET == 'true'
+        with:
+          node-version: 22
+      - uses: google-github-actions/auth@v2
+        if: env.HAS_SECRET == 'true'
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_FAMILIA }}
+      - name: Instalar dependencias de functions
+        if: env.HAS_SECRET == 'true'
+        working-directory: mi-familia/functions
+        run: npm ci
+      - name: Deploy
+        if: env.HAS_SECRET == 'true'
+        working-directory: mi-familia
+        run: npx --yes firebase-tools@14 deploy --non-interactive --only hosting,firestore,storage,functions

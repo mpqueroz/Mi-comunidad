@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "salidas",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {"fieldPath": "estado", "order": "ASCENDING"},
+        {"fieldPath": "esperaAt", "order": "ASCENDING"}
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

@@ -1,0 +1,22 @@
+{
+  "name": "Mi Familia",
+  "short_name": "Mi Familia",
+  "description": "Avisos, compras, salidas seguras, calendario y momentos en común para toda la familia.",
+  "lang": "es",
+  "start_url": "./#/hoy",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fff8f3",
+  "theme_color": "#e8590c",
+  "icons": [
+    {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml"}
+  ],
+  "shortcuts": [
+    {"name": "Salí / Llegué", "url": "./#/cuidado/salidas"},
+    {"name": "Lista de compras", "url": "./#/casa/compras"},
+    {"name": "Nuevo aviso", "url": "./#/muro/avisos"}
+  ]
+}
