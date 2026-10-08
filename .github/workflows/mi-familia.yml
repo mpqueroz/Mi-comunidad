@@ -1,6 +1,6 @@
 # Mi Familia: prueba las reglas de Firestore en cada pull request que toque
 # mi-familia/ y, al aceptar cambios en main, despliega a su propio proyecto
-# de Firebase (separado de Mi Comunidad).
+# de Firebase (el que comparte con Rol de turnos).
 #
 # El deploy solo corre si existe el secret FIREBASE_SERVICE_ACCOUNT_FAMILIA
 # (ver mi-familia/LEEME.md). Mientras no exista, el job se salta sin fallar.
@@ -76,4 +76,7 @@ jobs:
       - name: Deploy
         if: env.HAS_SECRET == 'true'
         working-directory: mi-familia
-        run: npx --yes firebase-tools@14 deploy --non-interactive --only hosting,firestore,storage,functions
+        # Proyecto compartido con Rol de turnos: solo el sitio de Mi Familia,
+        # las reglas (archivo compartido con ambas apps), el índice, Storage
+        # y las functions del grupo "mi-familia". Nunca toca lo demás.
+        run: npx --yes firebase-tools@14 deploy --non-interactive --only "hosting:mi-familia-md,firestore:rules,firestore:indexes,storage,functions:mi-familia"

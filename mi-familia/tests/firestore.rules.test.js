@@ -1,4 +1,4 @@
-// Tests de mi-familia/firestore.rules contra el emulador de Firestore.
+// Tests de firestore.rules contra el emulador de Firestore.
 // Correr desde esta carpeta: npm install && npm test (necesita Java).
 
 const {test, before, after, beforeEach} = require("node:test");
@@ -7,7 +7,7 @@ const path = require("node:path");
 const {initializeTestEnvironment, assertSucceeds, assertFails} = require("@firebase/rules-unit-testing");
 
 const F = "fam1";
-const BASE = `families/${F}`;
+const BASE = `mi_familia_families/${F}`;
 let env;
 
 const as = (uid) => env.authenticatedContext(uid).firestore();
@@ -36,8 +36,8 @@ beforeEach(async () => {
     await db.doc(`${BASE}/avisos/a1`).set({by: "mama", texto: "Hola", encargado: null, createdAt: 1});
     await db.doc(`${BASE}/cuentas/c1`).set({by: "mama", nombre: "Luz", monto: 1, dia: 5, pagado: {}});
     await db.doc(`${BASE}/salidas/s1`).set({by: "mama", quien: "hija", destino: "Colegio", estado: "en_camino", salioAt: 1});
-    await db.doc(`invites/ABC123`).set({familyId: F, familyName: "Familia", role: "nino", by: "mama", expiresAt: Date.now() + 864e5});
-    await db.doc(`invites/VIEJO1`).set({familyId: F, familyName: "Familia", role: "adulto", by: "mama", expiresAt: Date.now() - 1000});
+    await db.doc(`mi_familia_invites/ABC123`).set({familyId: F, familyName: "Familia", role: "nino", by: "mama", expiresAt: Date.now() + 864e5});
+    await db.doc(`mi_familia_invites/VIEJO1`).set({familyId: F, familyName: "Familia", role: "adulto", by: "mama", expiresAt: Date.now() - 1000});
   });
 });
 
@@ -151,7 +151,7 @@ test("la ubicación en vivo solo la escribe su dueño", async () => {
 // ---------- entrar a una familia ----------
 
 test("con una invitación válida se entra con el rol de la invitación", async () => {
-  await assertSucceeds(extrano().doc("invites/ABC123").get());
+  await assertSucceeds(extrano().doc("mi_familia_invites/ABC123").get());
   await assertSucceeds(extrano().doc(`${BASE}/members/extrano`).set({name: "Nuevo", role: "nino", invite: "ABC123"}));
 });
 
@@ -166,34 +166,34 @@ test("invitaciones vencidas o inexistentes no sirven", async () => {
 });
 
 test("no se pueden listar las invitaciones", async () => {
-  await assertFails(extrano().collection("invites").get());
+  await assertFails(extrano().collection("mi_familia_invites").get());
 });
 
 test("crear invitaciones: adultos (no admin) y nunca para otra familia", async () => {
   const inv = (by, role, extra = {}) => ({familyId: F, familyName: "Familia", role, by, createdAt: 1, expiresAt: Date.now() + 864e5, ...extra});
-  await assertSucceeds(abuela().doc("invites/NUEVO1").set(inv("abuela", "adulto")));
-  await assertFails(abuela().doc("invites/NUEVO2").set(inv("abuela", "admin")));
-  await assertSucceeds(mama().doc("invites/NUEVO3").set(inv("mama", "admin")));
-  await assertFails(hija().doc("invites/NUEVO4").set(inv("hija", "nino")));
-  await assertFails(extrano().doc("invites/NUEVO5").set(inv("extrano", "nino")));
-  await assertFails(mama().doc("invites/NUEVO6").set(inv("mama", "nino", {expiresAt: Date.now() + 60 * 864e5})));
+  await assertSucceeds(abuela().doc("mi_familia_invites/NUEVO1").set(inv("abuela", "adulto")));
+  await assertFails(abuela().doc("mi_familia_invites/NUEVO2").set(inv("abuela", "admin")));
+  await assertSucceeds(mama().doc("mi_familia_invites/NUEVO3").set(inv("mama", "admin")));
+  await assertFails(hija().doc("mi_familia_invites/NUEVO4").set(inv("hija", "nino")));
+  await assertFails(extrano().doc("mi_familia_invites/NUEVO5").set(inv("extrano", "nino")));
+  await assertFails(mama().doc("mi_familia_invites/NUEVO6").set(inv("mama", "nino", {expiresAt: Date.now() + 60 * 864e5})));
 });
 
 test("crear una familia: el creador entra como admin", async () => {
-  await assertSucceeds(extrano().doc("families/nueva").set({name: "Nueva", ownerUid: "extrano", createdAt: 1}));
-  await assertSucceeds(extrano().doc("families/nueva/members/extrano").set({name: "Yo", role: "admin"}));
-  await assertFails(hija().doc("families/nueva/members/hija").set({name: "Colada", role: "admin"}));
+  await assertSucceeds(extrano().doc("mi_familia_families/nueva").set({name: "Nueva", ownerUid: "extrano", createdAt: 1}));
+  await assertSucceeds(extrano().doc("mi_familia_families/nueva/members/extrano").set({name: "Yo", role: "admin"}));
+  await assertFails(hija().doc("mi_familia_families/nueva/members/hija").set({name: "Colada", role: "admin"}));
 });
 
 test("no se crea una familia a nombre de otro", async () => {
-  await assertFails(extrano().doc("families/otra").set({name: "X", ownerUid: "mama"}));
+  await assertFails(extrano().doc("mi_familia_families/otra").set({name: "X", ownerUid: "mama"}));
 });
 
-// ---------- users ----------
+// ---------- mi_familia_users ----------
 
-test("users/{uid} es privado", async () => {
-  await assertSucceeds(hija().doc("users/hija").set({familias: {[F]: "Familia"}, fcmTokens: ["t"]}));
-  await assertFails(mama().doc("users/hija").get());
+test("mi_familia_users/{uid} es privado", async () => {
+  await assertSucceeds(hija().doc("mi_familia_users/hija").set({familias: {[F]: "Familia"}, fcmTokens: ["t"]}));
+  await assertFails(mama().doc("mi_familia_users/hija").get());
 });
 
 // ---------- colegio ----------
@@ -213,4 +213,26 @@ test("el hijo/a anota sus propias tareas, pero no a nombre de otro", async () =>
 
 test("alguien de fuera no ve las tareas del colegio", async () => {
   await assertFails(extrano().collection(`${BASE}/colegio`).get());
+});
+
+// ---------- convivencia con Rol de turnos ----------
+
+test("Rol de turnos sigue igual: cada uno ve solo sus datos", async () => {
+  await assertSucceeds(as("ana").doc("users/ana").set({nombre: "Ana"}));
+  await assertSucceeds(as("ana").doc("users/ana/meta/config").set({x: 1}));
+  await assertSucceeds(as("ana").doc("users/ana/extras/2026-10-08").set({horas: 2}));
+  await assertFails(as("beto").doc("users/ana").get());
+  await assertFails(as("beto").doc("users/ana/extras/2026-10-08").get());
+  await assertFails(anon().doc("users/ana").get());
+});
+
+test("un usuario de Rol de turnos no ve nada de Mi Familia", async () => {
+  await assertFails(as("ana").doc(BASE).get());
+  await assertFails(as("ana").collection(`${BASE}/avisos`).get());
+  await assertFails(as("ana").collection(`${BASE}/ubicaciones`).get());
+});
+
+test("todo lo que no está en las reglas sigue bloqueado", async () => {
+  await assertFails(mama().collection("otra_cosa").add({x: 1}));
+  await assertFails(mama().doc("families/fam1").get());
 });

@@ -3,9 +3,19 @@
 App para la familia, instalable en el teléfono (PWA). Sirve para avisarse
 cosas, coordinar la casa, cuidarse y compartir momentos.
 
-Es un proyecto **independiente de Mi Comunidad**: tiene su propio proyecto de
-Firebase, sus reglas y sus functions. Vive en esta carpeta para partir
-rápido; se puede mover a su propio repositorio cuando quieras.
+Se publica en el proyecto de Firebase **Rol de turnos**, compartido con la
+app Rol de turnos. Para no pisarse:
+
+| Qué | Cómo se separa de Rol de turnos |
+|---|---|
+| Sitio web | Sitio propio dentro del proyecto: `mi-familia-md.web.app` |
+| Datos | Todo con prefijo `mi_familia_` (Rol de turnos usa `users`) |
+| Reglas | Un solo `firestore.rules` para las dos apps, con un bloque para cada una |
+| Fotos | Carpeta propia `mi_familia/` en Storage |
+| Functions | Grupo propio (`codebase: mi-familia`) |
+
+> **Importante:** nunca uses `firebase deploy` sin `--only`. Usa siempre el
+> comando de esta guía, que solo publica lo de Mi Familia.
 
 ## Qué hace
 
@@ -28,43 +38,60 @@ Con `public/js/config.js` sin configurar, la app funciona en **modo demo**:
 una "Familia Pérez" de ejemplo guardada en el navegador. Abre dos pestañas
 como personas distintas para ver cómo se sincroniza todo.
 
-    cd mi-familia/public
+    cd public
     python3 -m http.server 8000
     # abre http://localhost:8000
 
-## Ponerla en marcha de verdad (una sola vez)
+## Ponerla en marcha en "Rol de turnos" (una sola vez)
 
-1. **Crear el proyecto**: [console.firebase.google.com](https://console.firebase.google.com)
-   → *Agregar proyecto* → por ejemplo `mi-familia-perez`. Pon ese ID en
-   `mi-familia/.firebaserc` (en vez de `mi-familia-CAMBIAR`).
-2. **Plan Blaze** (pago por uso). Lo piden las Cloud Functions (notificaciones).
-   Para una familia el uso queda dentro de la cuota gratis; igual conviene
-   poner una alerta de presupuesto de, por ejemplo, USD 5.
-3. **Authentication** → *Comenzar* → habilita **Correo/contraseña** y **Google**.
-4. **Firestore Database** → *Crear base de datos* → ubicación
-   **`southamerica-west1` (Santiago)**. Si eliges otra, cambia `REGION` al
+Todo en [console.firebase.google.com](https://console.firebase.google.com) →
+proyecto **Rol de turnos**:
+
+1. **ID del proyecto**: ⚙️ *Configuración del proyecto* → copia el *ID del
+   proyecto* y ponlo en `.firebaserc` (en vez de `ID-DEL-PROYECTO-ROL-DE-TURNOS`).
+2. **Sitio nuevo**: *Hosting* → *Agregar otro sitio* → `mi-familia-md`. Si
+   ese nombre está tomado, elige otro y cámbialo en `firebase.json`
+   (`hosting.site`), en `.github/workflows/firebase.yml` y en `APP_URL` al
    inicio de `functions/index.js`.
-5. **Storage** → *Comenzar* (misma ubicación).
-6. **Configuración del proyecto → General → Tus apps → Web (`</>`)**: registra
-   la app y copia el objeto `firebaseConfig` en `public/js/config.js`.
-7. **Configuración del proyecto → Cloud Messaging → Certificados push web**
-   → *Generar par de claves*. Copia la clave en `vapidKey` de `config.js`.
-8. Deploy (con [Firebase CLI](https://firebase.google.com/docs/cli) instalado):
+3. **Plan Blaze** (pago por uso): lo piden las notificaciones. Para una
+   familia queda dentro de la cuota gratis; pon una alerta de presupuesto
+   de, por ejemplo, USD 5.
+4. **Authentication → Método de acceso**: habilita **Correo/contraseña** y
+   **Google** si no lo están. No cambia en nada cómo entran a Rol de turnos.
+5. **Firestore**: usa la base de datos que ya existe (no crees otra). Mira
+   su ubicación arriba (ej. `southamerica-west1`, `nam5`) y ponla en
+   `REGION` al inicio de `functions/index.js` (`nam5` → `us-central1`,
+   `eur3` → `europe-west1`).
+6. **Storage** → *Comenzar* si no está activo.
+7. **Configuración del proyecto → Tus apps → Agregar app → Web (`</>`)**:
+   nombre "Mi Familia". Copia el `firebaseConfig` en `public/js/config.js`.
+8. **Cloud Messaging → Certificados push web**: si ya hay un par de claves,
+   **reutilízalo**; si no, genera uno. Copia la clave en `vapidKey` de
+   `public/js/config.js`.
+9. **Reglas**: `firestore.rules` ya trae las de Rol de turnos (sin cambios)
+   más las de Mi Familia. Si alguna vez cambias las reglas de Rol de turnos,
+   hazlo en este archivo y cópialo también a la carpeta de Rol de turnos:
+   publicar desde cualquiera de las dos reemplaza las de ambas.
+10. Publicar (con [Firebase CLI](https://firebase.google.com/docs/cli)):
 
-       cd mi-familia/functions && npm install && cd ..
-       firebase deploy
+        cd functions && npm install && cd ..
+        cd tests && npm install && npm test && cd ..
+        firebase deploy --only "hosting:mi-familia-md,firestore:rules,firestore:indexes,storage,functions:mi-familia"
 
-9. Abre `https://TU-PROYECTO.web.app`, crea tu cuenta, crea la familia e
-   invita a los demás desde tu perfil (➕ Invitar).
+11. Abre `https://mi-familia-md.web.app`, crea tu cuenta, crea la familia e
+    invita a los demás desde tu perfil (➕ Invitar).
 
 ### Deploy automático desde GitHub (opcional)
 
-`.github/workflows/mi-familia.yml` corre los tests de reglas en cada pull
-request que toque `mi-familia/` y, al aceptar cambios en `main`, despliega.
-Para activar el deploy crea una cuenta de servicio **en el proyecto de Mi
-Familia** con los mismos roles que indica el `LEEME.md` de Mi Comunidad, más
-*Firebase Storage Admin*, y guarda su JSON en el secret
-`FIREBASE_SERVICE_ACCOUNT_FAMILIA`. Sin ese secret el deploy se salta.
+`.github/workflows/firebase.yml` corre los tests de reglas en cada pull
+request y, al aceptar cambios en `main`, publica con el mismo comando de
+arriba. Para activarlo crea en el proyecto Rol de turnos una cuenta de
+servicio con los roles *Firebase Hosting Admin*, *Firebase Rules Admin*,
+*Cloud Datastore Index Admin*, *Firebase Storage Admin*, *Cloud Functions
+Admin*, *Service Account User*, *Cloud Scheduler Admin*, *Artifact Registry
+Writer*, *Cloud Build Editor* y *Firebase Viewer*, y guarda su JSON en el
+secret `FIREBASE_SERVICE_ACCOUNT_FAMILIA` (Settings → Secrets and variables
+→ Actions). Sin ese secret el deploy se salta.
 
 ## Instalar en el teléfono
 
@@ -91,7 +118,7 @@ Familia** con los mismos roles que indica el `LEEME.md` de Mi Comunidad, más
 ## Estructura
 
 ```
-mi-familia/
+.
 ├── public/                 ← la app (HTML + CSS + JS sin build)
 │   ├── index.html
 │   ├── css/app.css

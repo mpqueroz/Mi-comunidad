@@ -1,18 +1,26 @@
 rules_version = '2';
 
-// Fotos del álbum: solo miembros de la familia pueden subir, ver o borrar.
+// Reglas de Storage del proyecto compartido (Rol de turnos + Mi Familia).
+// Rol de turnos no guarda archivos; si algún día lo hace, agrega su bloque
+// aquí, porque publicar estas reglas reemplaza las de todo el proyecto.
 service firebase.storage {
   match /b/{bucket}/o {
-    match /families/{fid}/fotos/{file} {
+    // Fotos del álbum de Mi Familia: solo miembros de esa familia.
+    match /mi_familia/{fid}/fotos/{file} {
       function isMember() {
         return request.auth != null
-          && firestore.exists(/databases/(default)/documents/families/$(fid)/members/$(request.auth.uid));
+          && firestore.exists(/databases/(default)/documents/mi_familia_families/$(fid)/members/$(request.auth.uid));
       }
       allow read: if isMember();
       allow create: if isMember()
         && request.resource.size < 10 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
       allow delete: if isMember();
+    }
+
+    // Todo lo demás, cerrado.
+    match /{allPaths=**} {
+      allow read, write: if false;
     }
   }
 }

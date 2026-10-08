@@ -1,19 +1,50 @@
 rules_version = '2';
 
-// Reglas de Mi Familia. La regla de oro: solo los miembros de una familia
-// ven y escriben lo de esa familia. Los roles (admin / adulto / nino) viven
-// en families/{fid}/members/{uid}.role y nadie puede subirse el rol solo.
+// =====================================================================
+// Reglas de Firestore del proyecto COMPARTIDO por:
+//   1. Rol de turnos  (colección: users)
+//   2. Mi Familia     (colecciones: mi_familia_*)
 //
-// Tests: mi-familia/tests (npm test). Córrelos antes de cada deploy.
+// Firebase admite UN SOLO archivo de reglas por proyecto: publicar desde
+// cualquiera de las dos apps reemplaza las reglas de AMBAS. Este archivo
+// debe ser siempre el mismo en las dos: si cambias reglas de una app,
+// edítalas aquí y cópialo a la otra.
+//
+// Mi Familia: solo los miembros de una familia ven y escriben lo de esa
+// familia. Los roles (admin / adulto / nino) viven en
+// mi_familia_families/{fid}/members/{uid}.role y nadie se sube el rol solo.
+//
+// Tests: carpeta tests/ (npm test). Córrelos antes de cada deploy.
+// =====================================================================
 
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // =================================================================
+    // ROL DE TURNOS (sin cambios: tal como estaba publicado)
+    // Cada persona solo puede leer y escribir sus propios datos.
+    // =================================================================
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      match /meta/{docId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      match /extras/{dateId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    // =================================================================
+    // MI FAMILIA (todo con prefijo "mi_familia_")
+    // =================================================================
 
     function signedIn() {
       return request.auth != null;
     }
     function memberPath(fid) {
-      return /databases/$(database)/documents/families/$(fid)/members/$(request.auth.uid);
+      return /databases/$(database)/documents/mi_familia_families/$(fid)/members/$(request.auth.uid);
     }
     function isMember(fid) {
       return signedIn() && exists(memberPath(fid));
@@ -40,7 +71,7 @@ service cloud.firestore {
     }
 
     function validInvite(fid, code, newRole) {
-      let ref = /databases/$(database)/documents/invites/$(code);
+      let ref = /databases/$(database)/documents/mi_familia_invites/$(code);
       return code is string && exists(ref)
         && get(ref).data.familyId == fid
         && get(ref).data.role == newRole
@@ -48,13 +79,13 @@ service cloud.firestore {
     }
 
     // ---------- usuario (solo el dueño) ----------
-    match /users/{uid} {
+    match /mi_familia_users/{uid} {
       allow read, write: if signedIn() && request.auth.uid == uid;
     }
 
     // ---------- invitaciones ----------
     // Se leen de a una conociendo el código (no se pueden listar).
-    match /invites/{code} {
+    match /mi_familia_invites/{code} {
       allow get: if signedIn();
       allow list: if false;
       allow create: if signedIn()
@@ -68,7 +99,7 @@ service cloud.firestore {
     }
 
     // ---------- familia ----------
-    match /families/{fid} {
+    match /mi_familia_families/{fid} {
       allow read: if isMember(fid);
       allow create: if signedIn()
         && request.resource.data.ownerUid == request.auth.uid
@@ -82,7 +113,7 @@ service cloud.firestore {
         allow read: if isMember(fid);
         // Entrar: quien creó la familia (como admin) o con una invitación válida.
         allow create: if signedIn() && request.auth.uid == uid && (
-          (get(/databases/$(database)/documents/families/$(fid)).data.ownerUid == uid
+          (get(/databases/$(database)/documents/mi_familia_families/$(fid)).data.ownerUid == uid
             && request.resource.data.role == 'admin')
           || validInvite(fid, request.resource.data.get('invite', ''), request.resource.data.role)
         );
@@ -122,6 +153,13 @@ service cloud.firestore {
               || isAdmin(fid)
               || (col == 'salidas' && resource.data.quien == request.auth.uid));
       }
+    }
+
+    // =================================================================
+    // Cualquier otra ruta queda bloqueada por defecto.
+    // =================================================================
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

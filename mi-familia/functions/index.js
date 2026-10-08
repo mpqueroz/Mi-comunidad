@@ -25,8 +25,13 @@ const REGION = "southamerica-west1";
 const TZ = "America/Santiago";
 setGlobalOptions({region: REGION, maxInstances: 5});
 
-const PROJECT = process.env.GCLOUD_PROJECT || JSON.parse(process.env.FIREBASE_CONFIG || "{}").projectId;
-const APP_URL = `https://${PROJECT}.web.app/`;
+// El proyecto se comparte con otras apps: todo lo de Mi Familia lleva el
+// prefijo "mi_familia_".
+const FAMILIES = "mi_familia_families";
+const USERS = "mi_familia_users";
+
+// Sitio de Mi Familia dentro del proyecto compartido (firebase.json → hosting.site).
+const APP_URL = "https://mi-familia-md.web.app/";
 
 // ---------- utilidades ----------
 
@@ -35,7 +40,7 @@ const timeTZ = (ts) => new Intl.DateTimeFormat("es-CL", {timeZone: TZ, hour: "2-
 const cut = (s, n = 140) => (s && s.length > n ? s.slice(0, n - 1) + "…" : s || "");
 
 async function familyMembers(fid) {
-  const snap = await db.collection(`families/${fid}/members`).get();
+  const snap = await db.collection(`${FAMILIES}/${fid}/members`).get();
   return snap.docs.map((d) => ({id: d.id, ...d.data()}));
 }
 
@@ -53,7 +58,7 @@ async function notify(fid, members, {title, body, path = "#/hoy", except = [], o
     .map((m) => m.id);
   if (!uids.length) return 0;
 
-  const users = await db.getAll(...uids.map((u) => db.doc(`users/${u}`)));
+  const users = await db.getAll(...uids.map((u) => db.doc(`${USERS}/${u}`)));
   const tokens = [];
   const owner = {};
   for (const u of users) {
@@ -83,13 +88,13 @@ async function notify(fid, members, {title, body, path = "#/hoy", except = [], o
   const dead = res.responses
     .map((r, i) => (!r.success && /registration-token-not-registered|invalid-registration-token|invalid-argument/.test(r.error?.code || "") ? tokens[i] : null))
     .filter(Boolean);
-  await Promise.all(dead.map((t) => db.doc(`users/${owner[t]}`).update({fcmTokens: FieldValue.arrayRemove(t)}).catch(() => {})));
+  await Promise.all(dead.map((t) => db.doc(`${USERS}/${owner[t]}`).update({fcmTokens: FieldValue.arrayRemove(t)}).catch(() => {})));
   return res.successCount;
 }
 
 // ---------- al crear algo ----------
 
-exports.onFamiliaCreado = onDocumentCreated("families/{fid}/{col}/{id}", async (event) => {
+exports.onFamiliaCreado = onDocumentCreated("mi_familia_families/{fid}/{col}/{id}", async (event) => {
   const {fid, col} = event.params;
   const d = event.data?.data();
   if (!d) return;
@@ -149,7 +154,7 @@ exports.onFamiliaCreado = onDocumentCreated("families/{fid}/{col}/{id}", async (
 
 // ---------- al actualizar algo ----------
 
-exports.onFamiliaActualizado = onDocumentUpdated("families/{fid}/{col}/{id}", async (event) => {
+exports.onFamiliaActualizado = onDocumentUpdated("mi_familia_families/{fid}/{col}/{id}", async (event) => {
   const {fid, col} = event.params;
   const before = event.data.before.data();
   const after = event.data.after.data();
@@ -194,6 +199,7 @@ exports.revisarLlegadas = onSchedule({schedule: "every 5 minutes", timeZone: TZ}
   const now = Date.now();
   const snap = await db.collectionGroup("salidas").where("estado", "==", "en_camino").where("esperaAt", "<", now).get();
   for (const doc of snap.docs) {
+    if (doc.ref.parent.parent?.parent.id !== FAMILIES) continue; // "salidas" de otra app
     const s = doc.data();
     if (s.avisoAtraso || now - s.esperaAt > 12 * 3600e3) continue; // ya avisado, o muy antiguo
     const fid = doc.ref.parent.parent.id;
@@ -244,20 +250,20 @@ function turnoDe(t, k, memberIds) {
 exports.resumenDiario = onSchedule({schedule: "30 7 * * *", timeZone: TZ}, async () => {
   const k = dayKeyTZ();
   const md = k.slice(5);
-  const families = await db.collection("families").get();
+  const families = await db.collection(FAMILIES).get();
 
   for (const fam of families.docs) {
     const fid = fam.id;
     const manana = dayKeyTZ(new Date(Date.now() + 864e5));
     const [members, pedidos, eventos, cuentas, mascotas, planes, tareas, colegio] = await Promise.all([
       familyMembers(fid),
-      db.collection(`families/${fid}/pedidos`).where("fecha", "==", k).get(),
-      db.collection(`families/${fid}/eventos`).get(),
-      db.collection(`families/${fid}/cuentas`).get(),
-      db.collection(`families/${fid}/mascotas`).get(),
-      db.collection(`families/${fid}/planes`).where("fecha", "==", k).get(),
-      db.collection(`families/${fid}/tareas`).get(),
-      db.collection(`families/${fid}/colegio`).where("hecho", "==", false).get(),
+      db.collection(`${FAMILIES}/${fid}/pedidos`).where("fecha", "==", k).get(),
+      db.collection(`${FAMILIES}/${fid}/eventos`).get(),
+      db.collection(`${FAMILIES}/${fid}/cuentas`).get(),
+      db.collection(`${FAMILIES}/${fid}/mascotas`).get(),
+      db.collection(`${FAMILIES}/${fid}/planes`).where("fecha", "==", k).get(),
+      db.collection(`${FAMILIES}/${fid}/tareas`).get(),
+      db.collection(`${FAMILIES}/${fid}/colegio`).where("hecho", "==", false).get(),
     ]);
     const escolar = colegio.docs.map((d) => d.data()).filter((c) => c.fecha === k || c.fecha === manana);
     const tipoTxt = (c) => ({prueba: "prueba de", materiales: "llevar", recordatorio: ""}[c.tipo] ?? "tarea de");

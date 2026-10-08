@@ -1,13 +1,14 @@
 // Datos reales: Firebase Auth + Firestore + Storage + Cloud Messaging.
 // Misma interfaz que store-local.js (modo demo).
 //
-// Estructura en Firestore:
-//   users/{uid}                      {familias: {fid: nombre}, fcmTokens: []}  (solo el dueño)
-//   invites/{codigo}                 {familyId, familyName, role, expiresAt}
-//   families/{fid}                   {name, ownerUid, createdAt}
-//   families/{fid}/members/{uid}     perfil, rol, ánimo, ficha médica
-//   families/{fid}/ubicaciones/{uid} ubicación en vivo (solo la escribe su dueño)
-//   families/{fid}/{coleccion}/{id}  avisos, pedidos, compras, ... (ver firestore.rules)
+// Estructura en Firestore. Todo lleva el prefijo "mi_familia_" porque el
+// proyecto de Firebase se comparte con otras apps (ver LEEME):
+//   mi_familia_users/{uid}                      {familias: {fid: nombre}, fcmTokens: []}  (solo el dueño)
+//   mi_familia_invites/{codigo}                 {familyId, familyName, role, expiresAt}
+//   mi_familia_families/{fid}                   {name, ownerUid, createdAt}
+//   mi_familia_families/{fid}/members/{uid}     perfil, rol, ánimo, ficha médica
+//   mi_familia_families/{fid}/ubicaciones/{uid} ubicación en vivo (solo la escribe su dueño)
+//   mi_familia_families/{fid}/{coleccion}/{id}  avisos, pedidos, compras, ... (ver firestore.rules)
 
 const SDK = "https://www.gstatic.com/firebasejs/10.13.2/";
 const cfg = self.MI_FAMILIA_CONFIG;
@@ -69,7 +70,11 @@ export const signOut = () => authM.signOut(auth);
 
 // ---------- familias ----------
 
-const userRef = () => fs.doc(db, "users", uid());
+const USERS = "mi_familia_users";
+const FAMILIES = "mi_familia_families";
+const INVITES = "mi_familia_invites";
+
+const userRef = () => fs.doc(db, USERS, uid());
 
 export async function myFamilies() {
   const snap = await fs.getDoc(userRef());
@@ -78,7 +83,7 @@ export async function myFamilies() {
 }
 
 export async function createFamily(name, me) {
-  const ref = fs.doc(fs.collection(db, "families"));
+  const ref = fs.doc(fs.collection(db, FAMILIES));
   await fs.setDoc(ref, {name, ownerUid: uid(), createdAt: Date.now()});
   await fs.setDoc(fs.doc(ref, "members", uid()), {...me, role: "admin", joinedAt: Date.now()});
   await fs.setDoc(userRef(), {familias: {[ref.id]: name}}, {merge: true});
@@ -87,9 +92,9 @@ export async function createFamily(name, me) {
 
 const CODE_ABC = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 export async function createInvite(fid, role) {
-  const fam = await fs.getDoc(fs.doc(db, "families", fid));
+  const fam = await fs.getDoc(fs.doc(db, FAMILIES, fid));
   const code = Array.from(crypto.getRandomValues(new Uint32Array(6)), (x) => CODE_ABC[x % CODE_ABC.length]).join("");
-  await fs.setDoc(fs.doc(db, "invites", code), {
+  await fs.setDoc(fs.doc(db, INVITES, code), {
     familyId: fid, familyName: fam.data().name, role, by: uid(),
     createdAt: Date.now(), expiresAt: Date.now() + 7 * 864e5,
   });
@@ -97,10 +102,10 @@ export async function createInvite(fid, role) {
 }
 
 export async function joinFamily(code, me) {
-  const snap = await fs.getDoc(fs.doc(db, "invites", code.toUpperCase()));
+  const snap = await fs.getDoc(fs.doc(db, INVITES, code.toUpperCase()));
   if (!snap.exists() || snap.data().expiresAt < Date.now()) throw new Error("El código no existe o ya venció.");
   const inv = snap.data();
-  const mref = fs.doc(db, "families", inv.familyId, "members", uid());
+  const mref = fs.doc(db, FAMILIES, inv.familyId, "members", uid());
   const ya = await fs.getDoc(mref).then((s) => s.exists()).catch(() => false);
   if (!ya) await fs.setDoc(mref, {...me, role: inv.role, invite: code.toUpperCase(), joinedAt: Date.now()});
   await fs.setDoc(userRef(), {familias: {[inv.familyId]: inv.familyName}}, {merge: true});
@@ -108,26 +113,26 @@ export async function joinFamily(code, me) {
 }
 
 export async function leaveFamily(fid, who = uid()) {
-  await fs.deleteDoc(fs.doc(db, "families", fid, "members", who));
+  await fs.deleteDoc(fs.doc(db, FAMILIES, fid, "members", who));
   if (who === uid()) await fs.updateDoc(userRef(), {[`familias.${fid}`]: fs.deleteField()});
 }
 
 export function watchFamily(fid, cb) {
   return fs.onSnapshot(
-    fs.doc(db, "families", fid),
+    fs.doc(db, FAMILIES, fid),
     (s) => cb(s.exists() ? {id: s.id, ...s.data()} : null),
     () => cb(null),
   );
 }
 
 export async function updateFamily(fid, patch) {
-  await fs.updateDoc(fs.doc(db, "families", fid), patch);
+  await fs.updateDoc(fs.doc(db, FAMILIES, fid), patch);
   if (patch.name) await fs.setDoc(userRef(), {familias: {[fid]: patch.name}}, {merge: true});
 }
 
 // ---------- colecciones ----------
 
-const col = (fid, c) => fs.collection(db, "families", fid, c);
+const col = (fid, c) => fs.collection(db, FAMILIES, fid, c);
 
 export function watch(fid, c, cb, {where, orderBy, limit} = {}) {
   const parts = [];
@@ -149,7 +154,7 @@ export const remove = (fid, c, id) => fs.deleteDoc(fs.doc(col(fid, c), id));
 export async function uploadPhoto(fid, file) {
   const {compressImage, randomId} = await import("./util.js");
   const blob = await compressImage(file, 1600, 0.82);
-  const path = `families/${fid}/fotos/${Date.now()}_${randomId(8)}.jpg`;
+  const path = `mi_familia/${fid}/fotos/${Date.now()}_${randomId(8)}.jpg`;
   const ref = st.ref(storage, path);
   await st.uploadBytes(ref, blob, {contentType: "image/jpeg"});
   return {url: await st.getDownloadURL(ref), path};
