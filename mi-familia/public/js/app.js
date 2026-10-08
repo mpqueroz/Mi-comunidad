@@ -1,7 +1,7 @@
 // Arranque, inicio de sesión, elección de familia, suscripciones en tiempo
 // real, navegación y alertas globales (SOS y llegadas atrasadas).
 
-import {esc, toast, sheet, fmtTime, ago, mapsLink} from "./util.js";
+import {esc, toast, sheet, fmtTime, ago, mapsLink, local, session} from "./util.js";
 import {S, A, F, C, setRender, members, me, member, nameOf, avatar, isAdult, upd, go, list} from "./state.js";
 import {atrasadas, sosActivos} from "./logic.js";
 import * as hoy from "./views/hoy.js";
@@ -86,7 +86,7 @@ export function openFamily(fid) {
   stopFamily();
   S.fid = fid;
   if (fid) {
-    localStorage.setItem("mf_fid", fid);
+    local.setItem("mf_fid", fid);
     unsubs.push(S.store.watchFamily(fid, (f) => {
       S.family = f;
       schedule();
@@ -223,7 +223,7 @@ function alertsHtml() {
   return out;
 }
 
-const seenSos = new Set(JSON.parse(sessionStorage.getItem("mf_sos_seen") || "[]"));
+const seenSos = new Set(JSON.parse(session.getItem("mf_sos_seen") || "[]"));
 let firstSos = true;
 function alertNewSos(items) {
   for (const s of items) {
@@ -237,7 +237,7 @@ function alertNewSos(items) {
     }
   }
   firstSos = false;
-  sessionStorage.setItem("mf_sos_seen", JSON.stringify([...seenSos]));
+  session.setItem("mf_sos_seen", JSON.stringify([...seenSos]));
 }
 
 A.sosVoy = (el) => upd("sos", el.dataset.id, {[`voy.${S.user.uid}`]: Date.now()}).then(() => toast("Avisamos que vas en camino"));
@@ -445,7 +445,7 @@ S.store.onAuth(async (user) => {
     console.error(e);
     S.families = [];
   }
-  const saved = localStorage.getItem("mf_fid");
+  const saved = local.getItem("mf_fid");
   const pick = S.families.find((f) => f.id === saved) || S.families[0];
   openFamily(pick?.id || null);
 });

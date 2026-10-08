@@ -20,11 +20,14 @@
   --shadow: 0 1px 2px rgba(60, 30, 10, 0.06), 0 4px 16px rgba(60, 30, 10, 0.06);
   --r: 16px;
   --nav-h: 64px;
-  color-scheme: light dark;
+  --gracias-bg: #fff9db;
+  --cumple-bg: #fff0f6;
+  --toast-bg: #2b2118;
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #17120f;
     --card: #221b17;
     --text: #f3ece6;
@@ -36,7 +39,26 @@
     --bad-soft: #3a1717;
     --info-soft: #132636;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --gracias-bg: #3a3110;
+    --cumple-bg: #3a1428;
+    color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+  --bg: #17120f;
+  --card: #221b17;
+  --text: #f3ece6;
+  --muted: #a8998e;
+  --line: #382d26;
+  --primary-soft: #3a2316;
+  --ok-soft: #142a1a;
+  --warn-soft: #33260f;
+  --bad-soft: #3a1717;
+  --info-soft: #132636;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --gracias-bg: #3a3110;
+  --cumple-bg: #3a1428;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -85,9 +107,9 @@ main {
 }
 
 .top {
-  position: sticky; top: 0; z-index: 20;
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
   display: flex; align-items: center; gap: 8px;
-  padding: calc(8px + env(safe-area-inset-top)) 12px 8px;
+  padding: 8px 12px;
   background: color-mix(in srgb, var(--bg) 88%, transparent);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -302,7 +324,7 @@ dialog.sheet h2 { padding-right: 36px; margin-bottom: 12px; }
   display: flex; flex-direction: column; align-items: center; gap: 8px; z-index: 100; pointer-events: none;
 }
 .toast {
-  background: #2b2118; color: #fff; padding: 10px 16px; border-radius: 12px; max-width: 90%;
+  background: var(--toast-bg); color: #fff; padding: 10px 16px; border-radius: 12px; max-width: 90%;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25); font-size: 0.92rem; transition: opacity 0.4s, transform 0.4s;
   animation: up 0.25s;
 }
@@ -367,11 +389,9 @@ dialog.sheet h2 { padding-right: 36px; margin-bottom: 12px; }
 .recuerdo { padding: 0; overflow: hidden; position: relative; }
 .recuerdo img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
 .rec-t { position: absolute; left: 0; right: 0; bottom: 0; padding: 30px 14px 12px; color: #fff; background: linear-gradient(transparent, rgba(0, 0, 0, 0.65)); margin: 0 !important; }
-.gracias-card { background: linear-gradient(135deg, #fff9db, var(--card)); }
-@media (prefers-color-scheme: dark) { .gracias-card { background: linear-gradient(135deg, #3a3110, var(--card)); } }
+.gracias-card { background: linear-gradient(135deg, var(--gracias-bg), var(--card)); }
 .gr-t { font-size: 1.05rem; font-style: italic; }
-.cumple { background: linear-gradient(135deg, #fff0f6, var(--card)); }
-@media (prefers-color-scheme: dark) { .cumple { background: linear-gradient(135deg, #3a1428, var(--card)); } }
+.cumple { background: linear-gradient(135deg, var(--cumple-bg), var(--card)); }
 
 .huge {
   display: block; width: 100%; padding: 22px; border-radius: 20px; border: 0; cursor: pointer;

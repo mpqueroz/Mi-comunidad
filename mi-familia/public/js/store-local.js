@@ -3,7 +3,7 @@
 // (cada pestaña puede "ser" una persona distinta de la familia), lo que
 // sirve para probar avisos, "yo me encargo", SOS, etc. sin servidor.
 
-import {randomId, dayKey, addDays, compressImage, blobToDataURL} from "./util.js";
+import {randomId, dayKey, addDays, compressImage, blobToDataURL, local, session} from "./util.js";
 
 const KEY = "mi_familia_demo_v1";
 const PERSONA = "mi_familia_demo_persona";
@@ -18,7 +18,7 @@ const authCbs = [];
 
 function load() {
   try {
-    state = JSON.parse(localStorage.getItem(KEY));
+    state = JSON.parse(local.getItem(KEY));
   } catch {
     state = null;
   }
@@ -31,8 +31,9 @@ function load() {
 function persist() {
   try {
     localStorage.setItem(KEY, JSON.stringify(state));
-  } catch {
-    alert("El almacenamiento de la demo está lleno. Borra algunas fotos o reinicia la demo.");
+  } catch (e) {
+    // Lleno (fotos) o bloqueado: la demo sigue funcionando en memoria.
+    if (e?.name === "QuotaExceededError") console.warn("Almacenamiento de la demo lleno");
   }
 }
 
@@ -43,11 +44,15 @@ function changed() {
 
 window.addEventListener("storage", (e) => {
   if (e.key !== KEY || !e.newValue) return;
-  state = JSON.parse(e.newValue);
+  try {
+    state = JSON.parse(e.newValue);
+  } catch {
+    return;
+  }
   listeners.forEach((l) => l());
 });
 
-const persona = () => sessionStorage.getItem(PERSONA) || localStorage.getItem(PERSONA);
+const persona = () => session.getItem(PERSONA) || local.getItem(PERSONA);
 function currentUser() {
   const uid = persona();
   const u = uid && state.users[uid];
@@ -68,13 +73,13 @@ export function demoPeople() {
   return Object.entries(state.users).map(([id, u]) => ({id, name: u.name, emoji: u.emoji}));
 }
 export function signInAs(id) {
-  sessionStorage.setItem(PERSONA, id);
-  localStorage.setItem(PERSONA, id);
+  session.setItem(PERSONA, id);
+  local.setItem(PERSONA, id);
   fireAuth();
 }
 export function signOut() {
-  sessionStorage.removeItem(PERSONA);
-  localStorage.removeItem(PERSONA);
+  session.removeItem(PERSONA);
+  local.removeItem(PERSONA);
   fireAuth();
 }
 export function resetDemo() {

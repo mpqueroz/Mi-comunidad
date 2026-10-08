@@ -4,6 +4,34 @@
 export const esc = (s) =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"})[c]);
 
+// localStorage/sessionStorage que nunca lanzan error (navegación privada,
+// datos bloqueados): si no están disponibles, se usa memoria.
+function safeStorage(kind) {
+  const mem = new Map();
+  let s = null;
+  try {
+    s = self[kind];
+    s.setItem("__t", "1");
+    s.removeItem("__t");
+  } catch {
+    s = null;
+  }
+  const wrap = (fn, fallback) => (...a) => {
+    try {
+      return s ? fn(...a) : fallback(...a);
+    } catch {
+      return fallback(...a);
+    }
+  };
+  return {
+    getItem: wrap((k) => s.getItem(k), (k) => (mem.has(k) ? mem.get(k) : null)),
+    setItem: wrap((k, v) => s.setItem(k, v), (k, v) => mem.set(k, String(v))),
+    removeItem: wrap((k) => s.removeItem(k), (k) => mem.delete(k)),
+  };
+}
+export const local = safeStorage("localStorage");
+export const session = safeStorage("sessionStorage");
+
 export const pad = (n) => String(n).padStart(2, "0");
 
 export const randomId = (len = 20, abc = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789") => {
