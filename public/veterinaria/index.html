@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dra. Delia Garcés · Veterinaria a domicilio</title>
+<meta name="description" content="Atención veterinaria a domicilio en Santiago y comunas aledañas. Vacunas, desparasitación, diagnóstico y acompañamiento para perros y gatos, en la comodidad de tu hogar.">
+<meta name="theme-color" content="#1d3a5f">
+<meta property="og:title" content="Dra. Delia Garcés · Veterinaria a domicilio">
+<meta property="og:description" content="Tu mascota, nuestra prioridad. Atención veterinaria profesional y cariñosa en tu hogar, en Santiago y comunas aledañas.">
+<meta property="og:image" content="dra-garces.jpg">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%231d3a5f'/%3E%3Cg fill='%23f6c94a'%3E%3Cellipse cx='32' cy='40' rx='11' ry='9'/%3E%3Ccircle cx='19' cy='27' r='5'/%3E%3Ccircle cx='27' cy='19' r='5'/%3E%3Ccircle cx='37' cy='19' r='5'/%3E%3Ccircle cx='45' cy='27' r='5'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Caveat:wght@600;700&display=swap" rel="stylesheet">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "VeterinaryCare",
+  "name": "Dra. Delia Garcés · Médico Veterinaria a domicilio",
+  "description": "Atención veterinaria a domicilio: vacunas, desparasitación, diagnóstico y acompañamiento.",
+  "telephone": "+56977522182",
+  "email": "garcescalderondelianicole@gmail.com",
+  "areaServed": "Santiago y comunas aledañas, Chile",
+  "image": "dra-garces.jpg",
+  "sameAs": ["https://www.instagram.com/dra._garces_med.vet/"]
+}
+</script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --navy:#1d3a5f;--navy-900:#132842;--navy-700:#2a4d78;
+  --teal:#3f9a8c;--teal-600:#2f7f73;--teal-50:#e6f3f0;
+  --sun:#f6c94a;--sun-50:#fff6dc;
+  --coral:#e25d5d;--coral-50:#fdeceb;
+  --violet:#8a6bc9;--violet-50:#f1ecfa;
+  --green:#6aa84f;--green-50:#edf6e8;
+  --orange:#eba23a;--orange-50:#fdf2e1;
+  --cream:#fbf7f0;--cream-2:#f4ede1;--white:#fff;
+  --ink:#1f2d3d;--muted:#5d6b7a;--line:#e8e1d4;
+  --radius:22px;
+  --shadow-sm:0 1px 2px rgba(19,40,66,.06),0 2px 6px rgba(19,40,66,.05);
+  --shadow-md:0 10px 30px rgba(19,40,66,.10),0 3px 8px rgba(19,40,66,.06);
+  --shadow-lg:0 24px 60px rgba(19,40,66,.16),0 8px 18px rgba(19,40,66,.08);
+  --serif:'Fraunces',Georgia,serif;
+  --sans:'Plus Jakarta Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --hand:'Caveat',cursive;
+}
+html{scroll-behavior:smooth;scroll-padding-top:84px}
+body{font-family:var(--sans);color:var(--ink);background:var(--cream);line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+img{max-width:100%;display:block}
+a{color:inherit}
+.wrap{width:min(1160px,100% - 32px);margin-inline:auto}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+:focus-visible{outline:3px solid var(--sun);outline-offset:3px;border-radius:8px}
+
+/* ---------- Botones ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;font:700 15.5px/1 var(--sans);padding:16px 24px;border-radius:999px;text-decoration:none;border:0;cursor:pointer;transition:transform .2s,box-shadow .2s,background .2s}
+.btn svg{width:20px;height:20px;flex:none}
+.btn-wa{background:#25a560;color:#fff;box-shadow:0 10px 24px rgba(37,165,96,.28)}
+.btn-wa:hover{background:#1e8f52;transform:translateY(-2px)}
+.btn-ghost{background:var(--white);color:var(--navy);box-shadow:inset 0 0 0 1.5px var(--line)}
+.btn-ghost:hover{box-shadow:inset 0 0 0 1.5px var(--navy);transform:translateY(-2px)}
+.btn-navy{background:var(--navy);color:#fff}
+.btn-navy:hover{background:var(--navy-900);transform:translateY(-2px)}
+
+/* ---------- Header ---------- */
+header{position:sticky;top:0;z-index:50;background:rgba(251,247,240,.86);backdrop-filter:saturate(1.4) blur(14px);-webkit-backdrop-filter:saturate(1.4) blur(14px);border-bottom:1px solid transparent;transition:border-color .3s,box-shadow .3s}
+header.scrolled{border-color:var(--line);box-shadow:0 4px 20px rgba(19,40,66,.06)}
+.nav{display:flex;align-items:center;justify-content:space-between;height:76px;gap:20px}
+.brand{display:flex;align-items:center;gap:12px;text-decoration:none}
+.brand-mark{width:46px;height:46px;flex:none}
+.brand-text{line-height:1.05}
+.brand-text>span{display:block}
+.brand-name{font:700 19px/1.1 var(--serif);color:var(--navy);letter-spacing:-.01em}
+.brand-sub{font:700 10.5px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--teal-600);margin-top:4px}
+.nav-links{display:flex;gap:4px;list-style:none}
+.nav-links a{display:block;white-space:nowrap;padding:10px 14px;border-radius:999px;font-weight:600;font-size:14.5px;color:var(--muted);text-decoration:none;transition:color .2s,background .2s}
+.nav-links a:hover{color:var(--navy);background:var(--cream-2)}
+.nav-cta{padding:12px 18px;font-size:14px;white-space:nowrap}
+.menu-btn{display:none;width:44px;height:44px;border-radius:12px;border:1.5px solid var(--line);background:var(--white);cursor:pointer;align-items:center;justify-content:center}
+.menu-btn svg{width:22px;height:22px;color:var(--navy)}
+
+/* ---------- Hero ---------- */
+.hero{position:relative;padding:56px 0 120px;overflow:hidden}
+.hero::before{content:"";position:absolute;inset:-20% -10% auto auto;width:720px;height:720px;background:radial-gradient(circle,rgba(63,154,140,.16),transparent 62%);pointer-events:none}
+.hero::after{content:"";position:absolute;left:-200px;bottom:-260px;width:620px;height:620px;background:radial-gradient(circle,rgba(246,201,74,.20),transparent 60%);pointer-events:none}
+.hero-grid{position:relative;z-index:1;display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
+.kicker{display:inline-flex;align-items:center;gap:10px;font:700 26px/1 var(--hand);color:var(--teal-600)}
+.kicker svg{width:26px;height:26px;color:var(--navy)}
+h1{font:700 clamp(40px,5.6vw,68px)/1.02 var(--serif);color:var(--navy);letter-spacing:-.025em;margin:18px 0 22px}
+h1 .hl{position:relative;white-space:nowrap;z-index:0}
+h1 .hl::after{content:"";position:absolute;left:-4px;right:-4px;bottom:.06em;height:.32em;background:var(--sun);border-radius:6px;z-index:-1;transform:rotate(-1.2deg)}
+.lead{font-size:clamp(17px,1.6vw,19px);color:var(--muted);max-width:540px}
+.lead strong{color:var(--ink)}
+.hero-ctas{display:flex;flex-wrap:wrap;gap:12px;margin:32px 0 30px}
+.pillars{display:flex;flex-wrap:wrap;gap:10px 22px;list-style:none;font-weight:600;font-size:14.5px;color:var(--navy)}
+.pillars li{display:flex;align-items:center;gap:8px}
+.pillars svg{width:18px;height:18px;color:var(--teal)}
+
+.hero-visual{position:relative;justify-self:center;width:min(480px,100%)}
+.photo-frame{position:relative;border-radius:240px 240px 32px 32px;overflow:hidden;aspect-ratio:507/595;background:var(--cream-2);box-shadow:var(--shadow-lg);border:8px solid var(--white)}
+.photo-frame img{width:100%;height:100%;object-fit:cover}
+.blob{position:absolute;inset:auto -34px -30px auto;width:180px;height:180px;background:var(--sun);border-radius:42% 58% 63% 37% / 41% 44% 56% 59%;z-index:-1}
+.blob.b2{inset:40px auto auto -40px;width:120px;height:120px;background:var(--teal);opacity:.85;border-radius:60% 40% 30% 70% / 60% 30% 70% 40%}
+.float{position:absolute;background:var(--white);border-radius:18px;box-shadow:var(--shadow-md);padding:14px 16px;display:flex;align-items:center;gap:12px}
+.float .ic{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;flex:none}
+.float .ic svg{width:22px;height:22px}
+.float b{display:block;font-size:14.5px;color:var(--navy);line-height:1.2}
+.float span{font-size:12.5px;color:var(--muted)}
+.float.f1{left:-36px;bottom:70px;animation:bob 6s ease-in-out infinite}
+.float.f1 .ic{background:var(--teal-50);color:var(--teal-600)}
+.float.f2{right:-26px;top:64px;animation:bob 7s ease-in-out -2s infinite}
+.float.f2 .ic{background:var(--coral-50);color:var(--coral)}
+.note{position:absolute;right:-14px;bottom:-62px;font:700 25px/1.05 var(--hand);color:var(--navy);transform:rotate(-5deg);text-align:right}
+.note svg{width:18px;height:18px;color:var(--coral);display:inline-block;vertical-align:middle}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+
+/* ---------- Secciones ---------- */
+section{position:relative}
+.sec{padding:100px 0}
+.sec-head{max-width:640px;margin-bottom:52px}
+.sec-head.center{margin-inline:auto;text-align:center}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;font:800 12.5px/1 var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--teal-600);background:var(--teal-50);padding:9px 14px;border-radius:999px}
+.eyebrow svg{width:14px;height:14px}
+h2{font:700 clamp(32px,3.8vw,46px)/1.08 var(--serif);color:var(--navy);letter-spacing:-.02em;margin:18px 0 14px}
+.sec-head p{color:var(--muted);font-size:17.5px}
+
+/* Servicios */
+.services{background:var(--white);border-radius:48px 48px 0 0;margin-top:-40px;z-index:2}
+.svc-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:20px}
+.svc{grid-column:span 2;position:relative;background:var(--cream);border-radius:var(--radius);padding:30px 28px 30px;border:1px solid var(--line);transition:transform .3s,box-shadow .3s,border-color .3s;overflow:hidden}
+.svc:nth-child(4),.svc:nth-child(5){grid-column:span 3}
+.svc:hover{transform:translateY(-4px);box-shadow:var(--shadow-md);border-color:transparent}
+.svc .ic{width:58px;height:58px;border-radius:18px;display:grid;place-items:center;margin-bottom:20px}
+.svc .ic svg{width:28px;height:28px}
+.svc h3{font:700 20px/1.25 var(--sans);color:var(--navy);margin-bottom:8px;letter-spacing:-.01em}
+.svc p{color:var(--muted);font-size:15.5px}
+.tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;list-style:none}
+.tags li{font-size:13px;font-weight:700;padding:7px 12px;border-radius:999px;background:var(--white);border:1px solid var(--line);color:var(--navy)}
+.c-blue .ic{background:#e7f0fb;color:#2f72c4}
+.c-green .ic{background:var(--green-50);color:var(--green)}
+.c-violet .ic{background:var(--violet-50);color:var(--violet)}
+.c-coral .ic{background:var(--coral-50);color:var(--coral)}
+.c-orange .ic{background:var(--orange-50);color:var(--orange)}
+
+/* Beneficios */
+.why{background:var(--navy);color:#dbe5f1;overflow:hidden}
+.why::before{content:"";position:absolute;right:-180px;top:-180px;width:520px;height:520px;border-radius:50%;background:radial-gradient(circle,rgba(63,154,140,.35),transparent 65%)}
+.why h2{color:#fff}
+.why .eyebrow{background:rgba(255,255,255,.1);color:var(--sun)}
+.why .sec-head p{color:#b6c5d8}
+.why-grid{position:relative;display:grid;grid-template-columns:repeat(4,1fr);gap:20px}
+.why-card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:var(--radius);padding:28px 24px}
+.why-card .ic{width:50px;height:50px;border-radius:14px;background:var(--sun);color:var(--navy);display:grid;place-items:center;margin-bottom:18px}
+.why-card .ic svg{width:24px;height:24px}
+.why-card h3{color:#fff;font-size:18px;margin-bottom:8px;line-height:1.3}
+.why-card p{font-size:15px;color:#b6c5d8}
+
+/* Pasos */
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:22px;counter-reset:s;list-style:none;position:relative}
+.steps::before{content:"";position:absolute;top:34px;left:12%;right:12%;border-top:2px dashed #cfc6b5}
+.step{position:relative;text-align:center;padding:0 8px}
+.step .num{position:relative;width:68px;height:68px;margin:0 auto 20px;border-radius:50%;background:var(--white);border:2px solid var(--line);display:grid;place-items:center;box-shadow:var(--shadow-sm);color:var(--navy)}
+.step .num svg{width:28px;height:28px}
+.step .num::after{counter-increment:s;content:counter(s);position:absolute;top:-6px;right:-6px;width:26px;height:26px;border-radius:50%;background:var(--sun);color:var(--navy);font:800 13px/26px var(--sans)}
+.step h3{font-size:18px;color:var(--navy);margin-bottom:6px}
+.step p{font-size:15px;color:var(--muted)}
+
+/* Sobre mí */
+.about{background:var(--cream-2)}
+.about-grid{display:grid;grid-template-columns:.9fr 1.1fr;gap:64px;align-items:center}
+.about-card{position:relative;background:var(--white);border-radius:32px;padding:44px 40px;box-shadow:var(--shadow-md)}
+.about-card .logo-big{width:150px;margin:0 auto 18px}
+.about-card .n1{font:700 38px/1 var(--serif);color:var(--navy);text-align:center;font-style:italic}
+.about-card .n2{font:800 30px/1.1 var(--sans);color:var(--navy);text-align:center;letter-spacing:.04em}
+.badge{display:flex;width:max-content;margin:14px auto 0;align-items:center;gap:8px;background:var(--teal);color:#fff;font:800 12.5px/1 var(--sans);letter-spacing:.12em;text-transform:uppercase;padding:10px 16px;border-radius:999px}
+.badge svg{width:14px;height:14px}
+.about-card .sig{font:700 28px/1.1 var(--hand);color:var(--teal-600);text-align:center;margin-top:24px}
+blockquote{font:600 clamp(22px,2.4vw,28px)/1.35 var(--serif);color:var(--navy);margin:28px 0 22px;letter-spacing:-.01em}
+blockquote::before{content:"“";display:block;font-size:72px;line-height:.6;color:var(--sun);margin-bottom:8px}
+.about p.txt{color:var(--muted);font-size:17px;margin-bottom:14px}
+.values{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:28px}
+.value{background:var(--white);border-radius:18px;padding:18px;text-align:center;border:1px solid var(--line)}
+.value svg{width:26px;height:26px;color:var(--teal);margin:0 auto 8px}
+.value b{display:block;font-size:14.5px;color:var(--navy)}
+
+/* Cobertura */
+.coverage-box{display:grid;grid-template-columns:1fr 1fr;gap:0;background:var(--white);border-radius:32px;overflow:hidden;box-shadow:var(--shadow-md);border:1px solid var(--line)}
+.coverage-text{padding:52px 48px}
+.coverage-text h2{margin-top:16px}
+.coverage-text p{color:var(--muted);font-size:17px}
+.coverage-text .hand{font:700 30px/1.1 var(--hand);color:var(--teal-600);margin-top:22px;display:flex;align-items:center;gap:10px}
+.coverage-text .hand svg{width:22px;height:22px;color:var(--coral)}
+.coverage-map{position:relative;background:linear-gradient(160deg,var(--teal-50),#d6ece7);min-height:340px;display:grid;place-items:center;overflow:hidden}
+.coverage-map svg.map{width:100%;height:100%;position:absolute;inset:0}
+.pin{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center}
+.pin-dot{width:70px;height:70px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:var(--navy);display:grid;place-items:center;box-shadow:var(--shadow-md)}
+.pin-dot svg{transform:rotate(45deg);width:30px;height:30px;color:var(--sun)}
+.pin-label{margin-top:16px;background:var(--white);padding:10px 16px;border-radius:999px;font-weight:800;color:var(--navy);font-size:14.5px;box-shadow:var(--shadow-sm)}
+.ring{position:absolute;left:50%;top:50%;width:140px;height:140px;margin:-90px 0 0 -70px;border-radius:50%;border:2px solid rgba(29,58,95,.25);animation:ping 3s ease-out infinite}
+.ring.r2{animation-delay:1.5s}
+@keyframes ping{0%{transform:scale(.6);opacity:1}100%{transform:scale(2.4);opacity:0}}
+
+/* Agenda */
+.book{background:var(--white)}
+.book-grid{display:grid;grid-template-columns:.85fr 1.15fr;gap:56px;align-items:start}
+.contact-list{list-style:none;display:grid;gap:14px;margin-top:30px}
+.contact-list a{display:flex;align-items:center;gap:16px;text-decoration:none;padding:16px 18px;border-radius:18px;background:var(--cream);border:1px solid var(--line);transition:border-color .2s,transform .2s}
+.contact-list a:hover{border-color:var(--navy);transform:translateX(4px)}
+.contact-list .ic{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;flex:none;color:#fff}
+.contact-list .ic svg{width:22px;height:22px}
+.contact-list small{display:block;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.contact-list b{display:block;color:var(--navy);font-size:15.5px;word-break:break-word}
+.ic-wa{background:#25a560}.ic-ig{background:linear-gradient(45deg,#f9a03f,#e1306c 50%,#8a3ab9)}.ic-mail{background:var(--navy)}
+form{background:var(--cream);border:1px solid var(--line);border-radius:28px;padding:36px}
+form h3{font:700 24px/1.2 var(--serif);color:var(--navy);margin-bottom:6px}
+form > p{color:var(--muted);font-size:15px;margin-bottom:24px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.field{display:flex;flex-direction:column;gap:7px;margin-bottom:16px}
+.field label,fieldset legend{font-size:13.5px;font-weight:700;color:var(--navy)}
+input,select,textarea{font:500 15.5px/1.4 var(--sans);color:var(--ink);background:var(--white);border:1.5px solid var(--line);border-radius:14px;padding:13px 15px;width:100%;transition:border-color .2s,box-shadow .2s}
+input:focus,select:focus,textarea:focus{outline:0;border-color:var(--teal);box-shadow:0 0 0 4px rgba(63,154,140,.15)}
+textarea{resize:vertical;min-height:96px}
+fieldset{border:0;margin-bottom:16px}
+fieldset legend{margin-bottom:8px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips label{cursor:pointer}
+.chips input{position:absolute;opacity:0;width:1px;height:1px}
+.chips span{display:inline-flex;align-items:center;gap:7px;padding:10px 16px;border-radius:999px;background:var(--white);border:1.5px solid var(--line);font-size:14.5px;font-weight:600;color:var(--muted);transition:all .2s}
+.chips input:checked + span{background:var(--navy);border-color:var(--navy);color:#fff}
+.chips input:focus-visible + span{outline:3px solid var(--sun);outline-offset:2px}
+form .btn{width:100%;margin-top:6px}
+.form-note{font-size:13px;color:var(--muted);text-align:center;margin-top:12px}
+
+/* FAQ */
+.faq{max-width:820px;margin-inline:auto;display:grid;gap:12px}
+details{background:var(--white);border:1px solid var(--line);border-radius:18px;padding:0 22px;transition:box-shadow .2s}
+details[open]{box-shadow:var(--shadow-sm)}
+summary{list-style:none;cursor:pointer;padding:20px 0;font-weight:700;color:var(--navy);font-size:16.5px;display:flex;justify-content:space-between;align-items:center;gap:16px}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"";width:12px;height:12px;flex:none;border-right:2.5px solid var(--teal);border-bottom:2.5px solid var(--teal);transform:rotate(45deg) translateY(-3px);transition:transform .25s}
+details[open] summary::after{transform:rotate(-135deg) translateY(-3px)}
+details p{color:var(--muted);padding-bottom:20px;font-size:15.5px}
+
+/* CTA final + footer */
+.cta-band{padding:0 0 100px}
+.cta-inner{position:relative;background:linear-gradient(120deg,var(--teal-600),var(--teal));border-radius:36px;padding:56px;color:#fff;display:flex;align-items:center;justify-content:space-between;gap:32px;overflow:hidden}
+.cta-inner::after{content:"";position:absolute;right:-60px;bottom:-80px;width:280px;height:280px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cg fill='%23ffffff' fill-opacity='.12'%3E%3Cellipse cx='32' cy='40' rx='11' ry='9'/%3E%3Ccircle cx='19' cy='27' r='5'/%3E%3Ccircle cx='27' cy='19' r='5'/%3E%3Ccircle cx='37' cy='19' r='5'/%3E%3Ccircle cx='45' cy='27' r='5'/%3E%3C/g%3E%3C/svg%3E") center/contain no-repeat;transform:rotate(-18deg)}
+.cta-inner h2{color:#fff;margin:0 0 8px;font-size:clamp(28px,3.2vw,40px)}
+.cta-inner p{color:#dff2ee;font-size:17px}
+.cta-inner .btn{position:relative;z-index:1;flex:none;background:#fff;color:var(--navy);box-shadow:var(--shadow-md)}
+.cta-inner .btn svg{color:#25a560}
+footer{background:var(--navy-900);color:#a9b8cb;padding:56px 0 28px;font-size:14.5px}
+.foot-grid{display:flex;flex-wrap:wrap;justify-content:space-between;gap:32px;padding-bottom:32px;border-bottom:1px solid rgba(255,255,255,.08)}
+footer .brand-name{color:#fff}
+footer .brand-sub{color:var(--sun)}
+footer h4{color:#fff;font-size:13px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:14px}
+footer ul{list-style:none;display:grid;gap:8px}
+footer a{text-decoration:none;color:#a9b8cb}
+footer a:hover{color:#fff}
+.foot-pillars{font:700 22px/1.2 var(--hand);color:var(--sun);margin-top:16px}
+.foot-bottom{padding-top:24px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;font-size:13px}
+
+/* WhatsApp flotante */
+.wa-float{position:fixed;right:20px;bottom:20px;z-index:60;width:62px;height:62px;border-radius:50%;background:#25a560;color:#fff;display:grid;place-items:center;box-shadow:0 12px 28px rgba(37,165,96,.4);transition:transform .2s;text-decoration:none}
+.wa-float:hover{transform:scale(1.07)}
+.wa-float svg{width:32px;height:32px}
+.wa-float::before{content:"";position:absolute;inset:0;border-radius:50%;background:#25a560;animation:pulse 2.4s ease-out infinite;z-index:-1}
+@keyframes pulse{0%{transform:scale(1);opacity:.6}100%{transform:scale(1.6);opacity:0}}
+
+/* Animación de entrada */
+.reveal{opacity:0;transform:translateY(24px);transition:opacity .7s ease,transform .7s ease}
+.reveal.in{opacity:1;transform:none}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+  .reveal{opacity:1;transform:none}
+  html{scroll-behavior:auto}
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width:1100px){
+  .nav-links{display:none}
+  .menu-btn{display:inline-flex}
+  .nav-links.open{display:flex;flex-direction:column;position:absolute;top:76px;left:0;right:0;background:var(--cream);padding:12px 16px 20px;border-bottom:1px solid var(--line);box-shadow:var(--shadow-md)}
+  .nav-links.open a{padding:14px 12px;font-size:16px}
+  .hero-grid,.about-grid,.book-grid,.coverage-box{grid-template-columns:1fr}
+  .hero-grid{gap:72px}
+  .hero{padding-top:32px}
+  .why-grid{grid-template-columns:repeat(2,1fr)}
+  .svc-grid{grid-template-columns:repeat(2,1fr)}
+  .svc,.svc:nth-child(4),.svc:nth-child(5){grid-column:span 1}
+  .svc:nth-child(5){grid-column:span 2}
+  .steps{grid-template-columns:repeat(2,1fr);row-gap:40px}
+  .steps::before{display:none}
+  .about-grid{gap:40px}
+}
+@media (max-width:640px){
+  .nav-cta{display:none}
+  .brand-name{font-size:17px}
+  .sec{padding:72px 0}
+  .services{border-radius:32px 32px 0 0}
+  .svc-grid,.why-grid,.steps{grid-template-columns:1fr}
+  .svc:nth-child(5){grid-column:span 1}
+  .hero-ctas .btn{width:100%}
+  .float.f1{left:-8px;bottom:56px}
+  .float.f2{right:-8px;top:30px}
+  .float{padding:10px 12px}
+  .float .ic{width:36px;height:36px}
+  .note{right:4px;font-size:22px;bottom:-58px}
+  .contact-list b{font-size:14px;word-break:break-all}
+  .row{grid-template-columns:1fr}
+  form{padding:24px 20px}
+  .about-card{padding:32px 22px}
+  .values{grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .value{padding:14px 8px}
+  .value b{font-size:13px}
+  .coverage-text{padding:36px 24px}
+  .coverage-map{min-height:260px}
+  .cta-inner{flex-direction:column;align-items:flex-start;padding:40px 26px}
+  .cta-inner .btn{width:100%}
+}
+</style>
+</head>
+<body>
+
+<!-- Íconos reutilizables -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-paw" viewBox="0 0 24 24"><g fill="currentColor"><ellipse cx="12" cy="15.5" rx="4.6" ry="3.8"/><circle cx="5.8" cy="10.2" r="2.1"/><circle cx="9.3" cy="6.3" r="2.2"/><circle cx="14.7" cy="6.3" r="2.2"/><circle cx="18.2" cy="10.2" r="2.1"/></g></symbol>
+    <symbol id="i-wa" viewBox="0 0 24 24"><path fill="currentColor" d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Zm0 18.15h-.01a8.23 8.23 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.2 8.2 0 0 1-1.26-4.38c0-4.54 3.7-8.23 8.25-8.23 2.2 0 4.27.86 5.82 2.42a8.18 8.18 0 0 1 2.41 5.83c0 4.54-3.7 8.22-8.23 8.22Zm4.52-6.16c-.25-.12-1.47-.72-1.7-.81-.23-.08-.39-.12-.56.13-.17.24-.64.8-.78.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.5.11-.11.25-.29.37-.43.13-.15.17-.25.25-.42.08-.17.04-.31-.02-.43-.06-.12-.56-1.34-.76-1.84-.2-.48-.41-.42-.56-.43h-.48c-.17 0-.43.06-.66.31-.23.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.17 1.75 2.67 4.23 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.06-.1-.22-.16-.47-.28Z"/></symbol>
+    <symbol id="i-ig" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/></g><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m4 7 8 6 8-6"/></g></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/></g></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24"><path fill="currentColor" d="M12 20.5s-7.5-4.6-9.3-9.4C1.4 7.6 3.6 4 7.2 4c2 0 3.6 1.1 4.8 2.7C13.2 5.1 14.8 4 16.8 4c3.6 0 5.8 3.6 4.5 7.1-1.8 4.8-9.3 9.4-9.3 9.4Z"/></symbol>
+    <symbol id="i-heart-o" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M12 20s-7-4.3-8.7-8.8C2.1 7.9 4.2 4.6 7.5 4.6c1.9 0 3.4 1 4.5 2.6 1.1-1.6 2.6-2.6 4.5-2.6 3.3 0 5.4 3.3 4.2 6.6C19 15.7 12 20 12 20Z"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-syringe" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 2 4 4M20 4l-4.5 4.5M14 5l5 5M16.5 7.5 8 16l-3 .5.5-3L14 5M5.5 18.5 2 22M8.5 10.5l2 2M11 8l2 2"/></g></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6L12 3Z"/><path d="m8.8 12 2.3 2.3 4.3-4.6"/></g></symbol>
+    <symbol id="i-steth" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3H4v6a5 5 0 0 0 10 0V3h-1"/><path d="M9 14v1.5a5.5 5.5 0 0 0 11 0V13"/><circle cx="20" cy="11" r="2"/></g></symbol>
+    <symbol id="i-cross" viewBox="0 0 24 24"><path fill="currentColor" d="M9.5 3h5a1 1 0 0 1 1 1v4.5H20a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-4.5V20a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-4.5H4a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1h4.5V4a1 1 0 0 1 1-1Z"/></symbol>
+    <symbol id="i-hand-heart" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 15h3l5 3.5c.8.5 1.8.4 2.4-.3L19 12a1.6 1.6 0 0 0-2.3-2.3L13 13"/><path d="M10 15h3a1.5 1.5 0 0 0 0-3H9.5L7 11H2"/><path d="M15.5 8.2S12 6.1 12 3.9C12 2.8 12.8 2 13.8 2c.7 0 1.3.4 1.7 1 .4-.6 1-1 1.7-1 1 0 1.8.8 1.8 1.9 0 2.2-3.5 4.3-3.5 4.3Z"/></g></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 12 3.5 21 11"/><path d="M5.5 9.5V20h13V9.5"/></g><path fill="currentColor" d="M12 18.2s-3.2-2-3.2-4.1c0-1 .7-1.7 1.6-1.7.7 0 1.2.4 1.6 1 .4-.6.9-1 1.6-1 .9 0 1.6.7 1.6 1.7 0 2.1-3.2 4.1-3.2 4.1Z"/></symbol>
+    <symbol id="i-calm" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5s1.3 1.8 3.5 1.8 3.5-1.8 3.5-1.8M8.5 9.8h.01M15.5 9.8h.01"/></g></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></g></symbol>
+    <symbol id="i-pets" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 20H7a3 3 0 0 1-3-3c0-3 3-6 8-6s8 3 8 6a3 3 0 0 1-3 3Z"/><circle cx="12" cy="6" r="3"/></g></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.8A8 8 0 1 1 21 12Z"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01"/></g></symbol>
+    <symbol id="i-cal" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M8 3v4M16 3v4M3.5 10h17M8.5 14.5l2 2 4-4"/></g></symbol>
+    <symbol id="i-follow" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-7 4 14 3-7h4"/></g></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path fill="currentColor" d="m12 3 2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.8l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8L12 3Z"/></symbol>
+    <!-- Logo: casa con perro, gato y estetoscopio -->
+    <symbol id="logo" viewBox="0 0 120 110">
+      <path d="M10 52 60 10l50 42" fill="none" stroke="#1d3a5f" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M22 44v52" stroke="#1d3a5f" stroke-width="7" stroke-linecap="round"/>
+      <path d="M86 18h10v20" fill="none" stroke="#1d3a5f" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M60 40s-8-5-8-10.2c0-2.7 2-4.6 4.4-4.6 1.6 0 2.9.9 3.6 2.2.7-1.3 2-2.2 3.6-2.2 2.4 0 4.4 1.9 4.4 4.6C68 35 60 40 60 40Z" fill="#1d3a5f"/>
+      <!-- perro -->
+      <path d="M36 96V77c0-4 1-7 3.6-9.4L38 60.5c-.3-1.3.9-2.3 2-1.6l5.2 3.4c1.5-.4 3.1-.4 4.6 0 4.6 1.3 6.7 5.4 6.7 10v6.7c0 2.4 1 4.7 2.6 6.4V96H36Z" fill="#1d3a5f"/>
+      <!-- gato -->
+      <path d="M62 96v-9c0-4.3 2-8 5.2-10.3v-5.5c0-1.4-.3-2.8.2-4.1l1.4-4 3.6 3.8h4.8l3.6-3.8 1.4 4c.5 1.3.2 2.7.2 4.1V77c3 2.3 5 6 5 10.2V96H62Z" fill="#3f9a8c"/>
+      <!-- estetoscopio -->
+      <path d="M96 96c0 4 -3 8-8 8H60" fill="none" stroke="#1d3a5f" stroke-width="4" stroke-linecap="round"/>
+      <path d="M96 96V76" fill="none" stroke="#1d3a5f" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="96" cy="68" r="10" fill="#fff" stroke="#1d3a5f" stroke-width="4"/>
+      <g fill="#1d3a5f"><ellipse cx="96" cy="70.5" rx="3.4" ry="2.8"/><circle cx="91.8" cy="66.8" r="1.4"/><circle cx="94.4" cy="64.2" r="1.5"/><circle cx="97.6" cy="64.2" r="1.5"/><circle cx="100.2" cy="66.8" r="1.4"/></g>
+    </symbol>
+  </defs>
+</svg>
+
+<header id="top">
+  <div class="wrap nav">
+    <a class="brand" href="#top" aria-label="Dra. Delia Garcés, inicio">
+      <svg class="brand-mark" aria-hidden="true"><use href="#logo"/></svg>
+      <span class="brand-text">
+        <span class="brand-name">Dra. Delia Garcés</span>
+        <span class="brand-sub">Médico Veterinaria</span>
+      </span>
+    </a>
+    <ul class="nav-links" id="navLinks">
+      <li><a href="#servicios">Servicios</a></li>
+      <li><a href="#como-funciona">Cómo funciona</a></li>
+      <li><a href="#sobre-mi">Sobre mí</a></li>
+      <li><a href="#cobertura">Cobertura</a></li>
+      <li><a href="#preguntas">Preguntas</a></li>
+      <li><a href="#agendar">Agendar</a></li>
+    </ul>
+    <a class="btn btn-wa nav-cta" href="https://wa.me/56977522182?text=Hola%20Dra.%20Garc%C3%A9s%2C%20quisiera%20agendar%20una%20visita%20a%20domicilio%20para%20mi%20mascota." target="_blank" rel="noopener">
+      <svg aria-hidden="true"><use href="#i-wa"/></svg>Agendar visita
+    </a>
+    <button class="menu-btn" id="menuBtn" aria-label="Abrir menú" aria-expanded="false" aria-controls="navLinks"><svg aria-hidden="true"><use href="#i-menu"/></svg></button>
+  </div>
+</header>
+
+<main>
+  <!-- HERO -->
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div class="reveal">
+        <span class="kicker"><svg aria-hidden="true"><use href="#i-paw"/></svg>Tu mascota, nuestra prioridad</span>
+        <h1>Atención veterinaria <span class="hl">a domicilio</span></h1>
+        <p class="lead">Cuidado profesional y cariñoso para tu perro o gato <strong>en la comodidad de tu hogar</strong>. Vacunas, desparasitación, diagnóstico y acompañamiento en Santiago y comunas aledañas.</p>
+        <div class="hero-ctas">
+          <a class="btn btn-wa" href="https://wa.me/56977522182?text=Hola%20Dra.%20Garc%C3%A9s%2C%20quisiera%20agendar%20una%20visita%20a%20domicilio%20para%20mi%20mascota." target="_blank" rel="noopener">
+            <svg aria-hidden="true"><use href="#i-wa"/></svg>Agenda por WhatsApp
+          </a>
+          <a class="btn btn-ghost" href="#servicios">Ver servicios</a>
+        </div>
+        <ul class="pillars">
+          <li><svg aria-hidden="true"><use href="#i-check"/></svg>Profesionalismo</li>
+          <li><svg aria-hidden="true"><use href="#i-check"/></svg>Compromiso</li>
+          <li><svg aria-hidden="true"><use href="#i-check"/></svg>Bienestar animal</li>
+        </ul>
+      </div>
+
+      <div class="hero-visual reveal">
+        <span class="blob" aria-hidden="true"></span>
+        <span class="blob b2" aria-hidden="true"></span>
+        <div class="photo-frame">
+          <img src="dra-garces.jpg" alt="La Dra. Delia Garcés sonriendo junto a un golden retriever, un gato carey y un perrito shih tzu" width="1014" height="1190" fetchpriority="high">
+        </div>
+        <div class="float f1">
+          <span class="ic"><svg aria-hidden="true"><use href="#i-home"/></svg></span>
+          <div><b>Voy a tu hogar</b><span>Santiago y alrededores</span></div>
+        </div>
+        <div class="float f2">
+          <span class="ic"><svg aria-hidden="true"><use href="#i-heart"/></svg></span>
+          <div><b>Perros y gatos</b><span>Con amor y paciencia</span></div>
+        </div>
+        <p class="note">Cuidado que se nota,<br>confianza que se siente <svg aria-hidden="true"><use href="#i-heart"/></svg></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- SERVICIOS -->
+  <section class="services sec" id="servicios">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <span class="eyebrow"><svg aria-hidden="true"><use href="#i-paw"/></svg>Nuestros servicios</span>
+        <h2>Todo lo que tu mascota necesita, sin salir de casa</h2>
+        <p>Atención integral y personalizada, con el tiempo y la calma que cada paciente merece.</p>
+      </div>
+      <div class="svc-grid">
+        <article class="svc c-blue reveal">
+          <div class="ic"><svg aria-hidden="true"><use href="#i-syringe"/></svg></div>
+          <h3>Vacunas</h3>
+          <p>Mantén al día el calendario de vacunación de tu perro o gato.</p>
+          <ul class="tags"><li>Óctuple</li><li>Triple felina</li><li>Leucemia felina</li><li>Antirrábica</li></ul>
+        </article>
+        <article class="svc c-green reveal">
+          <div class="ic"><svg aria-hidden="true"><use href="#i-shield"/></svg></div>
+          <h3>Desparasitación</h3>
+          <p>Protección contra parásitos que afectan su salud y la de toda la familia.</p>
+          <ul class="tags"><li>Interna</li><li>Externa</li></ul>
+        </article>
+        <article class="svc c-violet reveal">
+          <div class="ic"><svg aria-hidden="true"><use href="#i-steth"/></svg></div>
+          <h3>Diagnóstico y acompañamiento</h3>
+          <p>Evaluación clínica cuidadosa y seguimiento cercano, con amor y profesionalismo.</p>
+        </article>
+        <article class="svc c-coral reveal">
+          <div class="ic"><svg aria-hidden="true"><use href="#i-cross"/></svg></div>
+          <h3>Atención integral en tu hogar</h3>
+          <p>Consultas en el lugar donde tu mascota se siente más segura: su casa. Sin traslados, sin salas de espera.</p>
+        </article>
+        <article class="svc c-orange reveal">
+          <div class="ic"><svg aria-hidden="true"><use href="#i-hand-heart"/></svg></div>
+          <h3>Trato profesional, cariñoso y seguro</h3>
+          <p>Manejo respetuoso y de bajo estrés, pensado para pacientes nerviosos, mayores o que no toleran el auto.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- POR QUÉ A DOMICILIO -->
+  <section class="why sec">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <span class="eyebrow"><svg aria-hidden="true"><use href="#i-home"/></svg>¿Por qué a domicilio?</span>
+        <h2>Menos estrés para ellos, más tranquilidad para ti</h2>
+        <p>La atención en casa cambia por completo la experiencia de una consulta veterinaria.</p>
+      </div>
+      <div class="why-grid">
+        <div class="why-card reveal">
+          <div class="ic"><svg aria-hidden="true"><use href="#i-calm"/></svg></div>
+          <h3>Mascotas más tranquilas</h3>
+          <p>En su territorio, con sus olores y su gente, se sienten seguras y cooperan mejor.</p>
+        </div>
+        <div class="why-card reveal">
+          <div class="ic"><svg aria-hidden="true"><use href="#i-clock"/></svg></div>
+          <h3>Ahorras tiempo</h3>
+          <p>Sin traslados, sin tráfico y sin esperas. Coordinamos el horario que te acomode.</p>
+        </div>
+        <div class="why-card reveal">
+          <div class="ic"><svg aria-hidden="true"><use href="#i-pets"/></svg></div>
+          <h3>Ideal para varias mascotas</h3>
+          <p>Atiendo a todos tus peludos en una misma visita, cómodamente.</p>
+        </div>
+        <div class="why-card reveal">
+          <div class="ic"><svg aria-hidden="true"><use href="#i-heart"/></svg></div>
+          <h3>Pensado para todos</h3>
+          <p>Perfecto para mascotas mayores, gatos nerviosos y familias sin vehículo.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CÓMO FUNCIONA -->
+  <section class="sec" id="como-funciona">
+    <div class="wrap">
+      <div class="sec-head center reveal">
+        <span class="eyebrow"><svg aria-hidden="true"><use href="#i-paw"/></svg>Cómo funciona</span>
+        <h2>Agendar es muy simple</h2>
+        <p>En cuatro pasos tu mascota recibe atención profesional sin moverse de casa.</p>
+      </div>
+      <ol class="steps">
+        <li class="step reveal">
+          <div class="num"><svg aria-hidden="true"><use href="#i-chat"/></svg></div>
+          <h3>Escríbeme</h3>
+          <p>Cuéntame por WhatsApp qué necesita tu mascota.</p>
+        </li>
+        <li class="step reveal">
+          <div class="num"><svg aria-hidden="true"><use href="#i-cal"/></svg></div>
+          <h3>Coordinamos</h3>
+          <p>Acordamos día, hora y dirección de la visita.</p>
+        </li>
+        <li class="step reveal">
+          <div class="num"><svg aria-hidden="true"><use href="#i-home"/></svg></div>
+          <h3>Visita en casa</h3>
+          <p>Llego a tu hogar con todo lo necesario para la atención.</p>
+        </li>
+        <li class="step reveal">
+          <div class="num"><svg aria-hidden="true"><use href="#i-follow"/></svg></div>
+          <h3>Seguimiento</h3>
+          <p>Te acompaño después de la consulta y resuelvo tus dudas.</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- SOBRE MÍ -->
+  <section class="about sec" id="sobre-mi">
+    <div class="wrap about-grid">
+      <div class="about-card reveal">
+        <svg class="logo-big" viewBox="0 0 120 110" aria-hidden="true"><use href="#logo"/></svg>
+        <div class="n1">Dra. Delia</div>
+        <div class="n2">GARCÉS</div>
+        <span class="badge"><svg aria-hidden="true"><use href="#i-paw"/></svg>Médico Veterinaria<svg aria-hidden="true"><use href="#i-paw"/></svg></span>
+        <p class="sig">Amor, experiencia y vocación</p>
+      </div>
+      <div class="reveal">
+        <span class="eyebrow"><svg aria-hidden="true"><use href="#i-heart"/></svg>Sobre mí</span>
+        <blockquote>Cada mascota es parte de la familia, y así es como la atiendo: con paciencia, cariño y el máximo profesionalismo.</blockquote>
+        <p class="txt">Soy médico veterinaria y llevo la consulta hasta tu puerta. Mi objetivo es que la salud de tu mascota sea simple de cuidar: atención cercana, explicaciones claras y un trato que respeta sus tiempos.</p>
+        <p class="txt">Atiendo en Santiago y comunas aledañas, porque creo que el mejor lugar para cuidar a un animal es donde se siente en casa.</p>
+        <div class="values">
+          <div class="value"><svg aria-hidden="true"><use href="#i-paw"/></svg><b>Profesionalismo</b></div>
+          <div class="value"><svg aria-hidden="true"><use href="#i-heart-o"/></svg><b>Compromiso</b></div>
+          <div class="value"><svg aria-hidden="true"><use href="#i-paw"/></svg><b>Bienestar animal</b></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- COBERTURA -->
+  <section class="sec" id="cobertura">
+    <div class="wrap">
+      <div class="coverage-box reveal">
+        <div class="coverage-text">
+          <span class="eyebrow"><svg aria-hidden="true"><use href="#i-pin"/></svg>Cobertura</span>
+          <h2>Santiago y comunas aledañas</h2>
+          <p>Realizo visitas a domicilio en Santiago y sus alrededores. Si no estás seguro de si llego a tu comuna, escríbeme y lo vemos juntos.</p>
+          <p class="hand">¡Estoy donde tu mascota me necesita! <svg aria-hidden="true"><use href="#i-heart"/></svg></p>
+        </div>
+        <div class="coverage-map" aria-hidden="true">
+          <svg class="map" viewBox="0 0 400 340" preserveAspectRatio="xMidYMid slice">
+            <g fill="none" stroke="#3f9a8c" stroke-opacity=".22" stroke-width="2">
+              <path d="M-10 80 Q120 60 200 110 T420 90"/><path d="M-10 160 Q100 140 210 175 T420 170"/>
+              <path d="M-10 250 Q140 230 220 260 T420 245"/><path d="M80 -10 Q100 120 70 350"/>
+              <path d="M200 -10 Q180 150 215 350"/><path d="M320 -10 Q340 160 305 350"/>
+            </g>
+            <g fill="#1d3a5f" fill-opacity=".14">
+              <circle cx="90" cy="70" r="6"/><circle cx="310" cy="80" r="6"/><circle cx="60" cy="230" r="6"/><circle cx="330" cy="260" r="6"/><circle cx="150" cy="290" r="5"/><circle cx="260" cy="40" r="5"/>
+            </g>
+          </svg>
+          <span class="ring"></span><span class="ring r2"></span>
+          <div class="pin">
+            <div class="pin-dot"><svg><use href="#i-paw"/></svg></div>
+            <span class="pin-label">Región Metropolitana</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- AGENDAR -->
+  <section class="book sec" id="agendar">
+    <div class="wrap book-grid">
+      <div class="reveal">
+        <span class="eyebrow"><svg aria-hidden="true"><use href="#i-cal"/></svg>¡Comunícate!</span>
+        <h2>Agenda la visita de tu mascota</h2>
+        <p style="color:var(--muted);font-size:17px">Completa el formulario y se abrirá WhatsApp con tu mensaje listo para enviar. También puedes contactarme directamente:</p>
+        <ul class="contact-list">
+          <li><a href="https://wa.me/56977522182" target="_blank" rel="noopener"><span class="ic ic-wa"><svg aria-hidden="true"><use href="#i-wa"/></svg></span><span><small>WhatsApp</small><b>+56 9 7752 2182</b></span></a></li>
+          <li><a href="https://www.instagram.com/dra._garces_med.vet/" target="_blank" rel="noopener"><span class="ic ic-ig"><svg aria-hidden="true"><use href="#i-ig"/></svg></span><span><small>Instagram</small><b>@dra._garces_med.vet</b></span></a></li>
+          <li><a href="mailto:garcescalderondelianicole@gmail.com"><span class="ic ic-mail"><svg aria-hidden="true"><use href="#i-mail"/></svg></span><span><small>Correo</small><b>garcescalderondelianicole@gmail.com</b></span></a></li>
+        </ul>
+      </div>
+
+      <form id="bookForm" class="reveal" novalidate>
+        <h3>Solicitud de visita</h3>
+        <p>Te responderé a la brevedad para confirmar día y hora.</p>
+        <div class="row">
+          <div class="field"><label for="f-nombre">Tu nombre</label><input id="f-nombre" name="nombre" autocomplete="name" required placeholder="Ej: Camila"></div>
+          <div class="field"><label for="f-comuna">Comuna</label><input id="f-comuna" name="comuna" autocomplete="address-level2" required placeholder="Ej: Ñuñoa"></div>
+        </div>
+        <fieldset>
+          <legend>Tu mascota es</legend>
+          <div class="chips">
+            <label><input type="radio" name="especie" value="Perro" checked><span>🐶 Perro</span></label>
+            <label><input type="radio" name="especie" value="Gato"><span>🐱 Gato</span></label>
+            <label><input type="radio" name="especie" value="Ambos (perro y gato)"><span>🐾 Ambos</span></label>
+          </div>
+        </fieldset>
+        <div class="row">
+          <div class="field"><label for="f-mascota">Nombre de tu mascota</label><input id="f-mascota" name="mascota" placeholder="Ej: Nanuk"></div>
+          <div class="field"><label for="f-servicio">Servicio</label>
+            <select id="f-servicio" name="servicio">
+              <option>Vacunas</option>
+              <option>Desparasitación</option>
+              <option>Diagnóstico / consulta</option>
+              <option>Control y acompañamiento</option>
+              <option>Otro / no estoy seguro</option>
+            </select>
+          </div>
+        </div>
+        <div class="field"><label for="f-msg">Cuéntame un poco más (opcional)</label><textarea id="f-msg" name="mensaje" placeholder="Edad, síntomas, horario que te acomoda…"></textarea></div>
+        <button class="btn btn-wa" type="submit"><svg aria-hidden="true"><use href="#i-wa"/></svg>Enviar por WhatsApp</button>
+        <p class="form-note">Tus datos no se guardan en esta página: solo se usan para armar tu mensaje.</p>
+      </form>
+    </div>
+  </section>
+
+  <!-- PREGUNTAS -->
+  <section class="sec" id="preguntas" style="padding-top:20px">
+    <div class="wrap">
+      <div class="sec-head center reveal">
+        <span class="eyebrow"><svg aria-hidden="true"><use href="#i-chat"/></svg>Preguntas frecuentes</span>
+        <h2>Resolvemos tus dudas</h2>
+      </div>
+      <div class="faq">
+        <details class="reveal"><summary>¿Qué mascotas atiendes?</summary><p>Perros y gatos de todas las edades, desde cachorros y gatitos hasta pacientes mayores.</p></details>
+        <details class="reveal"><summary>¿En qué comunas haces visitas?</summary><p>Atiendo en Santiago y comunas aledañas. Escríbeme por WhatsApp indicando tu comuna y te confirmo disponibilidad.</p></details>
+        <details class="reveal"><summary>¿Qué vacunas puedes aplicar a domicilio?</summary><p>Óctuple para perros, triple felina, leucemia felina y antirrábica. Si no sabes qué vacunas le corresponden a tu mascota, lo revisamos juntos en la visita.</p></details>
+        <details class="reveal"><summary>¿Qué debo tener listo para la visita?</summary><p>Un espacio tranquilo y bien iluminado, el carnet de vacunas si lo tienes y, para los gatos, idealmente tenerlos en una habitación cerrada antes de que llegue.</p></details>
+        <details class="reveal"><summary>¿Cuánto cuesta la atención?</summary><p>El valor depende del servicio y la comuna. Escríbeme por WhatsApp y te envío el detalle sin compromiso.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA FINAL -->
+  <section class="cta-band">
+    <div class="wrap">
+      <div class="cta-inner reveal">
+        <div>
+          <h2>¿Tu mascota necesita atención?</h2>
+          <p>Escríbeme hoy y coordinamos una visita en la comodidad de tu hogar.</p>
+        </div>
+        <a class="btn" href="https://wa.me/56977522182?text=Hola%20Dra.%20Garc%C3%A9s%2C%20quisiera%20agendar%20una%20visita%20a%20domicilio%20para%20mi%20mascota." target="_blank" rel="noopener"><svg aria-hidden="true"><use href="#i-wa"/></svg>+56 9 7752 2182</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div>
+        <a class="brand" href="#top">
+          <svg class="brand-mark" viewBox="0 0 120 110" aria-hidden="true" style="background:#fff;border-radius:14px;padding:5px"><use href="#logo"/></svg>
+          <span class="brand-text"><span class="brand-name">Dra. Delia Garcés</span><span class="brand-sub">Médico Veterinaria</span></span>
+        </a>
+        <p class="foot-pillars">Profesionalismo · Compromiso · Bienestar animal</p>
+      </div>
+      <div>
+        <h4>Navegación</h4>
+        <ul><li><a href="#servicios">Servicios</a></li><li><a href="#como-funciona">Cómo funciona</a></li><li><a href="#sobre-mi">Sobre mí</a></li><li><a href="#agendar">Agendar</a></li></ul>
+      </div>
+      <div>
+        <h4>Contacto</h4>
+        <ul>
+          <li><a href="https://wa.me/56977522182" target="_blank" rel="noopener">+56 9 7752 2182</a></li>
+          <li><a href="https://www.instagram.com/dra._garces_med.vet/" target="_blank" rel="noopener">@dra._garces_med.vet</a></li>
+          <li><a href="mailto:garcescalderondelianicole@gmail.com">Escríbeme un correo</a></li>
+          <li>Santiago y comunas aledañas</li>
+        </ul>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <span>© <span id="year">2026</span> Dra. Delia Garcés · Médico Veterinaria</span>
+      <span>Tu mascota, nuestra prioridad 🐾</span>
+    </div>
+  </div>
+</footer>
+
+<a class="wa-float" href="https://wa.me/56977522182?text=Hola%20Dra.%20Garc%C3%A9s%2C%20quisiera%20agendar%20una%20visita%20a%20domicilio%20para%20mi%20mascota." target="_blank" rel="noopener" aria-label="Escribir por WhatsApp"><svg aria-hidden="true"><use href="#i-wa"/></svg></a>
+
+<script>
+(function(){
+  var header=document.querySelector('header');
+  var onScroll=function(){header.classList.toggle('scrolled',window.scrollY>8)};
+  window.addEventListener('scroll',onScroll,{passive:true});onScroll();
+
+  var btn=document.getElementById('menuBtn'),links=document.getElementById('navLinks');
+  btn.addEventListener('click',function(){
+    var open=links.classList.toggle('open');
+    btn.setAttribute('aria-expanded',open);
+  });
+  links.addEventListener('click',function(e){
+    if(e.target.tagName==='A'){links.classList.remove('open');btn.setAttribute('aria-expanded','false')}
+  });
+
+  document.getElementById('year').textContent=new Date().getFullYear();
+
+  var els=document.querySelectorAll('.reveal');
+  if('IntersectionObserver' in window){
+    var io=new IntersectionObserver(function(entries){
+      entries.forEach(function(en){if(en.isIntersecting){en.target.classList.add('in');io.unobserve(en.target)}});
+    },{threshold:.12,rootMargin:'0px 0px -40px 0px'});
+    els.forEach(function(el,i){el.style.transitionDelay=(i%4)*70+'ms';io.observe(el)});
+  }else{els.forEach(function(el){el.classList.add('in')})}
+
+  var form=document.getElementById('bookForm');
+  form.addEventListener('submit',function(e){
+    e.preventDefault();
+    var nombre=form.nombre.value.trim(),comuna=form.comuna.value.trim();
+    if(!nombre){form.nombre.focus();return}
+    if(!comuna){form.comuna.focus();return}
+    var lines=[
+      'Hola Dra. Garcés 🐾, quisiera agendar una visita a domicilio.',
+      '',
+      '• Nombre: '+nombre,
+      '• Comuna: '+comuna,
+      '• Mascota: '+form.especie.value+(form.mascota.value.trim()?' ('+form.mascota.value.trim()+')':''),
+      '• Servicio: '+form.servicio.value
+    ];
+    var msg=form.mensaje.value.trim();
+    if(msg)lines.push('• Detalle: '+msg);
+    window.open('https://wa.me/56977522182?text='+encodeURIComponent(lines.join('\n')),'_blank','noopener');
+  });
+})();
+</script>
+</body>
+</html>
