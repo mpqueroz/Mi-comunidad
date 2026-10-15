@@ -23,83 +23,132 @@ service cloud.firestore {
 
     // =================================================================
     // MERCADO CIUDADANO
-    // (transcrito desde la versión que estaba publicada antes del
-    // deploy de Mi Comunidad - sin cambios de lógica)
+    // (reglas revisadas para el lanzamiento de Mercado Ciudadano)
     // =================================================================
 
-    match /usuarios/{userId} {
-      allow read: if true;
-      allow create: if request.auth != null && request.auth.uid == userId;
-      allow update: if request.auth != null && request.auth.uid == userId;
-      allow delete: if false;
+  function login() { return request.auth != null; }
+  function owner(uid) { return login() && request.auth.uid == uid; }
+  // Conserva al administrador previo, con correo confirmado, mientras no tenga un rol explícito.
+  // Un documento activo:false siempre impide usar esa compatibilidad.
+  function admin() { return login() && (
+   (exists(/databases/$(database)/documents/admins/$(request.auth.uid)) && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.activo == true)
+   || (!exists(/databases/$(database)/documents/admins/$(request.auth.uid)) && request.auth.token.get('email','') == 'mpqueroz@gmail.com' && request.auth.token.get('email_verified',false) == true)
+  ); }
+  function only(fields) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields); }
+  function validAd(d) {
+   return d.titulo is string && d.titulo.size() > 0 && d.titulo.size() <= 120
+    && d.descripcion is string && d.descripcion.size() > 0 && d.descripcion.size() <= 4000
+    && d.tipo in ['venta','trueque','servicio','compra']
+    && d.region is string && d.comuna is string
+    && d.precio is number && d.precio >= 0
+    && (!('fotos' in d) || (d.fotos is list && d.fotos.size() <= 6))
+    && (!('estado' in d) || d.estado in ['disponible','pausado','vendido','intercambiado','finalizado']);
+  }
+  match /admins/{uid} { allow read: if owner(uid); allow write: if false; }
+  match /anuncios/{id} {
+   allow read: if resource.data.aprobado == true || admin() || owner(resource.data.autorUid);
+   allow create: if login() && request.resource.data.keys().hasOnly(['autorUid','autorNombre','autorVerificado','tipo','categoria','titulo','descripcion','region','comuna','contacto','correo','metodoContacto','precio','marca','modelo','anio','tipoInmueble','m2Terreno','m2Construidos','habitaciones','banos','truequeCambio','aprobado','ratingPromedio','ratingCount','ratingSuma','fechaCreacion','fotos','estado'])
+    && request.resource.data.autorUid == request.auth.uid
+    && request.resource.data.aprobado == false && validAd(request.resource.data)
+    && request.resource.data.ratingCount == 0 && request.resource.data.ratingSuma == 0 && request.resource.data.ratingPromedio == 0
+    && request.resource.data.autorVerificado == request.auth.token.email_verified
+    && request.resource.data.fechaCreacion == request.time;
+   allow update: if admin() || (owner(resource.data.autorUid) && (
+     (only(['tipo','categoria','titulo','descripcion','region','comuna','contacto','correo','metodoContacto','precio','marca','modelo','anio','tipoInmueble','m2Terreno','m2Construidos','habitaciones','banos','truequeCambio','aprobado','fechaEdicion','fotos']) && request.resource.data.aprobado == false && validAd(request.resource.data) && request.resource.data.fechaEdicion == request.time)
+     || (only(['fechaRenovacion']) && request.resource.data.fechaRenovacion == request.time && (!('fechaRenovacion' in resource.data) || request.time > resource.data.fechaRenovacion + duration.value(24,'h')))
+     || (only(['estado','fechaEstado']) && request.resource.data.estado in ['disponible','pausado','vendido','intercambiado','finalizado'] && request.resource.data.fechaEstado == request.time)
+   ));
+   allow delete: if admin() || owner(resource.data.autorUid);
+   match /reportes/{rid} {
+    allow create: if owner(rid) && get(/databases/$(database)/documents/anuncios/$(id)).data.autorUid != request.auth.uid && request.resource.data.keys().hasOnly(['motivo','comentario','autorUid','autorNombre','fecha']) && request.resource.data.autorUid == request.auth.uid && request.resource.data.motivo is string && request.resource.data.comentario is string && request.resource.data.comentario.size() <= 2000 && request.resource.data.fecha == request.time && get(/databases/$(database)/documents/anuncios/$(id)).data.aprobado == true;
+    allow read, update, delete: if admin();
+   }
+   match /valoraciones/{uid} {
+    allow read: if get(/databases/$(database)/documents/anuncios/$(id)).data.aprobado == true || admin() || owner(get(/databases/$(database)/documents/anuncios/$(id)).data.autorUid);
+    allow create: if owner(uid) && request.resource.data.keys().hasOnly(['autorUid','autorNombre','estrellas','comentario','fecha'])
+     && request.resource.data.autorUid == request.auth.uid
+     && request.resource.data.estrellas is int && request.resource.data.estrellas >= 1 && request.resource.data.estrellas <= 5
+     && request.resource.data.autorNombre is string && request.resource.data.autorNombre.size() <= 160
+     && request.resource.data.comentario is string && request.resource.data.comentario.size() <= 2000 && request.resource.data.fecha == request.time
+     && get(/databases/$(database)/documents/anuncios/$(id)).data.tipo == 'servicio'
+     && get(/databases/$(database)/documents/anuncios/$(id)).data.aprobado == true
+     && get(/databases/$(database)/documents/anuncios/$(id)).data.autorUid != request.auth.uid
+     && get(/databases/$(database)/documents/anuncios/$(id)/contactos/$(uid)).data.confirmado == true;
+    // Historial inmutable: agregados y marcadores los actualiza el servidor.
+    allow update, delete: if false;
+   }
+   match /contactos/{uid} {
+    allow read: if admin() || owner(uid) || owner(get(/databases/$(database)/documents/anuncios/$(id)).data.autorUid);
+    allow create: if owner(uid) && request.resource.data.keys().hasOnly(['clienteNombre','primerContacto','confirmado']) && request.resource.data.confirmado == false && request.resource.data.clienteNombre is string && request.resource.data.clienteNombre.size() <= 160 && request.resource.data.primerContacto == request.time && get(/databases/$(database)/documents/anuncios/$(id)).data.aprobado == true && get(/databases/$(database)/documents/anuncios/$(id)).data.autorUid != request.auth.uid;
+    allow update: if owner(get(/databases/$(database)/documents/anuncios/$(id)).data.autorUid) && only(['confirmado','fechaConfirmacion']) && request.resource.data.confirmado == true && request.resource.data.fechaConfirmacion == request.time;
+    allow delete: if admin();
+   }
+  }
 
-      match /notificaciones/{notifId} {
-        allow read: if request.auth != null && request.auth.uid == userId;
-        allow create: if request.auth != null;
-        allow update: if request.auth != null && request.auth.uid == userId
-                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['leido']);
-        allow delete: if false;
-      }
-    }
+  function validBusiness(d) {
+   return d.nombre is string && d.nombre.size()>0 && d.nombre.size()<=80
+    && d.descripcion is string && d.descripcion.size()>0 && d.descripcion.size()<=1200
+    && d.rubro is string && d.rubro.size()>0 && d.rubro.size()<=80
+    && d.region is string && d.region.size()>0 && d.region.size()<=80
+    && d.comuna is string && d.comuna.size()>0 && d.comuna.size()<=80
+    && d.whatsapp is string && (d.whatsapp=='' || d.whatsapp.matches('[0-9]{9,15}'))
+    && d.correo is string && d.correo.size()<=160
+    && (d.whatsapp!='' || d.correo!='')
+    && d.sitio is string && d.sitio.size()<=300 && (d.sitio=='' || d.sitio.matches('https://.*'))
+    && d.horario is string && d.horario.size()<=120;
+  }
+  match /negocios/{uid} {
+   allow read: if resource.data.aprobado==true || owner(uid) || admin();
+   allow create: if owner(uid) && request.resource.data.keys().hasOnly(['nombre','descripcion','rubro','region','comuna','whatsapp','correo','sitio','horario','aprobado','estadoRevision','fechaCreacion','fechaEdicion']) && request.resource.data.aprobado==false && request.resource.data.estadoRevision=='pendiente' && request.resource.data.fechaCreacion==request.time && request.resource.data.fechaEdicion==request.time && validBusiness(request.resource.data);
+   allow update: if admin() || (owner(uid) && only(['nombre','descripcion','rubro','region','comuna','whatsapp','correo','sitio','horario','aprobado','estadoRevision','fechaEdicion','motivoRechazo']) && request.resource.data.aprobado==false && request.resource.data.estadoRevision=='pendiente' && (!('motivoRechazo' in request.resource.data) || request.resource.data.motivoRechazo=='') && request.resource.data.fechaEdicion==request.time && validBusiness(request.resource.data));
+   allow delete: if admin() || owner(uid);
+  }
+  function validFeaturedRequest(id) {
+   let ad=get(/databases/$(database)/documents/anuncios/$(id)).data;
+   return owner(ad.autorUid) && ad.aprobado==true
+    && (!('estado' in ad) || ad.estado=='disponible')
+    && (!('destacadoHasta' in ad) || ad.destacadoHasta<=request.time)
+    && request.resource.data.keys().hasOnly(['autorUid','anuncioId','dias','estado','fecha'])
+    && request.resource.data.autorUid==request.auth.uid && request.resource.data.anuncioId==id
+    && request.resource.data.dias in [7,14,30] && request.resource.data.estado=='pendiente' && request.resource.data.fecha==request.time;
+  }
+  match /solicitudesDestacado/{id} {
+   allow read: if admin() || owner(resource.data.autorUid);
+   allow create: if login() && validFeaturedRequest(id);
+   allow update: if admin() || (owner(resource.data.autorUid) && resource.data.estado in ['activado','rechazado','cancelado'] && validFeaturedRequest(id));
+   allow delete: if admin();
+  }
+  match /ayuda/{uid} {
+   allow read: if owner(uid) || admin();
+   allow create: if owner(uid) && validHelp();
+   allow update: if admin() || (owner(uid) && resource.data.estado=='resuelto' && validHelp());
+   allow delete: if admin();
+  }
+  function validHelp() {
+   return request.resource.data.keys().hasOnly(['autorUid','tipo','mensaje','estado','fecha'])
+    && request.resource.data.autorUid==request.auth.uid
+    && request.resource.data.tipo in ['consulta','privacidad','corregir','eliminar','apelacion']
+    && request.resource.data.mensaje is string && request.resource.data.mensaje.size()>=10 && request.resource.data.mensaje.size()<=2000
+    && request.resource.data.estado=='pendiente' && request.resource.data.fecha==request.time;
+  }
+  match /usuarios/{uid} {
+   allow read: if admin() || owner(uid);
+   allow create, update: if owner(uid);
+   allow delete: if admin();
+   match /serviciosContactados/{id} { allow read: if owner(uid); allow write: if false; }
+   match /preferencias/{id} {
+    allow read: if owner(uid);
+    allow create, update: if owner(uid) && id=='busquedas' && request.resource.data.keys().hasOnly(['json','fecha']) && request.resource.data.json is string && request.resource.data.json.size()<=12000 && request.resource.data.fecha==request.time;
+    allow delete: if owner(uid);
+   }
+   match /notificaciones/{nid} {
+    allow read, delete: if owner(uid);
+    allow update: if owner(uid) && only(['leido']) && request.resource.data.leido == true;
+    allow create: if false;
+   }
+  }
 
-    match /anuncios/{anuncioId} {
-      allow read: if true;
-
-      allow create: if request.auth != null
-                    && request.resource.data.autorUid == request.auth.uid
-                    && request.resource.data.aprobado == false;
-
-      allow update: if
-        (request.auth != null && request.auth.token.email == 'mpqueroz@gmail.com')
-        ||
-        (request.auth != null
-          && request.auth.uid == resource.data.autorUid
-          && request.resource.data.autorUid == resource.data.autorUid
-          && (request.resource.data.aprobado == resource.data.aprobado || request.resource.data.aprobado == false))
-        ||
-        (request.auth != null
-          && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['ratingCount','ratingSuma','ratingPromedio','reportCount']));
-
-      allow delete: if request.auth != null &&
-        (request.auth.uid == resource.data.autorUid ||
-         request.auth.token.email == 'mpqueroz@gmail.com');
-
-      match /valoraciones/{valoracionId} {
-        allow read: if true;
-        allow create: if request.auth != null
-                      && request.auth.uid == request.resource.data.autorUid
-                      && get(/databases/$(database)/documents/anuncios/$(anuncioId)/contactos/$(request.auth.uid)).data.confirmado == true;
-        allow update, delete: if false;
-      }
-
-      match /contactos/{clienteUid} {
-        allow read: if request.auth != null
-                    && (request.auth.uid == clienteUid
-                        || get(/databases/$(database)/documents/anuncios/$(anuncioId)).data.autorUid == request.auth.uid);
-        allow create: if request.auth != null
-                      && request.auth.uid == clienteUid
-                      && request.resource.data.confirmado == false;
-        allow update: if request.auth != null
-                      && get(/databases/$(database)/documents/anuncios/$(anuncioId)).data.autorUid == request.auth.uid
-                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['confirmado','fechaConfirmacion']);
-        allow delete: if false;
-      }
-
-      match /reportes/{reporteId} {
-        allow read: if request.auth != null && request.auth.token.email == 'mpqueroz@gmail.com';
-        allow create: if request.auth != null && request.auth.uid == request.resource.data.autorUid;
-        allow update, delete: if false;
-      }
-    }
-
-    // =================================================================
-    // ALMACÉN DIGITAL
-    // (transcrito desde la versión publicada antes. Único cambio: la
-    // función esAdmin() pasó a llamarse esAdminAlmacen() para que no
-    // choque con la de Mi Comunidad.)
-    // =================================================================
-
+    // ALMACÉN DIGITAL Y MI COMUNIDAD: bloques activos conservados íntegramente.
     function esDueno(storeId) {
       return request.auth != null && request.auth.uid == storeId;
     }
