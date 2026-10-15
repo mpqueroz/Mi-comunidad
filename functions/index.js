@@ -23,10 +23,12 @@
 
 const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const {onSchedule} = require("firebase-functions/v2/scheduler");
-const admin = require("firebase-admin");
+const {initializeApp} = require("firebase-admin/app");
+const {getAuth} = require("firebase-admin/auth");
+const {getFirestore, FieldValue, Timestamp} = require("firebase-admin/firestore");
 const crypto = require("crypto");
 
-admin.initializeApp();
+initializeApp();
 
 const APP_ID = "mi_comunidad";
 const EMAIL_DOMAIN = "mi-comunidad.app";
@@ -120,7 +122,7 @@ exports.crearCuentaMiComunidad = onCall(async (request) => {
     throw new HttpsError("invalid-argument", "Falta un departamento válido.");
   }
 
-  const db = admin.firestore();
+  const db = getFirestore();
   const comunidadRef = db.collection(COMUNIDADES_COLLECTION).doc(comunidadId);
 
   // Una comunidad suspendida no puede seguir dando de alta cuentas
@@ -137,7 +139,7 @@ exports.crearCuentaMiComunidad = onCall(async (request) => {
   let userRecord;
 
   try {
-    userRecord = await admin.auth().createUser({
+    userRecord = await getAuth().createUser({
       email,
       password,
       displayName: nombre,
@@ -165,10 +167,10 @@ exports.crearCuentaMiComunidad = onCall(async (request) => {
   // quedaba una cuenta sin rol ni ficha, y ese RUT ya no se podía volver
   // a crear ("Ya existe una cuenta creada con ese RUT").
   try {
-    await admin.auth().setCustomUserClaims(userRecord.uid, claims);
+    await getAuth().setCustomUserClaims(userRecord.uid, claims);
     await escribirFichaNuevaCuenta(comunidadRef, userRecord.uid, rolNuevo, {...data, depto}, nombre, rut);
   } catch (err) {
-    await admin.auth().deleteUser(userRecord.uid).catch((e) =>
+    await getAuth().deleteUser(userRecord.uid).catch((e) =>
       console.error("No se pudo borrar la cuenta a medio crear:", userRecord.uid, e));
     await comunidadRef.collection(rolNuevo === "residente" ? "residentes" : "conserjes")
         .doc(userRecord.uid).delete().catch(() => {});
@@ -183,7 +185,7 @@ exports.crearCuentaMiComunidad = onCall(async (request) => {
   // cada vez que el superadmin abre el panel.
   await comunidadRef.update({
     [rolNuevo === "residente" ? "numResidentes" : "numConserjes"]:
-        admin.firestore.FieldValue.increment(1),
+        FieldValue.increment(1),
   });
 
   return {uid: userRecord.uid, email};
@@ -272,9 +274,11 @@ exports.restablecerClaveMiComunidad = onCall(async (request) => {
     );
   }
 
+  if (!esSuperAdmin) await exigirCuentaActiva(request, comunidadId);
+
   let cuentaObjetivo;
   try {
-    cuentaObjetivo = await admin.auth().getUser(uid);
+    cuentaObjetivo = await getAuth().getUser(uid);
   } catch (err) {
     throw new HttpsError("not-found", "No se encontró esa cuenta.");
   }
@@ -293,7 +297,7 @@ exports.restablecerClaveMiComunidad = onCall(async (request) => {
     );
   }
 
-  await admin.auth().updateUser(uid, {password: nuevaClave});
+  await getAuth().updateUser(uid, {password: nuevaClave});
 
   return {ok: true};
 });
@@ -364,7 +368,7 @@ exports.crearComunidadMiComunidad = onCall(async (request) => {
     );
   }
 
-  const db = admin.firestore();
+  const db = getFirestore();
   const comunidadRef = db.collection(COMUNIDADES_COLLECTION).doc(comunidadId);
 
   const comunidadExistente = await comunidadRef.get();
@@ -379,7 +383,7 @@ exports.crearComunidadMiComunidad = onCall(async (request) => {
   let userRecord;
 
   try {
-    userRecord = await admin.auth().createUser({
+    userRecord = await getAuth().createUser({
       email,
       password: adminPassword,
       displayName: adminNombre,
@@ -394,7 +398,7 @@ exports.crearComunidadMiComunidad = onCall(async (request) => {
     throw new HttpsError("internal", "No se pudo crear la cuenta del administrador: " + (err && err.message ? err.message : err));
   }
 
-  await admin.auth().setCustomUserClaims(userRecord.uid, {
+  await getAuth().setCustomUserClaims(userRecord.uid, {
     app: APP_ID,
     role: "admin",
     comunidadId: comunidadId,
@@ -499,13 +503,15 @@ exports.crearReservaMiComunidad = onCall(async (request) => {
   }
 
   const depto = token.depto;
-  const db = admin.firestore();
+  const db = getFirestore();
   const comunidadRef = db.collection(COMUNIDADES_COLLECTION).doc(comunidadId);
 
   const comunidadSnap = await comunidadRef.get();
   if (!comunidadSnap.exists || comunidadSnap.get("estado") === "Suspendida") {
     throw new HttpsError("failed-precondition", "Esta comunidad no está activa.");
   }
+
+  await exigirCuentaActiva(request, comunidadId);
 
   // Cuenta como deuda: "Atrasado", o cualquier gasto no pagado ya vencido
   // (incluye "Por confirmar": informar un pago no desbloquea las reservas
@@ -638,9 +644,25 @@ async function docSecretoNuevo(respuesta) {
   };
 }
 
-// Valida que quien llama pertenezca a esta app y comunidad, con uno de los
-// roles permitidos. El superadmin pasa siempre.
-function exigirRol(request, comunidadId, rolesPermitidos) {
+// Consulta el estado actual: el token de una sesión anterior no basta.
+async function exigirCuentaActiva(request, comunidadId) {
+  const token = request.auth.token;
+  const comunidadRef = getFirestore().collection(COMUNIDADES_COLLECTION).doc(comunidadId);
+  const comunidad = await comunidadRef.get();
+  if (!comunidad.exists || comunidad.get("estado") === "Suspendida") {
+    throw new HttpsError("failed-precondition", "Esta comunidad no está activa.");
+  }
+  const coleccion = token.role === "residente" ? "residentes" : token.role === "conserje" ? "conserjes" : null;
+  if (!coleccion) return;
+  const ficha = await comunidadRef.collection(coleccion).doc(request.auth.uid).get();
+  if (!ficha.exists || ficha.get("estado") === "Inactivo" ||
+      (token.role === "residente" && ficha.get("depto") !== token.depto)) {
+    throw new HttpsError("permission-denied", "La cuenta no está habilitada o cambió su departamento. Contacta a administración.");
+  }
+}
+
+// Valida aplicación, rol y comunidad; superadmin conserva su acceso global.
+async function exigirRol(request, comunidadId, rolesPermitidos) {
   const auth = request.auth;
   if (!auth) {
     throw new HttpsError("unauthenticated", "Debes iniciar sesión.");
@@ -655,6 +677,7 @@ function exigirRol(request, comunidadId, rolesPermitidos) {
   if (!rolesPermitidos.includes(token.role) || token.comunidadId !== comunidadId) {
     throw new HttpsError("permission-denied", "No tienes permiso para esta acción.");
   }
+  await exigirCuentaActiva(request, comunidadId);
   return token;
 }
 
@@ -676,7 +699,7 @@ async function migrarSecretoSiHaceFalta(comunidadRef, uid) {
     if (!secretoSnap.exists && String(legado).trim()) {
       await secretoRef.set(await docSecretoNuevo(String(legado)));
     }
-    await residenteRef.update({respuestaSecreta: admin.firestore.FieldValue.delete()});
+    await residenteRef.update({respuestaSecreta: FieldValue.delete()});
     return await secretoRef.get();
   }
 
@@ -690,7 +713,7 @@ exports.definirPreguntaSecretaMiComunidad = onCall(async (request) => {
   const pregunta = String(data.pregunta || "").trim();
   const respuesta = String(data.respuesta || "").trim();
 
-  const token = exigirRol(request, comunidadId, ["admin", "residente"]);
+  const token = await exigirRol(request, comunidadId, ["admin", "residente"]);
 
   // Un residente solo puede definir SU propia pregunta secreta.
   if (token.role === "residente" && request.auth.uid !== uid) {
@@ -707,7 +730,7 @@ exports.definirPreguntaSecretaMiComunidad = onCall(async (request) => {
     throw new HttpsError("invalid-argument", "La respuesta es demasiado corta.");
   }
 
-  const comunidadRef = admin.firestore().collection(COMUNIDADES_COLLECTION).doc(comunidadId);
+  const comunidadRef = getFirestore().collection(COMUNIDADES_COLLECTION).doc(comunidadId);
   const residenteRef = comunidadRef.collection("residentes").doc(uid);
 
   if (!(await residenteRef.get()).exists) {
@@ -717,7 +740,7 @@ exports.definirPreguntaSecretaMiComunidad = onCall(async (request) => {
   await comunidadRef.collection("secretos").doc(uid).set(await docSecretoNuevo(respuesta));
   await residenteRef.update({
     preguntaSecreta: pregunta,
-    respuestaSecreta: admin.firestore.FieldValue.delete(),
+    respuestaSecreta: FieldValue.delete(),
   });
 
   return {ok: true};
@@ -729,13 +752,13 @@ exports.verificarPreguntaSecretaMiComunidad = onCall(async (request) => {
   const uid = String(data.uid || "").trim();
   const respuesta = String(data.respuesta || "");
 
-  exigirRol(request, comunidadId, ["admin", "conserje"]);
+  await exigirRol(request, comunidadId, ["admin", "conserje"]);
 
   if (!uid || !respuesta.trim()) {
     throw new HttpsError("invalid-argument", "Falta la respuesta.");
   }
 
-  const comunidadRef = admin.firestore().collection(COMUNIDADES_COLLECTION).doc(comunidadId);
+  const comunidadRef = getFirestore().collection(COMUNIDADES_COLLECTION).doc(comunidadId);
   const secretoSnap = await migrarSecretoSiHaceFalta(comunidadRef, uid);
 
   if (!secretoSnap.exists) {
@@ -748,7 +771,7 @@ exports.verificarPreguntaSecretaMiComunidad = onCall(async (request) => {
   // Leer y actualizar el contador de intentos en una transacción: antes,
   // varias respuestas enviadas en paralelo leían el mismo contador y
   // se podían probar más de MAX_INTENTOS_SECRETO sin llegar al bloqueo.
-  const resultado = await admin.firestore().runTransaction(async (t) => {
+  const resultado = await getFirestore().runTransaction(async (t) => {
     const snap = await t.get(secretoSnap.ref);
     const secreto = snap.data();
     const ahora = Date.now();
@@ -801,9 +824,9 @@ exports.migrarRespuestasSecretasMiComunidad = onCall(async (request) => {
   const data = request.data || {};
   const comunidadId = String(data.comunidadId || "").trim();
 
-  exigirRol(request, comunidadId, ["admin"]);
+  await exigirRol(request, comunidadId, ["admin"]);
 
-  const comunidadRef = admin.firestore().collection(COMUNIDADES_COLLECTION).doc(comunidadId);
+  const comunidadRef = getFirestore().collection(COMUNIDADES_COLLECTION).doc(comunidadId);
   const residentes = await comunidadRef.collection("residentes").get();
 
   let migradas = 0;
@@ -841,7 +864,7 @@ async function marcarVencidos(query, campoFecha, hoy, nuevoEstado) {
   const snap = await query.get();
   const vencidos = snap.docs.filter((d) => String(d.get(campoFecha) || "") < hoy);
   for (let i = 0; i < vencidos.length; i += 400) {
-    const batch = admin.firestore().batch();
+    const batch = getFirestore().batch();
     vencidos.slice(i, i + 400).forEach((d) => batch.update(d.ref, {estado: nuevoEstado}));
     await batch.commit();
   }
@@ -851,7 +874,7 @@ async function marcarVencidos(query, campoFecha, hoy, nuevoEstado) {
 exports.actualizarVencimientosMiComunidad = onSchedule(
     {schedule: "15 0 * * *", timeZone: "America/Santiago"},
     async () => {
-      const db = admin.firestore();
+      const db = getFirestore();
       const hoy = hoyChile();
       const comunidades = await db.collection(COMUNIDADES_COLLECTION).get();
 
@@ -875,7 +898,7 @@ exports.actualizarVencimientosMiComunidad = onSchedule(
 
 
 // Operación profesional añadida; se conservan las funciones existentes de identidad.
-const profesional = require('./profesional')(admin, onCall, HttpsError);
+const profesional = require('./profesional')({firestore: Object.assign(() => getFirestore(), {FieldValue, Timestamp})}, onCall, HttpsError);
 delete profesional.configurarIdentidadMiComunidad;
 delete profesional.migrarPrivacidadMiComunidad;
 Object.assign(exports, profesional);

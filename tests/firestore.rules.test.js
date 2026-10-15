@@ -34,6 +34,7 @@ beforeEach(async () => {
   await env.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
     await db.doc(BASE).set({nombre: "Edificio 1", estado: "Activa"});
+    await db.doc(`${BASE}/conserjes/con1`).set({nombre: "Conserje", estado: "Activo"});
     await db.doc(`${BASE}/residentes/res1`).set({
       depto: "101", nombre: "Ana", rut: "11111111-1", telefono: "", estado: "Activo",
       familiares: [], restringidos: [],
