@@ -1,3 +1,19 @@
+# Actualización profesional · octubre de 2026
+
+Integra turnos, bitácora compartida, pendientes, visitas con salida, encomiendas transaccionales, conversación de solicitudes, cancelación de reservas, planes preventivos y avisos con confirmación. Conserva los paneles, fichas laterales, conciliación y verificación de identidad del repositorio vigente.
+
+Administración configura los métodos de pago en Finanzas → Gastos comunes → Configurar métodos e instrucciones. Cada comunidad puede indicar sus métodos habilitados, banco, cuenta, titular, correo, instrucciones y enlace HTTPS. El residente informa el pago y administración lo confirma contra cartola; no se agrega una pasarela automática ni se guardan claves bancarias.
+
+Los archivos `profesional.js`, `continuidad.js`, `gestion.js`, `cierre.js` y `profesional.css` son necesarios junto con `index.html`. El workflow despliega sitio, reglas compartidas y una lista explícita de funciones de Mi Comunidad. No se reemplazan las reglas de las otras apps.
+
+Las preguntas secretas conservan su almacén y funciones existentes. La verificación manual se registra en auditoría. Las novedades locales antiguas no se importan como bitácora auditada; las mantenciones previas se consultan como historial y los nuevos planes se configuran por administración.
+
+La agenda muestra recordatorios dentro de la aplicación; no envía push con la app cerrada. Las fotografías se guardan como JPEG comprimido y acotado. Para un volumen mayor, migrar las evidencias a Storage con permisos equivalentes.
+
+Validación: 81 pruebas locales aprobadas, con emulador real de Firestore, concurrencia mediante Admin SDK contra un proyecto demo aislado, conciliación existente y DOM simulado. No se hizo validación visual con navegador real. Tras publicar, entrar con las cuentas existentes de cada rol y comprobar operación en dos dispositivos.
+
+---
+
 # Mi Comunidad: archivos para deploy
 
 ## Qué hay en este zip
@@ -127,3 +143,4 @@ Configuración (una sola vez):
 repositorio. Si los tuyos locales tienen otras versiones de `firebase-admin`
 o `firebase-functions`, reemplaza `functions/package.json` por el tuyo y
 regenera `functions/package-lock.json` con `npm install`.
+

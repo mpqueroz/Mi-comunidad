@@ -94,16 +94,11 @@ test("residente NO puede inflar la lista de familiares", async () => {
 
 // ---- encomiendas ----
 
-test("flujo completo de entrega de encomienda", async () => {
-  const ref = conserje().doc(`${BASE}/encomiendas/e1`);
-  await assertSucceeds(ref.update({estado: "En proceso de entrega"}));
-  await assertSucceeds(ref.update({estado: "Recibido"}));
-  await assertSucceeds(ref.update({estado: "En proceso de entrega"}));
-  await assertSucceeds(ref.update({
-    estado: "Entregado", retiradoPor: {nombre: "Ana", relacion: "Titular"},
-    confirmadoPor: "Conserje", entregadoEn: 123,
-  }));
-  await assertFails(ref.update({estado: "Recibido"}));
+test("entregas de encomiendas solo se actualizan mediante el servidor", async () => {
+  const db=conserje();
+  await assertFails(db.doc(`${BASE}/encomiendas/e1`).update({estado: "En proceso de entrega"}));
+  await assertFails(db.doc(`${BASE}/encomiendas/e1`).update({estado: "Entregado"}));
+  await assertFails(db.doc(`${BASE}/encomiendas/e2`).set({estado:"Recibido",depto:"101"}));
 });
 
 test("conserjería NO puede cambiar el depto ni el QR de una encomienda", async () => {
@@ -186,4 +181,21 @@ test("conserjería y residentes NO ven la conciliación bancaria", async () => {
     await assertFails(db.collection(`${BASE}/movimientosBancarios`).add(movBanco));
     await assertFails(db.collection(`${BASE}/saldosAFavor`).get());
   }
+});
+
+
+test('turnos, planes y bitácora son operativos: residentes no acceden', async()=>{
+  await env.withSecurityRulesDisabled(async ctx=>{const db=ctx.firestore();await db.doc(`${BASE}/turnos/t`).set({estado:'Activo'});await db.doc(`${BASE}/planesMantencion/p`).set({titulo:'Portón'});await db.doc(`${BASE}/novedades/n`).set({title:'Turno'});});
+  for(const path of ['turnos/t','planesMantencion/p','novedades/n']){await assertSucceeds(conserje().doc(`${BASE}/${path}`).get());await assertFails(residente().doc(`${BASE}/${path}`).get());}
+  await assertFails(adminDb().doc(`${BASE}/turnos/t`).update({estado:'Cerrado'}));
+});
+test('cada cuenta solo puede leer sus propias confirmaciones; administración ve todas',async()=>{
+ await env.withSecurityRulesDisabled(async ctx=>{const db=ctx.firestore();await db.doc(`${BASE}/lecturasAvisos/propia`).set({uid:'res1',avisoId:'a'});await db.doc(`${BASE}/lecturasAvisos/ajena`).set({uid:'otro',avisoId:'a'});});
+ await assertSucceeds(residente().doc(`${BASE}/lecturasAvisos/propia`).get());await assertFails(residente().doc(`${BASE}/lecturasAvisos/ajena`).get());await assertSucceeds(residente().collection(`${BASE}/lecturasAvisos`).where('uid','==','res1').get());await assertSucceeds(adminDb().collection(`${BASE}/lecturasAvisos`).get());await assertFails(residente().doc(`${BASE}/lecturasAvisos/nueva`).set({uid:'res1',avisoId:'a'}));
+});
+test('conversación de solicitud respeta departamento y autor',async()=>{
+ const {serverTimestamp}=require('firebase/firestore');
+ await env.withSecurityRulesDisabled(async ctx=>{const db=ctx.firestore();await db.doc(`${BASE}/incidencias/propia`).set({depto:'101',estado:'Pendiente'});await db.doc(`${BASE}/incidencias/ajena`).set({depto:'999',estado:'Pendiente'});});
+ const mensaje={texto:'Gracias',foto:'',autorUid:'res1',autorNombre:'Ana',rol:'residente',ts:serverTimestamp()};
+ await assertSucceeds(residente().doc(`${BASE}/incidencias/propia/mensajes/m1`).set(mensaje));await assertFails(residente().doc(`${BASE}/incidencias/ajena/mensajes/m1`).set({...mensaje,ts:serverTimestamp()}));await assertFails(residente().doc(`${BASE}/incidencias/propia/mensajes/m2`).set({...mensaje,autorUid:'adm1',ts:serverTimestamp()}));
 });

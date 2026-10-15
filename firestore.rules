@@ -381,7 +381,7 @@ service cloud.firestore {
       match /visitas/{id} {
         allow read: if mcEsDeEstaComunidadActiva(comunidadId) &&
                        (mcEsAdmin() || mcEsConserje() || (mcEsResidente() && resource.data.depto == mcMiDepto()));
-        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje());
+        allow create: if false;
         allow update, delete: if false;
       }
 
@@ -393,7 +393,7 @@ service cloud.firestore {
                        (mcEsAdmin() || mcEsConserje() || (mcEsResidente() && resource.data.depto == mcMiDepto()));
         allow create: if mcEsDeEstaComunidadActiva(comunidadId) &&
                          mcEsResidente() && request.resource.data.depto == mcMiDepto();
-        allow update: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje());
+        allow update: if false;
         allow delete: if mcEsDeEstaComunidadActiva(comunidadId) &&
                          ((mcEsResidente() && resource.data.depto == mcMiDepto()) || mcEsAdmin());
       }
@@ -419,30 +419,8 @@ service cloud.firestore {
         allow read: if mcEsDeEstaComunidadActiva(comunidadId) &&
                        (mcEsAdmin() || mcEsConserje() || (mcEsResidente() && resource.data.depto == mcMiDepto()));
 
-        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje()) &&
-                         request.resource.data.estado == "Recibido";
-
-        // Solo las 3 transiciones que existen en la app, y cada una
-        // acotada a sus campos: depto, código y qrToken no se pueden
-        // reescribir después de registrada la encomienda.
-        //   Recibido → En proceso de entrega   (iniciarProcesoEntrega)
-        //   En proceso de entrega → Recibido   (closeModal, revertir)
-        //   En proceso de entrega → Entregado  (confirmarEntregaEncomienda)
-        allow update: if mcEsDeEstaComunidadActiva(comunidadId) &&
-                         (mcEsAdmin() || mcEsConserje()) &&
-                         (
-                           (resource.data.estado == "Recibido" &&
-                            request.resource.data.estado == "En proceso de entrega" &&
-                            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado'])) ||
-                           (resource.data.estado == "En proceso de entrega" &&
-                            request.resource.data.estado == "Recibido" &&
-                            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado'])) ||
-                           (resource.data.estado == "En proceso de entrega" &&
-                            request.resource.data.estado == "Entregado" &&
-                            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado', 'retiradoPor', 'confirmadoPor', 'entregadoEn']))
-                         );
-
-        allow delete: if false;
+        // Registro, toma y entrega solo por funciones transaccionales.
+        allow create, update, delete: if false;
       }
 
       // Contador para el código correlativo de encomiendas (PAQ-2026-000458).
@@ -490,7 +468,8 @@ service cloud.firestore {
                          request.resource.data.fecha == resource.data.fecha &&
                          request.resource.data.hora == resource.data.hora &&
                          request.resource.data.bloqueId == resource.data.bloqueId &&
-                         request.resource.data.estado == resource.data.estado;
+                         request.resource.data.estado == resource.data.estado &&
+                         resource.data.estado == "Confirmada" && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["invitados"]);
         allow delete: if false;
       }
 
@@ -571,7 +550,7 @@ service cloud.firestore {
       // (tampoco existe esa opción en la app hoy).
       match /avisos/{id} {
         allow read: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje() || mcEsResidente());
-        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        allow create: if false;
         allow update, delete: if false;
       }
 
@@ -585,9 +564,38 @@ service cloud.firestore {
                        (mcEsAdmin() || mcEsConserje() || (mcEsResidente() && resource.data.depto == mcMiDepto()));
         allow create: if mcEsDeEstaComunidadActiva(comunidadId) &&
                          ((mcEsResidente() && request.resource.data.depto == mcMiDepto() && request.resource.data.origen == "Residente") ||
-                          (mcEsConserje() && request.resource.data.origen == "Conserjería"));
-        allow update: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje());
+                          ((mcEsConserje() || mcEsAdmin()) && request.resource.data.origen == "Conserjería")) &&
+          request.resource.data.keys().hasOnly(['categoria','descripcion','depto','origen','estado','fecha','hora','foto','creadoPor','ts']) &&
+          request.resource.data.estado == 'Pendiente' && request.resource.data.creadoPor == request.auth.uid &&
+          request.resource.data.descripcion is string && request.resource.data.descripcion.size() > 0 && request.resource.data.descripcion.size() <= 4000 &&
+          request.resource.data.foto is string && request.resource.data.foto.size() <= 180000 &&
+          (request.resource.data.foto == '' || request.resource.data.foto.matches('data:image/jpeg;base64,[A-Za-z0-9+/=]+'));
+        allow update: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje()) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado','responsable','compromiso','solucion','actualizadoPor','actualizadoEn']) &&
+          request.resource.data.estado in ['Pendiente','En proceso','Resuelto'] &&
+          request.resource.data.actualizadoPor == request.auth.uid && request.resource.data.actualizadoEn == request.time &&
+          request.resource.data.responsable is string && request.resource.data.responsable.size() <= 100 &&
+          request.resource.data.solucion is string && request.resource.data.solucion.size() <= 2000 &&
+          (request.resource.data.estado != 'Resuelto' || request.resource.data.solucion.size() > 0);
         allow delete: if false;
+        match /mensajes/{mensajeId} {
+          function puedeLeerSolicitud() {
+            return mcEsDeEstaComunidadActiva(comunidadId) &&
+              (mcEsAdmin() || mcEsConserje() || (mcEsResidente() &&
+              get(/databases/$(database)/documents/mi_comunidad_comunidades/$(comunidadId)/incidencias/$(id)).data.depto == mcMiDepto()));
+          }
+          allow read: if puedeLeerSolicitud();
+          allow create: if puedeLeerSolicitud() &&
+            request.resource.data.keys().hasOnly(['texto','foto','autorUid','autorNombre','rol','ts']) &&
+            request.resource.data.autorUid == request.auth.uid && request.resource.data.rol == mcRol() &&
+            request.resource.data.ts == request.time &&
+            request.resource.data.autorNombre is string && request.resource.data.autorNombre.size() <= 150 &&
+            request.resource.data.texto is string && request.resource.data.texto.size() <= 2000 &&
+            request.resource.data.foto is string && request.resource.data.foto.size() <= 180000 &&
+            (request.resource.data.foto == '' || request.resource.data.foto.matches('data:image/jpeg;base64,[A-Za-z0-9+/=]+')) &&
+            (request.resource.data.texto.size() > 0 || request.resource.data.foto.size() > 0);
+          allow update, delete: if false;
+        }
       }
 
       // Documentos de la comunidad (reglamento, actas, comunicados) - los
@@ -728,6 +736,60 @@ service cloud.firestore {
 
         allow delete: if false;
       }
+      match /verificaciones/{id} { allow read, write: if false; }
+      match /auditoria/{id} {
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        allow write: if false;
+      }
+      match /operacion/{id} {
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje());
+        allow write: if false;
+      }
+      match /turnos/{id} {
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje());
+        allow write: if false;
+      }
+      match /novedades/{id} {
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje());
+        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje()) &&
+          request.resource.data.keys().hasOnly(['icon','title','meta','badgeClass','badgeText','autorUid','autorNombre','turnoId','ts']) &&
+          request.resource.data.autorUid == request.auth.uid && request.resource.data.ts == request.time &&
+          request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 2000 &&
+          request.resource.data.meta is string && request.resource.data.meta.size() <= 2000 &&
+          request.resource.data.autorNombre is string && request.resource.data.autorNombre.size() <= 150;
+        allow update, delete: if false;
+      }
+      match /tareasTurno/{id} {
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje());
+        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje()) &&
+          request.resource.data.keys().hasOnly(['titulo','detalle','prioridad','responsable','compromiso','estado','autorUid','autorNombre','turnoId','ts']) &&
+          request.resource.data.estado == 'Pendiente' && request.resource.data.autorUid == request.auth.uid &&
+          request.resource.data.ts == request.time && request.resource.data.titulo is string &&
+          request.resource.data.titulo.size() > 0 && request.resource.data.titulo.size() <= 160 &&
+          request.resource.data.detalle is string && request.resource.data.detalle.size() <= 2000 &&
+          request.resource.data.responsable is string && request.resource.data.responsable.size() <= 100 &&
+          request.resource.data.prioridad in ['Normal','Urgente'];
+        allow update: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje()) &&
+          resource.data.estado == 'Pendiente' && request.resource.data.estado == 'Resuelto' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado','resolucion','resueltoPor','resueltoPorNombre','resueltoEn']) &&
+          request.resource.data.resueltoPor == request.auth.uid && request.resource.data.resueltoEn == request.time &&
+          request.resource.data.resolucion is string && request.resource.data.resolucion.size() > 0 && request.resource.data.resolucion.size() <= 2000;
+        allow delete: if false;
+      }
+
+      match /planesMantencion/{id} {
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje());
+        allow write: if false;
+        match /revisiones/{revisionId} {
+          allow read: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje());
+          allow write: if false;
+        }
+      }
+      match /lecturasAvisos/{id} {
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || resource.data.uid == request.auth.uid);
+        allow write: if false;
+      }
     }
   }
 }
+

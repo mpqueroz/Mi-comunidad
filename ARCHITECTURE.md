@@ -657,3 +657,17 @@ No se renombró en esta limpieza porque toca ~40 puntos del archivo y la
 propia clave de `localStorage` con la que persiste en el dispositivo de
 cada usuario, sin aportar ninguna mejora funcional; queda anotado acá
 por si se decide abordar en una pasada dedicada solo a eso.
+
+
+
+## Integración profesional · octubre de 2026
+
+La base es el index del repositorio vigente, conservando conciliación, paneles y fichas laterales. Las extensiones `profesional.js`, `continuidad.js`, `gestion.js` y `cierre.js` añaden operación y configuración sin sustituir los flujos financieros existentes.
+
+Colecciones nuevas: novedades, tareasTurno, turnos, operacion/turnoActual, planesMantencion/{id}/revisiones, lecturasAvisos, auditoria e incidencias/{id}/mensajes. Las transiciones de turnos, paquetes, visitas, cancelación, revisión y publicación son transaccionales en functions/profesional.js. Visitas y encomiendas mantienen ts en milisegundos para compatibilidad con las consultas existentes de 90 días.
+
+La configuración de pagos vive en configuracionPago del documento de comunidad; tiene versión y validación de servidor. Solo contiene instrucciones destinadas a los residentes y no credenciales bancarias. El informe, confirmación y conciliación conservan su implementación nativa.
+
+Las preguntas secretas mantienen las funciones y colección secretos del repositorio. Las funciones auxiliares configurarIdentidadMiComunidad y migrarPrivacidadMiComunidad del módulo adicional no se exportan en producción, evitando un segundo formato. La comprobación manual de identidad añade auditoría.
+
+Se conservan las reglas de otras apps en el proyecto compartido. La suite suma 81 pruebas de reglas, lógica, interfaz simulada e integración real con emulador, sin cuentas ni datos productivos.
