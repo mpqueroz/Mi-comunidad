@@ -15,6 +15,8 @@ on:
       - "tests/**"
       - "public/**"
       - "firebase.json"
+      - "firebase.test.json"
+      - "scripts/**"
       - ".github/workflows/firebase.yml"
   push:
     branches: [main]
@@ -23,6 +25,8 @@ on:
       - "functions/**"
       - "public/**"
       - "firebase.json"
+      - "firebase.test.json"
+      - "scripts/**"
       - ".github/workflows/firebase.yml"
   workflow_dispatch:
 
@@ -56,6 +60,9 @@ jobs:
       - name: Correr tests en el emulador
         working-directory: tests
         run: npm test
+      - name: Auditar herramientas sin excepciones de severidad
+        working-directory: tests
+        run: npm audit --audit-level=moderate
 
   deploy:
     name: Deploy a Firebase
@@ -68,6 +75,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Instalar herramientas verificadas
+        working-directory: tests
+        run: |
+          npm ci
+          npm audit --audit-level=moderate
       - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
@@ -85,9 +97,25 @@ jobs:
       # cambiaron se saltan solas.
       - name: Desplegar funciones de Mi Comunidad
         run: >
-          npx --yes firebase-tools@14 deploy --non-interactive
+          ./tests/node_modules/.bin/firebase deploy --non-interactive
           --only "functions:crearCuentaMiComunidad,functions:restablecerClaveMiComunidad,functions:crearComunidadMiComunidad,functions:crearReservaMiComunidad,functions:definirPreguntaSecretaMiComunidad,functions:verificarPreguntaSecretaMiComunidad,functions:migrarRespuestasSecretasMiComunidad,functions:actualizarVencimientosMiComunidad,functions:configurarPagosMiComunidad,functions:guardarPlanMantencionMiComunidad,functions:registrarRevisionMantencionMiComunidad,functions:gestionarAvisoMiComunidad,functions:confirmarAvisoMiComunidad,functions:gestionarVisitaMiComunidad,functions:cancelarReservaMiComunidad,functions:registrarEncomiendaMiComunidad,functions:gestionarTurnoMiComunidad,functions:gestionarEncomiendaMiComunidad,functions:verificarFichaMiComunidad"
       - name: Publicar reglas compartidas
-        run: npx --yes firebase-tools@14 deploy --non-interactive --only firestore:rules
+        run: ./tests/node_modules/.bin/firebase deploy --non-interactive --only firestore:rules
       - name: Publicar página
-        run: npx --yes firebase-tools@14 deploy --non-interactive --only hosting
+        run: ./tests/node_modules/.bin/firebase deploy --non-interactive --only hosting
+      - name: Comprobar servicio y rechazos sin sesión
+        run: node scripts/comprobar-despliegue.cjs
+
+  public-smoke:
+    name: Comprobación pública sin credenciales
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Comprobar servicio publicado y solicitudes sin sesión
+        run: node scripts/comprobar-despliegue.cjs
