@@ -17,7 +17,7 @@ module.exports = function profesional(admin, onCall, HttpsError) {
     const community = await base.get();
     if(!community.exists || community.data().estado === 'Suspendida')throw new HttpsError('failed-precondition', 'La comunidad no está activa.');
     const person = token.role === 'conserje' ? await base.collection('conserjes').doc(req.auth.uid).get() : token.role === 'residente' ? await base.collection('residentes').doc(req.auth.uid).get() : null;
-    if(person && (!person.exists || person.data().estado === 'Inactivo'))throw new HttpsError('permission-denied', 'La cuenta no está habilitada.');
+    if(person && (!person.exists || person.data().estado === 'Inactivo' || (token.role === 'residente' && person.data().depto !== token.depto)))throw new HttpsError('permission-denied', 'La cuenta no está habilitada.');
     const nombre = person?.data()?.nombre || community.data().adminNombre || 'Administración';
     return {base, uid:req.auth.uid, role:token.role, nombre};
   }

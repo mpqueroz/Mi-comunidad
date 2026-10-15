@@ -230,6 +230,17 @@ service cloud.firestore {
       return mcEsMiComunidad() && mcComunidadIdToken() == comunidadId;
     }
 
+    // Consultar la ficha en cada solicitud corta el acceso aunque el token
+    // de una sesión anterior todavía no haya vencido. No se confía en la UI.
+    function mcCuentaHabilitada(comunidadId) {
+      let residente = /databases/$(database)/documents/mi_comunidad_comunidades/$(comunidadId)/residentes/$(request.auth.uid);
+      let conserje = /databases/$(database)/documents/mi_comunidad_comunidades/$(comunidadId)/conserjes/$(request.auth.uid);
+      return mcEsAdmin() ||
+             (mcEsConserje() && exists(conserje) && get(conserje).data.get('estado', 'Activo') != 'Inactivo') ||
+             (mcEsResidente() && exists(residente) && get(residente).data.get('estado', 'Activo') != 'Inactivo' &&
+              get(residente).data.get('depto', '') == mcMiDepto());
+    }
+
     // "Suspendida" es el kill-switch comercial: una comunidad que dejó de
     // pagar, o que aún no se activa formalmente, no debe poder seguir
     // operando. Se consulta el propio doc de la comunidad (un get() extra por
@@ -250,7 +261,7 @@ service cloud.firestore {
     // el campo "estado" y avisar "servicio suspendido" en vez de un
     // permission-denied genérico durante el login.
     function mcEsDeEstaComunidadActiva(comunidadId) {
-      return mcEsDeEstaComunidad(comunidadId) && mcEsComunidadActiva(comunidadId);
+      return mcEsDeEstaComunidad(comunidadId) && mcEsComunidadActiva(comunidadId) && mcCuentaHabilitada(comunidadId);
     }
 
     // Un residente informando un pago: solo puede cambiar "estado" a
@@ -283,7 +294,7 @@ service cloud.firestore {
       // y mostrar un mensaje claro en vez de un permission-denied genérico
       // durante el login- y el superadmin puede leer/listar todas (panel
       // "Comunidades").
-      allow read: if mcEsDeEstaComunidad(comunidadId) || mcEsSuperAdmin();
+      allow read: if (mcEsDeEstaComunidad(comunidadId) && mcCuentaHabilitada(comunidadId)) || mcEsSuperAdmin();
 
       // Solo administración (de esta comunidad, y solo si sigue activa) o
       // el superadmin pueden editar los datos generales del edificio.

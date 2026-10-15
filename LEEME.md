@@ -108,7 +108,7 @@ Córrelos antes de cada `firebase deploy --only firestore:rules`.
 
 `.github/workflows/firebase.yml` corre los tests de reglas en cada pull
 request y, cuando se aceptan cambios en `main`, despliega la página
-(`public/` → sitio `mi-comunidad-md`), `firestore.rules` y las 8 Cloud
+(`public/` → sitio `mi-comunidad-md`), `firestore.rules` y las 19 Cloud
 Functions de Mi Comunidad.
 
 La carpeta `public/` del repositorio es la que se publica **completa**:
@@ -144,3 +144,31 @@ repositorio. Si los tuyos locales tienen otras versiones de `firebase-admin`
 o `firebase-functions`, reemplaza `functions/package.json` por el tuyo y
 regenera `functions/package-lock.json` con `npm install`.
 
+
+## Comprobaciones de seguridad
+
+Las reglas de Mi Comunidad consultan la ficha actual de residentes y conserjes.
+Marcarla como `Inactivo` o eliminarla bloquea nuevas solicitudes, incluso si el
+usuario conserva un token anterior. Un cambio de departamento también exige
+renovar la sesión antes de usar los permisos del nuevo departamento. Los datos
+ya vistos o descargados por una persona no se borran de sus dispositivos.
+Las funciones de identidad, reservas y operación verifican estas restricciones
+en el servidor, además de la separación entre comunidades.
+
+El servidor usa Node.js 22, Firebase Admin 14.5.0 mediante APIs modulares y
+Firebase Functions 7.4.0. Para validar dependencias de producción:
+
+```sh
+npm --prefix functions ci
+npm --prefix functions audit --omit=dev --audit-level=moderate
+npm --prefix tests ci
+npm --prefix tests test
+```
+
+La integración continua ejecuta la auditoría de dependencias y las pruebas
+antes del despliegue. La suite usa datos ficticios en proyectos `demo-*`;
+no accede a datos de producción. Que estas pruebas pasen no verifica la
+existencia ni la restauración de respaldos reales: esa comprobación se hace
+por separado, restaurando una copia en una base aislada y sin sobrescribir
+la base operativa. Los respaldos de Firestore no sustituyen un plan de
+recuperación de cuentas de Authentication ni de archivos de Cloud Storage.

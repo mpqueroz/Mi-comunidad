@@ -52,6 +52,7 @@ jobs:
         run: |
           npm ci
           node -e 'require("./index.js")'
+          npm audit --omit=dev --audit-level=moderate
       - name: Correr tests en el emulador
         working-directory: tests
         run: npm test
