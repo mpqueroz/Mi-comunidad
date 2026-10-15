@@ -172,3 +172,28 @@ existencia ni la restauración de respaldos reales: esa comprobación se hace
 por separado, restaurando una copia en una base aislada y sin sobrescribir
 la base operativa. Los respaldos de Firestore no sustituyen un plan de
 recuperación de cuentas de Authentication ni de archivos de Cloud Storage.
+
+### Herramientas de pruebas y despliegue
+
+Las herramientas se fijan con lockfile: Firebase CLI 15.34.0, SDK de pruebas
+Firebase 13.0.0 y rules-unit-testing 6.0.0. Requieren Node.js 22 y Java 21
+para ejecutar el emulador actual (GitHub Actions ya instala ambos).
+Se fija gRPC 1.14.5 en las pruebas para evitar una versión antigua transitiva.
+El despliegue usa el mismo CLI instalado y auditado desde este lockfile.
+
+La auditoría distingue dependencias de producción (bloqueo desde severidad
+moderada) de herramientas de desarrollo (bloqueo desde severidad moderada). Estas últimas
+siguen reportando alertas transitivas: braces 3.0.3 no tiene parche publicado
+para GHSA-vfj7-8cjw-p6xm; no se utiliza para procesar patrones enviados por
+usuarios en la aplicación. También quedan alertas moderadas de OpenTelemetry
+y uuid en el CLI, que requieren cambios mayores de sus dependencias.
+No se fuerza una degradación del CLI ni se ocultan los resultados de npm audit.
+Las pruebas de pull requests no reciben las credenciales de despliegue.
+
+Después de desplegar, un script sin credenciales comprueba Hosting y cinco
+operaciones sensibles mediante solicitudes vacías sin sesión. Estas deben
+responder con UNAUTHENTICATED o PERMISSION_DENIED y nunca ejecutar escrituras.
+
+La actualización de herramientas no debe desplegarse mientras falle esta
+auditoría estricta; se mantiene como trabajo pendiente hasta corregir las
+alertas transitivas o revisar explícitamente una excepción justificada.
