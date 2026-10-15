@@ -177,23 +177,29 @@ recuperación de cuentas de Authentication ni de archivos de Cloud Storage.
 
 Las herramientas se fijan con lockfile: Firebase CLI 15.34.0, SDK de pruebas
 Firebase 13.0.0 y rules-unit-testing 6.0.0. Requieren Node.js 22 y Java 21
-para ejecutar el emulador actual (GitHub Actions ya instala ambos).
-Se fija gRPC 1.14.5 en las pruebas para evitar una versión antigua transitiva.
-El despliegue usa el mismo CLI instalado y auditado desde este lockfile.
+para ejecutar el emulador actual (GitHub Actions instala ambos).
 
-La auditoría distingue dependencias de producción (bloqueo desde severidad
-moderada) de herramientas de desarrollo (bloqueo desde severidad moderada). Estas últimas
-siguen reportando alertas transitivas: braces 3.0.3 no tiene parche publicado
-para GHSA-vfj7-8cjw-p6xm; no se utiliza para procesar patrones enviados por
-usuarios en la aplicación. También quedan alertas moderadas de OpenTelemetry
-y uuid en el CLI, que requieren cambios mayores de sus dependencias.
-No se fuerza una degradación del CLI ni se ocultan los resultados de npm audit.
-Las pruebas de pull requests no reciben las credenciales de despliegue.
+Los overrides fijan gRPC 1.14.5, OpenTelemetry Core 2.12.0 y uuid 11.1.1
+para evitar dependencias transitivas antiguas. Los dos últimos siguen el
+criterio de overrides del propio Firebase CLI, que npm no hereda cuando
+el CLI se instala como dependencia de otro proyecto.
+
+Se actualiza el watcher del CLI a Chokidar 4.0.3, eliminando la dependencia
+vulnerable braces. Chokidar 4 conserva CommonJS y la vigilancia de archivos y
+directorios; ya no interpreta globs para vigilar o excluir rutas. En este
+repositorio se valida su uso para Firestore y los despliegues. Si se amplía el
+uso al emulador de Functions, deben revisarse los patrones de exclusión de
+vigilancia; los patrones de empaquetado del despliegue son independientes.
+
+Pruebas adicionales comprueban cambios reales de archivos y exclusiones por
+expresión, un envío HTTP multipart a un servidor local con el cliente del CLI
+y la propagación W3C del cliente PubSub con OpenTelemetry actualizado.
+
+La auditoría bloquea desde severidad moderada tanto las dependencias de
+producción como las herramientas. No hay excepciones ni avisos ocultados.
+El despliegue usa el mismo CLI instalado y auditado desde el lockfile.
+Las pruebas de pull requests no reciben credenciales de despliegue.
 
 Después de desplegar, un script sin credenciales comprueba Hosting y cinco
 operaciones sensibles mediante solicitudes vacías sin sesión. Estas deben
 responder con UNAUTHENTICATED o PERMISSION_DENIED y nunca ejecutar escrituras.
-
-La actualización de herramientas no debe desplegarse mientras falle esta
-auditoría estricta; se mantiene como trabajo pendiente hasta corregir las
-alertas transitivas o revisar explícitamente una excepción justificada.
