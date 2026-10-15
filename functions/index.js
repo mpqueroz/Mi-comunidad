@@ -580,7 +580,7 @@ exports.crearReservaMiComunidad = onCall(async (request) => {
       invitados: [],
       ts: Date.now(),
     });
-    t.set(ocupadoRef, {ts: Date.now()});
+    t.set(ocupadoRef, {ts: Date.now(), reservaId: nuevaReservaRef.id});
 
     return nuevaReservaRef.id;
   });
@@ -872,3 +872,10 @@ exports.actualizarVencimientosMiComunidad = onSchedule(
 
       console.log(`Vencimientos ${hoy}: ${gastos} gastos atrasados, ${mantenciones} mantenciones atrasadas`);
     });
+
+
+// Operación profesional añadida; se conservan las funciones existentes de identidad.
+const profesional = require('./profesional')(admin, onCall, HttpsError);
+delete profesional.configurarIdentidadMiComunidad;
+delete profesional.migrarPrivacidadMiComunidad;
+Object.assign(exports, profesional);

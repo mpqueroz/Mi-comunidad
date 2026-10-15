@@ -47,14 +47,14 @@ jobs:
       - name: Instalar dependencias
         working-directory: tests
         run: npm ci
-      - name: Correr tests en el emulador
-        working-directory: tests
-        run: npm test
       - name: Revisar que las functions cargan
         working-directory: functions
         run: |
           npm ci
           node -e 'require("./index.js")'
+      - name: Correr tests en el emulador
+        working-directory: tests
+        run: npm test
 
   deploy:
     name: Deploy a Firebase
@@ -82,7 +82,11 @@ jobs:
       # deploy nunca borre ni toque las de las otras apps, y el hosting va
       # solo al sitio mi-comunidad-md (firebase.json). Las functions que no
       # cambiaron se saltan solas.
-      - name: Deploy de página, reglas y functions
+      - name: Desplegar funciones de Mi Comunidad
         run: >
           npx --yes firebase-tools@14 deploy --non-interactive
-          --only "hosting,firestore:rules,functions:crearCuentaMiComunidad,functions:restablecerClaveMiComunidad,functions:crearComunidadMiComunidad,functions:crearReservaMiComunidad,functions:definirPreguntaSecretaMiComunidad,functions:verificarPreguntaSecretaMiComunidad,functions:migrarRespuestasSecretasMiComunidad,functions:actualizarVencimientosMiComunidad"
+          --only "functions:crearCuentaMiComunidad,functions:restablecerClaveMiComunidad,functions:crearComunidadMiComunidad,functions:crearReservaMiComunidad,functions:definirPreguntaSecretaMiComunidad,functions:verificarPreguntaSecretaMiComunidad,functions:migrarRespuestasSecretasMiComunidad,functions:actualizarVencimientosMiComunidad,functions:configurarPagosMiComunidad,functions:guardarPlanMantencionMiComunidad,functions:registrarRevisionMantencionMiComunidad,functions:gestionarAvisoMiComunidad,functions:confirmarAvisoMiComunidad,functions:gestionarVisitaMiComunidad,functions:cancelarReservaMiComunidad,functions:registrarEncomiendaMiComunidad,functions:gestionarTurnoMiComunidad,functions:gestionarEncomiendaMiComunidad,functions:verificarFichaMiComunidad"
+      - name: Publicar reglas compartidas
+        run: npx --yes firebase-tools@14 deploy --non-interactive --only firestore:rules
+      - name: Publicar página
+        run: npx --yes firebase-tools@14 deploy --non-interactive --only hosting

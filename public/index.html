@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#1f5f5b">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1960,6 +1960,7 @@ td, .stat-number, .rc-monto, .cj-monto{ font-variant-numeric:tabular-nums; }
     .conc-stats .stat-number{ font-size:18px; }
 }
 </style>
+<link rel="stylesheet" href="profesional.css">
 </head>
 
 <body>
@@ -2003,7 +2004,9 @@ td, .stat-number, .rc-monto, .cj-monto{ font-variant-numeric:tabular-nums; }
                    onkeydown="if(event.key==='Enter'){login();}">
         </div>
 
-        <div id="loginError" class="login-error hidden"></div>
+        <label class="mc-recordar"><input id="mcRecordar" type="checkbox" checked> Mantener sesión en este dispositivo</label>
+<p class="mc-meta">En un equipo compartido, cierra sesión al terminar.</p>
+<div id="loginError" class="login-error hidden"></div>
 
         <button class="primary-btn" id="loginBtn" onclick="login()">
             Ingresar
@@ -2951,22 +2954,7 @@ let avisos = [];
 let encomiendas = [];
 
 
-let novedades = loadData("novedades", [
-    {
-        icon:"📦",
-        title:"Encomienda recibida",
-        meta:"Depto 804 · 10:42",
-        badgeClass:"badge-green",
-        badgeText:"Registrada"
-    },
-    {
-        icon:"🚪",
-        title:"Visita registrada",
-        meta:"Depto 302 · 10:15",
-        badgeClass:"",
-        badgeText:""
-    }
-]);
+let novedades = [];
 
 
 let reservas = [];
@@ -5047,41 +5035,7 @@ async function login(){
     try {
 
         const credencial = await auth.signInWithEmailAndPassword(rutToEmail(rutInput), password);
-        const tokenResult = await credencial.user.getIdTokenResult(true);
-        const claims = tokenResult.claims;
-
-        // El superadmin no pertenece a ninguna comunidad en particular
-        // (administra la plataforma completa), así que a él no se le exige
-        // comunidadId en el token - a todos los demás roles sí.
-        const claimsValidas = claims.app === "mi_comunidad" && claims.role &&
-            (claims.role === "superadmin" || claims.comunidadId);
-
-        if(!claimsValidas){
-            await auth.signOut();
-            mostrarErrorLogin("Esta cuenta no pertenece a Mi Comunidad.");
-            return;
-        }
-
-        currentUid = credencial.user.uid;
-        currentRole = claims.role;
-
-        if(currentRole === "superadmin"){
-            await iniciarSesionSuperAdmin();
-        } else {
-            await iniciarSesionComunidad(claims.comunidadId);
-        }
-
-        document
-            .getElementById("loginScreen")
-            .classList.add("hidden");
-
-        document
-            .getElementById("app")
-            .classList.remove("hidden");
-
-        aplicarRolUI();
-        navigate(rolesConfig[currentRole].paginaInicial);
-        actualizarContadorNotificaciones();
+        await mcEntrarUsuario(credencial.user);
 
     } catch(err){
 
@@ -5265,7 +5219,7 @@ async function iniciarSesionComunidad(comunidadId){
         {nombre:"tiposMulta", array:tiposMulta, setUnsub:u => tiposMultaUnsub = u},
         {nombre:"multas", array:multas, setUnsub:u => multasUnsub = u, filtraPorDepto:true},
         {nombre:"avisos", array:avisos, setUnsub:u => avisosUnsub = u},
-        {nombre:"incidencias", array:incidencias, setUnsub:u => incidenciasUnsub = u},
+        {nombre:"incidencias", array:incidencias, setUnsub:u => incidenciasUnsub = u, filtraPorDepto:true},
         {nombre:"documentos", array:documentos, setUnsub:u => documentosUnsub = u},
         {nombre:"movimientosContables", array:movimientosContables, setUnsub:u => movimientosContablesUnsub = u},
         {nombre:"remuneraciones", array:remuneraciones, setUnsub:u => remuneracionesUnsub = u},
@@ -5289,7 +5243,11 @@ async function iniciarSesionComunidad(comunidadId){
     const COLECCIONES_BITACORA = ["visitas", "vehiculos", "accesos"];
     const desdeHistorial = Date.now() - DIAS_HISTORIAL * 86400000;
 
+    const mcSoloResidente = new Set(['visitas','visitasProgramadas','vehiculos','encomiendas','reservas','bloquesReserva','bloquesOcupados','gastosComunes','tiposMulta','multas','avisos','incidencias','documentos']);
+    const mcSoloAdmin = new Set(['movimientosContables','remuneraciones','proveedoresDirectorio','mantenciones']);
     for(const modulo of modulos){
+        if(currentRole === 'residente' && !mcSoloResidente.has(modulo.nombre)) continue;
+        if(currentRole === 'conserje' && mcSoloAdmin.has(modulo.nombre)) continue;
 
         // gastosComunes no se expone a conserjeria por regla (dato
         // financiero) - ni siquiera lo intentamos leer para ese rol, para
@@ -5424,7 +5382,7 @@ function aplicarSnapshotModulo(array, snap){
         array.push(Object.assign({id: doc.id}, doc.data()));
     });
 
-    array.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    array.sort((a, b) => mcTs(b.ts) - mcTs(a.ts));
 
     actualizarEstadosMorosidad();
     actualizarEstadosMantencion();
@@ -5517,7 +5475,9 @@ function rerenderSiAppVisible(){
         rerenderProgramado = null;
         const appEl = document.getElementById("app");
         if(appEl && !appEl.classList.contains("hidden") && currentRole){
-            navigate(currentPage);
+            const y = window.scrollY;
+            navigate(currentPage, true);
+            window.scrollTo({top:y, behavior:"instant"});
         }
     }, 60);
 }
@@ -5770,6 +5730,8 @@ function navigate(page, fromPopState){
     const pages = {
 
         inicio: renderHome,
+        agenda: mcRenderAgenda,
+        mantenciones: mcRenderMantenciones,
 
         avisos: renderAvisos,
 
@@ -5935,7 +5897,7 @@ function renderHome(){
     const deudaAnterior = gastosComunes.filter(g => g.depto === depto && g.periodo !== periodoActual() &&
         g.estado !== "Pagado" && (g.estado === "Atrasado" || g.vencimiento < hoy));
     const misEncomiendas = encomiendas.filter(e => e.depto === depto && e.estado !== "Entregado")
-        .sort((a, b) => (b.ts || 0) - (a.ts || 0));
+        .sort((a, b) => mcTs(b.ts) - mcTs(a.ts));
     const misReservas = reservas.filter(r => r.depto === depto && r.fecha >= hoy);
     const misVisitas = visitasProgramadas.filter(v => v.depto === depto && v.estado === "Pendiente");
     const misSolicitudes = incidencias.filter(i => i.depto === depto && i.estado !== "Resuelto");
@@ -7412,7 +7374,7 @@ function renderGastosComunes(){
 
     const misMultas = multas
         .filter(m => m.depto === profile.depto)
-        .sort((a, b) => (b.ts || 0) - (a.ts || 0));
+        .sort((a, b) => mcTs(b.ts) - mcTs(a.ts));
 
     const seccionMultas = misMultas.length ? `
 
@@ -8574,7 +8536,7 @@ function openGenerarCobroModal(){
 
 function renderAdminMultas(){
 
-    const multasDelPeriodo = multas.slice().sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    const multasDelPeriodo = multas.slice().sort((a, b) => mcTs(b.ts) - mcTs(a.ts));
     const pendientes = multasDelPeriodo.filter(m => m.estado !== "Pagada");
     const recaudadoMultas = multasDelPeriodo.filter(m => m.estado === "Pagada").reduce((s, m) => s + m.monto, 0);
     const pendienteMultas = pendientes.reduce((s, m) => s + m.monto, 0);
@@ -8844,7 +8806,7 @@ function renderAdminContabilidad(){
     );
 
     const filas = [...movimientosContables]
-        .sort((a, b) => b.fecha.localeCompare(a.fecha) || (b.ts || 0) - (a.ts || 0))
+        .sort((a, b) => b.fecha.localeCompare(a.fecha) || mcTs(b.ts) - mcTs(a.ts))
         .map(m => `
             <tr>
                 <td>${esc(formatFecha(m.fecha))}</td>
@@ -9432,10 +9394,10 @@ function fichaDeptoHtml(r){
 
     const familiares = r.familiares || [];
     const restringidos = r.restringidos || [];
-    const solicitudes = incidencias.filter(i => i.depto === r.depto).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    const solicitudes = incidencias.filter(i => i.depto === r.depto).sort((a, b) => mcTs(b.ts) - mcTs(a.ts));
     const gastosDepto = gastosComunes.filter(g => g.depto === r.depto).sort((a, b) => String(b.periodo).localeCompare(String(a.periodo)));
-    const multasDepto = multas.filter(m => m.depto === r.depto).sort((a, b) => (b.ts || 0) - (a.ts || 0));
-    const reservasDepto = reservas.filter(x => x.depto === r.depto).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    const multasDepto = multas.filter(m => m.depto === r.depto).sort((a, b) => mcTs(b.ts) - mcTs(a.ts));
+    const reservasDepto = reservas.filter(x => x.depto === r.depto).sort((a, b) => mcTs(b.ts) - mcTs(a.ts));
     const historial = historialAccesosDepto(r.depto);
     const gastoMes = gastosDepto.find(g => g.periodo === periodoActual());
     const deuda = sumaMontos(gastosDepto.filter(g => g.estado === "Atrasado" || (g.estado !== "Pagado" && g.vencimiento < hoyISO())));
@@ -10186,13 +10148,7 @@ const modalFormBuilders = {
                       placeholder="Describe el problema..."></textarea>
         </div>
 
-        <div class="form-group">
-            <label>Foto (opcional)</label>
-            <input class="form-control" type="file" accept="image/*" disabled>
-            <div style="font-size:11px;color:var(--muted);margin-top:5px">
-                Disponible cuando conectemos almacenamiento en la nube.
-            </div>
-        </div>
+
 
     `,
 
@@ -10223,13 +10179,7 @@ const modalFormBuilders = {
                       placeholder="Describe la incidencia..."></textarea>
         </div>
 
-        <div class="form-group">
-            <label>Foto (opcional)</label>
-            <input class="form-control" type="file" accept="image/*" disabled>
-            <div style="font-size:11px;color:var(--muted);margin-top:5px">
-                Disponible cuando conectemos almacenamiento en la nube.
-            </div>
-        </div>
+
 
     `,
 
@@ -12576,7 +12526,7 @@ function combinarNotificaciones(){
 
     notificaciones.length = 0;
     notificaciones.push(...Array.from(mapa.values()));
-    notificaciones.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    notificaciones.sort((a, b) => mcTs(b.ts) - mcTs(a.ts));
 
     actualizarContadorNotificaciones();
     rerenderSiAppVisible();
@@ -12594,7 +12544,7 @@ function aplicarSnapshotNotificaciones(snap){
         notificaciones.push(Object.assign({id: doc.id}, doc.data()));
     });
 
-    notificaciones.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    notificaciones.sort((a, b) => mcTs(b.ts) - mcTs(a.ts));
 
     actualizarContadorNotificaciones();
     rerenderSiAppVisible();
@@ -12727,6 +12677,8 @@ async function crearIncidencia(datos){
         estado:"Pendiente",
         fecha:new Date().toLocaleDateString("es-CL"),
         hora:nowTime(),
+        foto:await mcLeerFoto("mcFoto"),
+        creadoPor:currentUid,
         ts:Date.now()
     };
 
@@ -12842,12 +12794,13 @@ async function saveModal(){
             return;
         }
 
-        await crearIncidencia({
+        const creada = await crearIncidencia({
             categoria:categoria,
             descripcion:descripcion,
             depto:profile.depto,
             origen:"Residente"
         });
+        if(!creada) return;
 
         closeModal();
         showToast("Solicitud enviada correctamente");
@@ -12864,12 +12817,13 @@ async function saveModal(){
             return;
         }
 
-        await crearIncidencia({
+        const creada = await crearIncidencia({
             categoria:categoria,
             descripcion:descripcion,
             depto:depto,
             origen:"Conserjería"
         });
+        if(!creada) return;
 
         closeModal();
         showToast("Incidencia registrada correctamente");
@@ -13569,8 +13523,6 @@ async function saveModal(){
             return;
         }
 
-        closeModal();
-
         await registrarVisitaReal({nombre, rut, depto, motivo});
 
     } else if(modalMode === "visitaProgramada"){
@@ -13626,7 +13578,7 @@ async function saveModal(){
             return;
         }
 
-        addNovedad("📝", texto, `Turno actual · ${nowTime()}`, "", "");
+        if(!await addNovedad("📝", texto, `Turno actual · ${nowTime()}`, "", "")) return;
 
         closeModal();
         showToast("Novedad registrada correctamente");
@@ -14047,5 +13999,9 @@ window.addEventListener("popstate", function(event){
 
 </script>
 
+<script src="profesional.js"></script>
+<script src="continuidad.js"></script>
+<script src="gestion.js"></script>
+<script src="cierre.js"></script>
 </body>
 </html>
