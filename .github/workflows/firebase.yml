@@ -75,6 +75,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
       - name: Instalar herramientas verificadas
         working-directory: tests
         run: |
@@ -92,6 +96,9 @@ jobs:
         run: npm ci
       - name: Conservar reglas vigentes de las otras aplicaciones
         run: node scripts/preparar-reglas-compartidas.cjs
+      - name: Probar reglas combinadas antes de publicar
+        working-directory: tests
+        run: npm test
       # El proyecto es compartido con Mercado Ciudadano y Almacén Digital:
       # se nombran las functions de Mi Comunidad una por una para que el
       # deploy nunca borre ni toque las de las otras apps, y el hosting va
