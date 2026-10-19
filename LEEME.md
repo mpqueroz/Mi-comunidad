@@ -1,8 +1,20 @@
+# Preparación para producción · 19 de octubre de 2026
+
+- Cada conserje consulta únicamente su propia ficha laboral. Administración mantiene el directorio completo. No se mueven ni borran fichas existentes.
+- `generarCobrosMiComunidad` genera cobros por departamento y mes en el servidor, con transacciones e identificadores estables. Respeta cobros existentes con IDs antiguos, agrupa varias cuentas del mismo departamento y omite residentes inactivos. Repetir una solicitud completa los faltantes sin modificar deudas anteriores. Cada lote de hasta 100 departamentos confirma sus cobros y avisos juntos; una interrupción entre lotes se resuelve repitiendo la solicitud.
+- Los clientes no pueden crear gastos comunes directamente ni reasignar una deuda a otro departamento o mes. Es necesario actualizar la página después de publicar.
+- Los pagos se realizan mediante los canales de cada administrador. Se conserva el registro manual ya existente y la configuración guardada. La conexión con bancos, pasarelas y sistemas de administración queda pendiente; no se ha incorporado un sistema de cobro de dinero.
+- Antes de publicar reglas, el workflow obtiene las vigentes y sustituye solo las funciones `mc*` y el bloque de Mi Comunidad. Una estructura desconocida detiene la publicación. Después verifica el contenido publicado.
+- Las pruebas usan proyectos `demo-*` del emulador y datos ficticios. No verifican una restauración de los respaldos administrados de producción. Esa restauración debe ensayarse en una base de destino aislada antes de prometer recuperación completa ante desastres.
+- Cada cuenta sigue perteneciendo a una comunidad. No se incluye en esta versión un selector para que una misma cuenta administre varios edificios.
+
+---
+
 # Actualización profesional · octubre de 2026
 
 Integra turnos, bitácora compartida, pendientes, visitas con salida, encomiendas transaccionales, conversación de solicitudes, cancelación de reservas, planes preventivos y avisos con confirmación. Conserva los paneles, fichas laterales, conciliación y verificación de identidad del repositorio vigente.
 
-Administración configura los métodos de pago en Finanzas → Gastos comunes → Configurar métodos e instrucciones. Cada comunidad puede indicar sus métodos habilitados, banco, cuenta, titular, correo, instrucciones y enlace HTTPS. El residente informa el pago y administración lo confirma contra cartola; no se agrega una pasarela automática ni se guardan claves bancarias.
+Los métodos de pago se acoplarán al sistema de cada administrador en una etapa posterior. El registro manual existente no procesa dinero ni sustituye la confirmación de administración.
 
 Los archivos `profesional.js`, `continuidad.js`, `gestion.js`, `cierre.js` y `profesional.css` son necesarios junto con `index.html`. El workflow despliega sitio, reglas compartidas y una lista explícita de funciones de Mi Comunidad. No se reemplazan las reglas de las otras apps.
 

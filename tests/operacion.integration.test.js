@@ -18,6 +18,47 @@ test('Firestore real: publicar y confirmar aviso conserva una lectura por cuenta
 test('Firestore real: registrar revisión recalcula calendario sin generar un cobro',{skip:!enabled},async()=>{const h=await fixture();const p=await h.call('guardarPlanMantencionMiComunidad',{titulo:'Portón',proximaFecha:'2099-01-31',periodicidad:'Mensual',activo:true,solicitud:'b'.repeat(32)},'adm','admin');await h.call('registrarRevisionMantencionMiComunidad',{id:p.id,version:1,solicitud:'c'.repeat(32),observacion:'Revisado',foto:''});assert.equal((await h.base.collection('planesMantencion').doc(p.id).get()).data().proximaFecha,'2099-02-28');assert.equal((await h.base.collection('movimientosContables').get()).size,0);});
 test('Firestore real: cada comunidad conserva su propia configuración de pagos',{skip:!enabled},async()=>{const a=await fixture(),b=await fixture();await a.call('configurarPagosMiComunidad',{version:0,metodos:['Transferencia'],banco:'Banco de prueba',numeroCuenta:'123'},'adm','admin');assert.equal((await a.base.get()).data().configuracionPago.banco,'Banco de prueba');assert.equal((await b.base.get()).data().configuracionPago,undefined);await assert.rejects(a.call('configurarPagosMiComunidad',{version:1,metodos:['Transferencia']},'r1','residente'),{code:'permission-denied'});});
 
+test('cobros reales: dos administradores concurrentes y varios residentes por depto no duplican deudas',{skip:!enabled},async()=>{
+ const h=await fixture();
+ await h.base.collection('residentes').doc('r2').set({estado:'Activo',depto:'101'});
+ const data={monto:45000,vencimiento:'2099-12-31'};
+ const results=await Promise.all([h.call('generarCobrosMiComunidad',data,'adm1','admin'),h.call('generarCobrosMiComunidad',data,'adm2','admin')]);
+ assert.equal(results.reduce((n,r)=>n+r.creados,0),1);
+ const docs=await h.base.collection('gastosComunes').get();assert.equal(docs.size,1);assert.equal(docs.docs[0].data().monto,45000);
+ assert.equal((await h.base.collection('notificaciones').get()).size,1);
+ const retry=await h.call('generarCobrosMiComunidad',{...data,monto:90000},'adm1','admin');
+ assert.equal(retry.creados,0);assert.equal((await docs.docs[0].ref.get()).data().monto,45000);
+});
+test('cobros reales: conserva cobros históricos con IDs antiguos y no cobra fichas inactivas',{skip:!enabled},async()=>{
+ const h=await fixture();const periodo=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()).slice(0,7);
+ await h.base.collection('gastosComunes').doc('id-antiguo').set({depto:'101',periodo,monto:123,estado:'Pagado'});
+ await h.base.collection('residentes').doc('inactivo').set({estado:'Inactivo',depto:'999'});
+ const r=await h.call('generarCobrosMiComunidad',{monto:45000,vencimiento:'2099-12-31'},'adm','admin');
+ assert.equal(r.creados,0);const docs=await h.base.collection('gastosComunes').get();assert.equal(docs.size,1);assert.equal(docs.docs[0].data().estado,'Pagado');assert.equal(docs.docs[0].data().monto,123);
+});
+test('cobros reales: completa varios lotes y repetir solo agrega departamentos nuevos',{skip:!enabled},async()=>{
+ const h=await fixture();const batch=db.batch();for(let i=0;i<104;i++)batch.set(h.base.collection('residentes').doc('extra-'+i),{estado:'Activo',depto:String(200+i)});await batch.commit();
+ const data={monto:45000,vencimiento:'2099-12-31'};
+ const original=db.runTransaction;let llamadas=0;
+ db.runTransaction=function(...args){if(++llamadas===2)throw Error('Interrupción simulada entre lotes');return original.apply(this,args);};
+ try{await assert.rejects(h.call('generarCobrosMiComunidad',data,'adm','admin'),/Interrupción simulada/);}finally{db.runTransaction=original;}
+ assert.equal((await h.base.collection('gastosComunes').get()).size,100);
+ assert.equal((await h.call('generarCobrosMiComunidad',data,'adm','admin')).creados,5);
+ await h.base.collection('residentes').doc('nuevo').set({estado:'Activo',depto:'500'});
+ assert.equal((await h.call('generarCobrosMiComunidad',data,'adm','admin')).creados,1);
+ assert.equal((await h.base.collection('gastosComunes').get()).size,106);
+ assert.equal((await h.base.collection('movimientosContables').get()).size,0);
+});
+test('cobros reales: roles, comunidad, monto y fecha se verifican en servidor',{skip:!enabled},async()=>{
+ const a=await fixture(),b=await fixture();const data={monto:45000,vencimiento:'2099-12-31'};
+ for(const [uid,role]of [['r1','residente'],['c1','conserje']])await assert.rejects(a.call('generarCobrosMiComunidad',data,uid,role),{code:'permission-denied'});
+ await assert.rejects(a.call('generarCobrosMiComunidad',{...data,comunidadId:b.id},'adm','admin'),{code:'permission-denied'});
+ for(const bad of [{monto:-1},{monto:1.5},{monto:'45000'},{vencimiento:'2099-02-30'}])await assert.rejects(a.call('generarCobrosMiComunidad',{...data,...bad},'adm','admin'),{code:'invalid-argument'});
+ await a.base.update({estado:'Suspendida'});await assert.rejects(a.call('generarCobrosMiComunidad',data,'adm','admin'),{code:'failed-precondition'});
+ assert.equal((await a.base.collection('gastosComunes').get()).size,0);
+ assert.equal((await b.base.collection('gastosComunes').get()).size,0);
+});
+
 for(const [uid,role,collection] of [['r1','residente','residentes'],['c1','conserje','conserjes']]) {
  test(`Firestore real: ${role} inactivo o eliminado no usa funciones de identidad`,{skip:!enabled},async()=>{
   const h=await fixture();const profile=h.base.collection(collection).doc(uid);

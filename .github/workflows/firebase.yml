@@ -90,6 +90,8 @@ jobs:
       - name: Instalar dependencias de functions
         working-directory: functions
         run: npm ci
+      - name: Conservar reglas vigentes de las otras aplicaciones
+        run: node scripts/preparar-reglas-compartidas.cjs
       # El proyecto es compartido con Mercado Ciudadano y Almacén Digital:
       # se nombran las functions de Mi Comunidad una por una para que el
       # deploy nunca borre ni toque las de las otras apps, y el hosting va
@@ -98,13 +100,15 @@ jobs:
       - name: Desplegar funciones de Mi Comunidad
         run: >
           ./tests/node_modules/.bin/firebase deploy --non-interactive
-          --only "functions:crearCuentaMiComunidad,functions:restablecerClaveMiComunidad,functions:crearComunidadMiComunidad,functions:crearReservaMiComunidad,functions:definirPreguntaSecretaMiComunidad,functions:verificarPreguntaSecretaMiComunidad,functions:migrarRespuestasSecretasMiComunidad,functions:actualizarVencimientosMiComunidad,functions:configurarPagosMiComunidad,functions:guardarPlanMantencionMiComunidad,functions:registrarRevisionMantencionMiComunidad,functions:gestionarAvisoMiComunidad,functions:confirmarAvisoMiComunidad,functions:gestionarVisitaMiComunidad,functions:cancelarReservaMiComunidad,functions:registrarEncomiendaMiComunidad,functions:gestionarTurnoMiComunidad,functions:gestionarEncomiendaMiComunidad,functions:verificarFichaMiComunidad"
+          --only "functions:generarCobrosMiComunidad,functions:crearCuentaMiComunidad,functions:restablecerClaveMiComunidad,functions:crearComunidadMiComunidad,functions:crearReservaMiComunidad,functions:definirPreguntaSecretaMiComunidad,functions:verificarPreguntaSecretaMiComunidad,functions:migrarRespuestasSecretasMiComunidad,functions:actualizarVencimientosMiComunidad,functions:configurarPagosMiComunidad,functions:guardarPlanMantencionMiComunidad,functions:registrarRevisionMantencionMiComunidad,functions:gestionarAvisoMiComunidad,functions:confirmarAvisoMiComunidad,functions:gestionarVisitaMiComunidad,functions:cancelarReservaMiComunidad,functions:registrarEncomiendaMiComunidad,functions:gestionarTurnoMiComunidad,functions:gestionarEncomiendaMiComunidad,functions:verificarFichaMiComunidad"
       - name: Publicar reglas compartidas
         run: ./tests/node_modules/.bin/firebase deploy --non-interactive --only firestore:rules
+      - name: Verificar reglas publicadas
+        run: node scripts/preparar-reglas-compartidas.cjs --verify
       - name: Publicar página
         run: ./tests/node_modules/.bin/firebase deploy --non-interactive --only hosting
       - name: Comprobar servicio y rechazos sin sesión
-        run: node scripts/comprobar-despliegue.cjs
+        run: node scripts/comprobar-despliegue.cjs --release
 
   public-smoke:
     name: Comprobación pública sin credenciales
