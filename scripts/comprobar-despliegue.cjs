@@ -9,12 +9,20 @@ async function main() {
   assert.equal(hosting.status, 200, 'Hosting debe responder');
   assert.match(hosting.headers.get('content-type') || '', /text\/html/);
   console.log('Hosting: HTTP 200');
+  if(process.argv.includes('--release')){
+    assert.match(await hosting.text(), /httpsCallable\("generarCobrosMiComunidad"\)/,
+        'Hosting debe servir la nueva generación de cobros');
+    assert.match(hosting.headers.get('cache-control') || '', /no-cache/,
+        'La portada debe permitir recuperar las actualizaciones');
+  }
 
-  for (const name of [
+  const functions=[
     'crearCuentaMiComunidad', 'restablecerClaveMiComunidad',
     'crearReservaMiComunidad', 'configurarPagosMiComunidad',
     'gestionarEncomiendaMiComunidad',
-  ]) {
+  ];
+  if(process.argv.includes('--release'))functions.push('generarCobrosMiComunidad');
+  for (const name of functions) {
     const response = await fetch(`https://us-central1-mercado-ciudadano.cloudfunctions.net/${name}`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},

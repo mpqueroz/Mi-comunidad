@@ -320,6 +320,58 @@ module.exports = function profesional(admin, onCall, HttpsError) {
       tx.create(lectura,{avisoId:id,uid:s.uid,nombre:s.nombre,rol:s.role,depto:s.role==='residente'?req.auth.token.depto:'',ts:stamp()});return {ok:true};
     });
   });
+  // Cobranza interna: no realiza pagos ni integra una pasarela. El ID por
+  // departamento/mes y las transacciones hacen seguros los reintentos.
+  const generarCobrosMiComunidad=onCall({timeoutSeconds:300},async req=>{
+    const s=await scope(req,['admin']);
+    const monto=req.data.monto,vencimiento=req.data.vencimiento;
+    if(!Number.isSafeInteger(monto)||monto<=0||monto>100000000||!fechaReal(vencimiento)){
+      throw new HttpsError('invalid-argument','Indica un monto entero positivo y una fecha válida.');
+    }
+    const periodo=hoyChile().slice(0,7);
+    const residentes=await s.base.collection('residentes').get();
+    const departamentos=[...new Set(residentes.docs
+      .filter(d=>d.data().estado!=='Inactivo')
+      .map(d=>String(d.data().depto||'').trim()).filter(Boolean))].sort();
+    if(departamentos.some(d=>d.length>40||d.includes('/'))){
+      throw new HttpsError('failed-precondition','Revisa los departamentos registrados antes de generar el cobro.');
+    }
+    let creados=0;
+    // Cada lote se confirma completo; si se interrumpe la solicitud, repetirla
+    // completa los faltantes y conserva los montos/estados ya registrados.
+    for(let offset=0;offset<departamentos.length;offset+=100){
+      const lote=departamentos.slice(offset,offset+100);
+      const cantidad=await db.runTransaction(async tx=>{
+        const comunidad=await tx.get(s.base);
+        if(!comunidad.exists||comunidad.data().estado==='Suspendida'){
+          throw new HttpsError('failed-precondition','La comunidad no está activa.');
+        }
+        // También se respetan los cobros antiguos con identificadores aleatorios.
+        const anteriores=await tx.get(s.base.collection('gastosComunes').where('periodo','==',periodo));
+        const yaCobrados=new Set(anteriores.docs.map(d=>d.data().depto));
+        const refs=lote.map(depto=>s.base.collection('gastosComunes')
+          .doc(`${periodo}_${Buffer.from(depto).toString('base64url')}`));
+        const snapshots=await tx.getAll(...refs);
+        let nuevos=0;
+        lote.forEach((depto,i)=>{
+          if(yaCobrados.has(depto)||snapshots[i].exists)return;
+          tx.create(refs[i],{depto,periodo,monto,vencimiento,estado:'Pendiente',
+            fechaPago:null,metodoPago:null,creadoPor:s.uid,ts:Date.now()});
+          nuevos++;
+        });
+        if(nuevos){
+          tx.create(s.base.collection('notificaciones').doc(),{
+            icon:'💵',titulo:'Nuevo gasto común generado',meta:`${periodo} · Vence ${vencimiento}`,
+            paraTodos:true,leidaPor:[],ts:Date.now()
+          });
+          log(tx,s,'Cobro mensual generado',`${periodo} · ${nuevos} departamentos`);
+        }
+        return nuevos;
+      });
+      creados+=cantidad;
+    }
+    return {creados,existentes:departamentos.length-creados,departamentos:departamentos.length,periodo};
+  });
   const configurarPagosMiComunidad=onCall(async req=>{
     const s=await scope(req,['admin']);const d=req.data;
     const permitidos=['Transferencia','Depósito','Efectivo en conserjería','Otro'];
@@ -329,5 +381,5 @@ module.exports = function profesional(admin, onCall, HttpsError) {
     if(configuracion.correo&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(configuracion.correo))throw new HttpsError('invalid-argument','El correo de comprobantes no es válido.');
     return db.runTransaction(async tx=>{const snap=await tx.get(s.base);const version=snap.data().configuracionPago?.version||0;if(version!==(d.version||0))throw new HttpsError('failed-precondition','La configuración cambió. Vuelve a abrirla.');configuracion.version=version+1;tx.update(s.base,{configuracionPago:configuracion,configuracionPagoActualizadaEn:stamp(),configuracionPagoActualizadaPor:s.uid});log(tx,s,'Configuración de pagos actualizada',configuracion.metodos.join(', '));return {configuracion};});
   });
-  return {configurarPagosMiComunidad,guardarPlanMantencionMiComunidad,registrarRevisionMantencionMiComunidad,gestionarAvisoMiComunidad,confirmarAvisoMiComunidad,gestionarVisitaMiComunidad,cancelarReservaMiComunidad,registrarEncomiendaMiComunidad,gestionarTurnoMiComunidad,gestionarEncomiendaMiComunidad,configurarIdentidadMiComunidad,verificarFichaMiComunidad,migrarPrivacidadMiComunidad};
+  return {generarCobrosMiComunidad,configurarPagosMiComunidad,guardarPlanMantencionMiComunidad,registrarRevisionMantencionMiComunidad,gestionarAvisoMiComunidad,confirmarAvisoMiComunidad,gestionarVisitaMiComunidad,cancelarReservaMiComunidad,registrarEncomiendaMiComunidad,gestionarTurnoMiComunidad,gestionarEncomiendaMiComunidad,configurarIdentidadMiComunidad,verificarFichaMiComunidad,migrarPrivacidadMiComunidad};
 };

@@ -3147,43 +3147,10 @@ function tieneGastosComunesAtrasados(depto){
 
 
 async function generarCobroMensual(monto, vencimiento){
-
-    const periodo = periodoActual();
-    let creados = 0;
-
-    const gastosRef = refComunidadActual().collection("gastosComunes");
-
-    for(const r of residentesDirectorio){
-
-        const yaExiste = gastosComunes.some(g => g.depto === r.depto && g.periodo === periodo);
-
-        if(!yaExiste){
-            await gastosRef.add({
-                depto:r.depto,
-                periodo:periodo,
-                monto:monto,
-                vencimiento:vencimiento,
-                estado:"Pendiente",
-                fechaPago:null,
-                metodoPago:null,
-                ts:Date.now()
-            });
-            creados++;
-        }
-
-    }
-
-    if(creados > 0){
-        crearNotificacion({
-            icon:"💵",
-            titulo:"Nuevo gasto común generado",
-            meta:`${periodoLabel(periodo)} · Vence ${formatFecha(vencimiento)}`,
-            paraTodos:true
-        });
-    }
-
-    return creados;
-
+    const resultado = await functions.httpsCallable("generarCobrosMiComunidad")({
+        comunidadId: community.id, monto, vencimiento
+    });
+    return resultado.data.creados;
 }
 
 
@@ -5175,7 +5142,9 @@ async function iniciarSesionComunidad(comunidadId){
         residentesUnsub = residentesRef.onSnapshot(aplicarSnapshotResidentes, err => console.error(err));
 
         pasoLogin = "conserjes";
-        const conserjesRef = comunidadRef.collection("conserjes");
+        const conserjesRef = currentRole === "conserje"
+            ? comunidadRef.collection("conserjes").doc(currentUid)
+            : comunidadRef.collection("conserjes");
         const conserjesSnap = await conserjesRef.get();
         aplicarSnapshotConserjes(conserjesSnap);
         conserjesUnsub = conserjesRef.onSnapshot(aplicarSnapshotConserjes, err => console.error(err));
@@ -5530,9 +5499,13 @@ function aplicarSnapshotConserjes(snap){
 
     conserjesDirectorio.length = 0;
 
-    snap.forEach(doc => {
-        conserjesDirectorio.push(Object.assign({uid: doc.id}, doc.data()));
-    });
+    if(typeof snap.forEach === "function"){
+        snap.forEach(doc => {
+            conserjesDirectorio.push(Object.assign({uid: doc.id}, doc.data()));
+        });
+    } else if(snap.exists){
+        conserjesDirectorio.push(Object.assign({uid: snap.id}, snap.data()));
+    }
 
     rerenderSiAppVisible();
 
@@ -7438,7 +7411,7 @@ function renderGastosComunes(){
                     Informar pago
                 </button>
                 <p style="margin-top:8px;font-size:11px;color:var(--muted);line-height:1.4">
-                    Paga por transferencia o en conserjería y luego informa aquí tu pago.
+                    Utiliza los canales indicados por tu administración. Aquí solo puedes informar el pago para su revisión.
                 </p>
             ` : `
                 <p style="margin-top:10px;font-size:12px;color:var(--muted)">

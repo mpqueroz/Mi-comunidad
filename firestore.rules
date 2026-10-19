@@ -421,7 +421,10 @@ service cloud.firestore {
       // ---- Conserjes (doc id = uid del conserje) ----
       match /conserjes/{uid} {
 
-        allow read: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje());
+        // La ficha incluye información laboral. Conserjería consulta solo
+        // su propia ficha; el directorio completo queda para administración.
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) &&
+                         (mcEsAdmin() || (mcEsConserje() && request.auth.uid == uid));
 
         allow create, delete: if false;
 
@@ -561,9 +564,13 @@ service cloud.firestore {
       match /gastosComunes/{id} {
         allow read: if mcEsDeEstaComunidadActiva(comunidadId) &&
                        (mcEsAdmin() || (mcEsResidente() && resource.data.depto == mcMiDepto()));
-        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        // El servidor asigna un identificador único por departamento/mes.
+        // Bloquear altas directas evita duplicados desde clientes antiguos.
+        allow create: if false;
         allow update: if mcEsDeEstaComunidadActiva(comunidadId) &&
-                         (mcEsAdmin() ||
+                         ((mcEsAdmin() &&
+                           request.resource.data.depto == resource.data.depto &&
+                           request.resource.data.get('periodo', null) == resource.data.get('periodo', null)) ||
                           // El residente ya NO puede marcar su gasto como pagado: solo
                           // INFORMAR un pago (estado "Por confirmar" + pagoInformado).
                           // Lo confirma administración.
