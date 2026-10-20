@@ -1961,6 +1961,7 @@ td, .stat-number, .rc-monto, .cj-monto{ font-variant-numeric:tabular-nums; }
 }
 </style>
 <link rel="stylesheet" href="profesional.css">
+<link rel="stylesheet" href="interfaz.css">
 </head>
 
 <body>
@@ -7007,8 +7008,7 @@ function renderPerfil(){
                 </div>
 
 
-                <div class="section-grid"
-                     style="grid-template-columns:repeat(2,1fr)">
+                <div class="profile-fields">
 
                     <div>
 
@@ -9847,15 +9847,15 @@ function renderConserjeria(){
             </button>
         </div>
 
-        <div class="cj-more">
-            <button class="cj-chip" onclick="openVehiculoModal()">${icon('car')} Vehículo</button>
-            <button class="cj-chip" onclick="openAccesoModal()">${icon('key')} Proveedor o técnico</button>
-            <button class="cj-chip" onclick="openIncidenciaStaffModal()">${icon('triangle-alert')} Incidencia</button>
-            <button class="cj-chip" onclick="abrirModalVehiculoRegistrado()">${icon('siren')} Vehículo sospechoso</button>
-            <button class="cj-chip" onclick="abrirBuscarEncomienda()">${icon('search')} Buscar encomienda</button>
-            <button class="cj-chip" onclick="openContactoModal()">${icon('phone')} Contactar residente</button>
-            <button class="cj-chip" onclick="abrirBuscarFicha()">${icon('folder-open')} Fichas</button>
-        </div>
+        <section class="cj-tools" aria-labelledby="cjToolsTitle"><h2 id="cjToolsTitle">Más herramientas</h2><div class="cj-tools-grid">
+<button type="button" class="cj-tool" onclick="openVehiculoModal()"><span class="cj-tool-icon">${icon('car')}</span><span class="cj-tool-copy"><strong>Vehículos</strong><small>Registrar ingreso</small></span></button>
+<button type="button" class="cj-tool" onclick="openAccesoModal()"><span class="cj-tool-icon">${icon('key')}</span><span class="cj-tool-copy"><strong>Proveedores y técnicos</strong><small>Control de acceso</small></span></button>
+<button type="button" class="cj-tool" onclick="openIncidenciaStaffModal()"><span class="cj-tool-icon">${icon('triangle-alert')}</span><span class="cj-tool-copy"><strong>Incidencias</strong><small>Registrar novedad</small></span></button>
+<button type="button" class="cj-tool" onclick="abrirModalVehiculoRegistrado()"><span class="cj-tool-icon">${icon('siren')}</span><span class="cj-tool-copy"><strong>Vehículo sospechoso</strong><small>Crear una alerta</small></span></button>
+<button type="button" class="cj-tool" onclick="abrirBuscarEncomienda()"><span class="cj-tool-icon">${icon('search')}</span><span class="cj-tool-copy"><strong>Buscar encomienda</strong><small>Consultar paquetes</small></span></button>
+<button type="button" class="cj-tool" onclick="openContactoModal()"><span class="cj-tool-icon">${icon('phone')}</span><span class="cj-tool-copy"><strong>Contactar residente</strong><small>Ver contactos</small></span></button>
+<button type="button" class="cj-tool" onclick="abrirBuscarFicha()"><span class="cj-tool-icon">${icon('folder-open')}</span><span class="cj-tool-copy"><strong>Fichas del edificio</strong><small>Consultar información</small></span></button>
+</div></section>
 
         ${alertas.length ? `
             <section class="db-panel cj-alertas">
