@@ -1,0 +1,62 @@
+/* Shared by the signed-in app and its public demo. */
+.form-control {
+    color: var(--text);
+    caret-color: var(--primary);
+    font-family: inherit;
+}
+.form-control::placeholder { color: var(--muted); opacity: 1; }
+.form-control:disabled,
+.form-control[readonly] {
+    color: var(--text-muted-2);
+    -webkit-text-fill-color: currentColor;
+    opacity: 1;
+    background: var(--surface-muted);
+}
+.form-control:autofill {
+    -webkit-text-fill-color: var(--text);
+    box-shadow: 0 0 0 100px var(--card) inset;
+}
+html[data-theme="dark"] { color-scheme: dark; }
+.profile-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.profile-fields > div { min-width: 0; }
+.cj-tools { margin-bottom: 24px; }
+.cj-tools h2 { font-size: 15px; font-weight: 800; margin: 0 0 12px; color: var(--text); }
+.cj-tools-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.cj-tool {
+    display: flex; align-items: center; gap: 12px;
+    min-width: 0; min-height: 88px; padding: 16px;
+    border: 1px solid var(--border); border-radius: 16px;
+    background: var(--card); color: var(--text);
+    text-align: left; font: inherit; cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    transition: border-color .15s, background-color .15s;
+}
+.cj-tool:hover { border-color: var(--primary); background: var(--surface-muted); }
+.cj-tool:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.cj-tool:active { background: var(--primary-light); }
+.cj-tool-icon {
+    display: grid; place-items: center; flex-shrink: 0;
+    width: 40px; height: 40px; border-radius: 12px;
+    background: var(--primary-light); color: var(--primary);
+}
+.cj-tool-icon svg { width: 22px; height: 22px; }
+.cj-tool-copy { display: block; min-width: 0; overflow-wrap: anywhere; }
+.cj-tool strong { display: block; font-size: 13px; font-weight: 800; line-height: 1.4; }
+.cj-tool small { display: block; margin-top: 4px; color: var(--text-muted-2); font-size: 11px; line-height: 1.45; }
+@media (max-width: 1100px) {
+    .cj-tools-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+    .cj-tools-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .cj-tool { padding: 13px 11px; gap: 9px; }
+    .cj-tool-icon { width: 32px; height: 36px; border-radius: 10px; }
+    .cj-tool-icon svg { width: 20px; height: 20px; }
+    .cj-tool:last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
+@media (max-width: 480px) {
+    .profile-fields { grid-template-columns: minmax(0, 1fr); gap: 0; }
+    .profile-fields .form-control { font-size: 16px; }
+}
+@media (max-width: 340px) {
+    .cj-tools-grid { grid-template-columns: minmax(0, 1fr); }
+}
