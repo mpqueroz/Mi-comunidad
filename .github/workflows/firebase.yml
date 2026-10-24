@@ -54,7 +54,7 @@ jobs:
       - name: Revisar que las functions cargan
         working-directory: functions
         run: |
-          npm install --no-audit --no-fund
+          npm ci
           node -e 'require("./index.js")'
           npm audit --omit=dev --audit-level=moderate
       - name: Correr tests en el emulador
@@ -63,6 +63,12 @@ jobs:
       - name: Auditar herramientas sin excepciones de severidad
         working-directory: tests
         run: npm audit --audit-level=moderate
+      - name: Adjuntar lockfile de herramientas para revisión
+        uses: actions/upload-artifact@v4
+        with:
+          name: mi-comunidad-tests-lockfile
+          path: tests/package-lock.json
+          retention-days: 7
 
   deploy:
     name: Deploy a Firebase
