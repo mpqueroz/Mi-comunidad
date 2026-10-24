@@ -18,3 +18,11 @@ jobs:
           node-version: '22'
       - run: npm install --ignore-scripts --no-audit --no-fund
       - run: npm run check
+      - name: Auditar dependencias de producción
+        run: npm audit --omit=dev --audit-level=moderate
+      - name: Publicar lockfile actualizado para revisión
+        uses: actions/upload-artifact@v4
+        with:
+          name: mi-comunidad-lockfile-revisado
+          path: functions/package-lock.json
+          retention-days: 7
