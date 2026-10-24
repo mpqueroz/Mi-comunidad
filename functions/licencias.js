@@ -34,7 +34,9 @@ function evaluateLicense(license, now = new Date()) {
   if (!license) return {allowed: false, reason: "missing"};
   if (license.estado === STATES.SUSPENDED) return {allowed: false, reason: "suspended"};
   const paidUntil = validDate(license.paidUntil);
-  if (paidUntil && current < paidUntil) return {allowed: true, reason: "paid"};
+  if ((license.estado === STATES.ACTIVE || license.estado === STATES.PAST_DUE) && paidUntil && current < paidUntil) {
+    return {allowed: true, reason: "paid"};
+  }
   const trialEndsAt = validDate(license.trialEndsAt);
   if (license.estado === STATES.TRIAL && trialEndsAt && current < trialEndsAt) {
     return {allowed: true, reason: "trial"};
