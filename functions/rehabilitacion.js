@@ -30,7 +30,8 @@ exports.rehabilitarLicenciaMiComunidad = onCall(async (request) => {
     }
     const pagada = evaluateLicense({...data, estado: "active"});
     const prueba = evaluateLicense({...data, estado: "trial"});
-    const nuevoEstado = pagada.allowed ? "active" : prueba.allowed ? "trial" : null;
+    const nuevoEstado = pagada.reason === "paid" ? "active" :
+      prueba.reason === "trial" ? "trial" : null;
     if (!nuevoEstado) {
       throw new HttpsError("failed-precondition", "Licencia vencida: requiere pago.");
     }
