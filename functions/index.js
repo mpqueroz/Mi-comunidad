@@ -33,6 +33,8 @@ initializeApp();
 const APP_ID = "mi_comunidad";
 const EMAIL_DOMAIN = "mi-comunidad.app";
 const COMUNIDADES_COLLECTION = "mi_comunidad_comunidades";
+const LICENCIAS_COLLECTION = "mi_comunidad_licencias";
+const {createTrial} = require("./licencias");
 
 // Debe coincidir EXACTO con limpiarRut() del index.html del front-end,
 // para que el mismo RUT siempre produzca el mismo email sintético.
@@ -404,7 +406,9 @@ exports.crearComunidadMiComunidad = onCall(async (request) => {
     comunidadId: comunidadId,
   });
 
-  await comunidadRef.create({
+  const licenciaRef = db.collection(LICENCIAS_COLLECTION).doc(comunidadId);
+  const loteAlta = db.batch();
+  loteAlta.create(comunidadRef, {
     name,
     address: String(data.address || "").trim(),
     apartments: parseInt(data.apartments, 10) || 0,
@@ -421,6 +425,9 @@ exports.crearComunidadMiComunidad = onCall(async (request) => {
     adminUid: userRecord.uid,
     ultimoAcceso: null,
   });
+  // La prueba se inicia una sola vez, con fecha calculada en el servidor.
+  loteAlta.create(licenciaRef, createTrial(new Date()));
+  await loteAlta.commit();
 
   return {comunidadId, adminUid: userRecord.uid, adminEmail: email};
 });
