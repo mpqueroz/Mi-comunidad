@@ -54,7 +54,7 @@ jobs:
       - name: Revisar que las functions cargan
         working-directory: functions
         run: |
-          npm ci
+          npm install --no-audit --no-fund
           node -e 'require("./index.js")'
           npm audit --omit=dev --audit-level=moderate
       - name: Correr tests en el emulador
