@@ -46,13 +46,13 @@ exports.consultarLicenciaMiComunidad = onCall(async (request) => {
   const comunidadId = token.role === "superadmin" ?
     String((request.data || {}).comunidadId || "").trim() :
     String(token.comunidadId || "");
-  if (!/^[a-z0-9-]+$/.test(comunidadId)) {
-    throw new HttpsError("invalid-argument", "Comunidad inválida.");
+  const {canReadLicense, evaluateLicense} = require("./licencias");
+  if (!canReadLicense(token, comunidadId)) {
+    throw new HttpsError("permission-denied", "No autorizado para consultar esta licencia.");
   }
   const licenciaSnap = await getFirestore().collection(LICENCIAS_COLLECTION).doc(comunidadId).get();
   if (!licenciaSnap.exists) return {comunidadId, estado: "sin_licencia", acceso: false};
   const licencia = licenciaSnap.data();
-  const {evaluateLicense} = require("./licencias");
   const resultado = evaluateLicense(licencia, new Date());
   return {
     comunidadId,
