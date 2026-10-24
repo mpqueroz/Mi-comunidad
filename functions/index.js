@@ -969,6 +969,7 @@ exports.actualizarVencimientosMiComunidad = onSchedule(
 Object.assign(exports, require("./mercadopago").registerMercadoPago());
 Object.assign(exports, require("./comercial"));
 Object.assign(exports, require("./rehabilitacion"));
+Object.assign(exports, require("./webhook-test"));
 
 // Operación profesional añadida; se conservan las funciones existentes de identidad.
 const profesional = require('./profesional')({firestore: Object.assign(() => getFirestore(), {FieldValue, Timestamp})}, onCall, HttpsError);
