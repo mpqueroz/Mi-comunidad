@@ -51,4 +51,27 @@ function canReadLicense(token, comunidadId) {
     (token.role === "admin" && token.comunidadId === comunidadId);
 }
 
-module.exports = {TRIAL_DAYS, STATES, createTrial, evaluateLicense, canReadLicense};
+// Solo debe llamarse desde un proceso de pago verificado en el servidor.
+// Nunca aceptar estado "pagado" enviado directamente por el navegador.
+function applyVerifiedRenewal(license, options) {
+  const opts = options || {};
+  const now = validDate(opts.now || new Date());
+  const months = opts.months;
+  if (!license || !now || !Number.isInteger(months) || months < 1 || months > 24) {
+    throw new TypeError("Datos de renovación inválidos");
+  }
+  if (license.estado === STATES.SUSPENDED) {
+    throw new Error("Una suspensión administrativa requiere revisión manual");
+  }
+  const previousEnd = validDate(license.paidUntil);
+  const base = previousEnd && previousEnd > now ? previousEnd : now;
+  const next = new Date(base.getTime());
+  const originalDay = next.getUTCDate();
+  next.setUTCDate(1);
+  next.setUTCMonth(next.getUTCMonth() + months);
+  const lastDay = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
+  next.setUTCDate(Math.min(originalDay, lastDay));
+  return {...license, estado: STATES.ACTIVE, paidUntil: next};
+}
+
+module.exports = {TRIAL_DAYS, STATES, createTrial, evaluateLicense, canReadLicense, applyVerifiedRenewal};
