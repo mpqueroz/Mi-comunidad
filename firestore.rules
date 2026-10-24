@@ -301,7 +301,17 @@ service cloud.firestore {
       // campo "estado" (comunidades creadas antes de que existiera), se
       // considera activa. Leer un campo inexistente con .estado hace fallar
       // la regla completa y bloqueaba TODA la app para ese edificio.
-      return get(/databases/$(database)/documents/mi_comunidad_comunidades/$(comunidadId)).data.get('estado', 'Activa') != "Suspendida";
+      let comunidad = get(/databases/$(database)/documents/mi_comunidad_comunidades/$(comunidadId)).data;
+      let licenciaPath = /databases/$(database)/documents/mi_comunidad_licencias/$(comunidadId);
+      // Compatibilidad: edificios anteriores al sistema de licencias siguen
+      // operando hasta que exista una migración comercial explícita.
+      // Una licencia nueva, en cambio, debe estar vigente en el servidor.
+      return comunidad.get('estado', 'Activa') != "Suspendida" &&
+             (!exists(licenciaPath) ||
+              (get(licenciaPath).data.get('estado', '') == 'trial' &&
+               get(licenciaPath).data.get('trialEndsAt', timestamp.date(1970, 1, 1)) > request.time) ||
+              (get(licenciaPath).data.get('estado', '') in ['active', 'past_due'] &&
+               get(licenciaPath).data.get('paidUntil', timestamp.date(1970, 1, 1)) > request.time));
     }
 
     // Úsese en TODO el contenido operativo (las subcolecciones). El doc de la
