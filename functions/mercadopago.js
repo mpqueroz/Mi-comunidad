@@ -11,6 +11,7 @@ const ACCESS_TOKEN = defineSecret("MC_MP_ACCESS_TOKEN");
 const WEBHOOK_SECRET = defineSecret("MC_MP_WEBHOOK_SECRET");
 const PLAN_PRICE = defineSecret("MC_PLAN_ANUAL_CLP");
 const WEBHOOK_URL = defineSecret("MC_MP_WEBHOOK_URL");
+const MP_ENVIRONMENT = defineSecret("MC_MP_ENVIRONMENT");
 const ORDERS = "mi_comunidad_ordenes_pago";
 const LICENSES = "mi_comunidad_licencias";
 const API = "https://api.mercadopago.com";
@@ -103,11 +104,15 @@ async function flagReversedPayment(db, orderId, payment, paymentId) {
 }
 
 function registerMercadoPago() {
-  const createCheckout = onCall({secrets: [ACCESS_TOKEN, PLAN_PRICE, WEBHOOK_URL]}, async (request) => {
+  const createCheckout = onCall({secrets: [ACCESS_TOKEN, PLAN_PRICE, WEBHOOK_URL, MP_ENVIRONMENT]}, async (request) => {
     const token = request.auth?.token;
     if (!token || token.app !== "mi_comunidad" || token.role !== "admin" ||
         !/^[a-z0-9-]+$/.test(String(token.comunidadId || ""))) {
       throw new HttpsError("permission-denied", "Solo el administrador de la comunidad puede pagar.");
+    }
+    const environment = String(MP_ENVIRONMENT.value() || "");
+    if (!["test", "production"].includes(environment)) {
+      throw new HttpsError("failed-precondition", "Entorno de Mercado Pago no configurado.");
     }
     const amount = Number(PLAN_PRICE.value());
     const url = WEBHOOK_URL.value();
@@ -138,7 +143,9 @@ function registerMercadoPago() {
         }),
       });
       if (!pref.id || !/^https:\/\/[^\s]+$/.test(pref.init_point || "")) throw new Error("Preferencia incompleta");
-      const liveMode = !ACCESS_TOKEN.value().startsWith("TEST-");
+      // Las credenciales de prueba actuales también pueden comenzar con APP_USR.
+      // El entorno se declara explícitamente; nunca inferirlo del prefijo del token.
+      const liveMode = environment === "production";
       await orderRef.update({preferenceId: String(pref.id), liveMode, status: "checkout_ready"});
       return {checkoutUrl: pref.init_point, orderId: orderRef.id};
     } catch (err) {
