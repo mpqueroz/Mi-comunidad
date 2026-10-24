@@ -400,14 +400,17 @@ exports.crearComunidadMiComunidad = onCall(async (request) => {
     throw new HttpsError("internal", "No se pudo crear la cuenta del administrador: " + (err && err.message ? err.message : err));
   }
 
-  await getAuth().setCustomUserClaims(userRecord.uid, {
-    app: APP_ID,
-    role: "admin",
-    comunidadId: comunidadId,
-  });
+  // Si falla la asignación de permisos o el guardado de Firestore,
+  // revertimos la cuenta recién creada para permitir un nuevo intento.
+  try {
+    await getAuth().setCustomUserClaims(userRecord.uid, {
+      app: APP_ID,
+      role: "admin",
+      comunidadId: comunidadId,
+    });
 
-  const licenciaRef = db.collection(LICENCIAS_COLLECTION).doc(comunidadId);
-  const loteAlta = db.batch();
+    const licenciaRef = db.collection(LICENCIAS_COLLECTION).doc(comunidadId);
+    const loteAlta = db.batch();
   loteAlta.create(comunidadRef, {
     name,
     address: String(data.address || "").trim(),
@@ -427,7 +430,19 @@ exports.crearComunidadMiComunidad = onCall(async (request) => {
   });
   // La prueba se inicia una sola vez, con fecha calculada en el servidor.
   loteAlta.create(licenciaRef, createTrial(new Date()));
-  await loteAlta.commit();
+    await loteAlta.commit();
+  } catch (err) {
+    try {
+      await getAuth().deleteUser(userRecord.uid);
+    } catch (rollbackError) {
+      console.error("No se pudo revertir la cuenta del administrador:", rollbackError);
+    }
+    if (err && err.code === 6) {
+      throw new HttpsError("already-exists", "La comunidad ya fue creada por otra solicitud.");
+    }
+    console.error("Error al crear comunidad y licencia:", err);
+    throw new HttpsError("internal", "No se pudo completar el alta de la comunidad.");
+  }
 
   return {comunidadId, adminUid: userRecord.uid, adminEmail: email};
 });
