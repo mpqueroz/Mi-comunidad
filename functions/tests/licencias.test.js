@@ -75,3 +75,26 @@ test("no se aceptan períodos comerciales arbitrarios", () => {
   assert.throws(() => applyVerifiedRenewal({estado: "trial"}, {months: 0}));
   assert.throws(() => applyVerifiedRenewal({estado: "trial"}, {months: 120}));
 });
+
+
+test("el primer pago durante la prueba activa doce meses desde el cobro", () => {
+  const now = new Date("2026-10-26T12:00:00Z");
+  const license = createTrial(new Date("2026-10-24T12:00:00Z"));
+  const result = applyVerifiedRenewal(license, {now, months: 12});
+  assert.equal(result.estado, "active");
+  assert.equal(result.paidUntil.toISOString(), "2027-10-26T12:00:00.000Z");
+  assert.equal(evaluateLicense(result, new Date("2027-10-26T12:00:00Z")).allowed, false);
+});
+
+test("dos renovaciones anticipadas acumulan los doce meses sin perder saldo", () => {
+  const now = new Date("2026-10-24T00:00:00Z");
+  const first = applyVerifiedRenewal({estado: "trial"}, {now, months: 12});
+  const second = applyVerifiedRenewal(first, {now: new Date("2026-11-24T00:00:00Z"), months: 12});
+  assert.equal(second.paidUntil.toISOString(), "2028-10-24T00:00:00.000Z");
+});
+
+test("licencia vencida y suspensión bloquean acceso incluso con fechas futuras", () => {
+  const now = new Date("2026-10-24T12:00:00Z");
+  assert.equal(evaluateLicense({estado: "expired", paidUntil: new Date("2030-01-01T00:00:00Z")}, now).allowed, false);
+  assert.equal(evaluateLicense({estado: "suspended", trialEndsAt: new Date("2030-01-01T00:00:00Z")}, now).allowed, false);
+});
