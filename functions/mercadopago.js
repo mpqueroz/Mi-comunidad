@@ -2,6 +2,7 @@
 // Mercado Pago Checkout Pro. No desplegar sin configurar secretos y pruebas.
 const crypto = require("crypto");
 const {onCall, onRequest, HttpsError} = require("firebase-functions/v2/https");
+const {onSchedule} = require("firebase-functions/v2/scheduler");
 const {defineSecret} = require("firebase-functions/params");
 const {getFirestore, FieldValue} = require("firebase-admin/firestore");
 const {applyVerifiedRenewal} = require("./licencias");
@@ -49,6 +50,31 @@ function verifyPayment(payment, order, paymentId) {
     Number(payment.transaction_amount) === order.amount &&
     order.months === MONTHS &&
     payment.live_mode === order.liveMode;
+}
+
+// La misma transacción sirve para webhook y conciliación programada.
+async function settleVerifiedPayment(db, orderId, payment, paymentId) {
+  const orderRef = db.collection(ORDERS).doc(orderId);
+      return db.runTransaction(async (tx) => {
+        const orderSnap = await tx.get(orderRef);
+        if (!orderSnap.exists) throw new Error("Orden no encontrada: reintentar notificación");
+        const order = orderSnap.data();
+        if (order.status === "paid") return;
+        if (order.status !== "checkout_ready") throw new Error("Orden todavía no lista para confirmación");
+        if (!verifyPayment(payment, order, paymentId)) {
+          console.warn("Pago no coincide con orden", orderId);
+          return;
+        }
+        const licenseRef = db.collection(LICENSES).doc(order.comunidadId);
+        const licenseSnap = await tx.get(licenseRef);
+        if (!licenseSnap.exists) throw new Error("Licencia no encontrada: requiere conciliación");
+        if (licenseSnap.get("estado") === "suspended") return;
+        const updated = applyVerifiedRenewal(licenseSnap.data(), {months: MONTHS});
+        tx.update(licenseRef, {...updated, lastPaymentId: paymentId,
+          updatedAt: FieldValue.serverTimestamp()});
+        tx.update(orderRef, {status: "paid", paymentId,
+          paidAt: FieldValue.serverTimestamp()});
+      });
 }
 
 function registerMercadoPago() {
@@ -110,34 +136,46 @@ function registerMercadoPago() {
       if (payment.status !== "approved") return res.status(200).send("Pago aún no aprobado");
       const orderId = String(payment.external_reference || "");
       if (!/^[a-zA-Z0-9]{10,80}$/.test(orderId)) return res.status(200).send("Referencia inválida");
-      const db = getFirestore();
-      const orderRef = db.collection(ORDERS).doc(orderId);
-      await db.runTransaction(async (tx) => {
-        const orderSnap = await tx.get(orderRef);
-        if (!orderSnap.exists) throw new Error("Orden no encontrada: reintentar notificación");
-        const order = orderSnap.data();
-        if (order.status === "paid") return;
-        if (order.status !== "checkout_ready") throw new Error("Orden todavía no lista para confirmación");
-        if (!verifyPayment(payment, order, paymentId)) {
-          console.warn("Pago no coincide con orden", orderId);
-          return;
-        }
-        const licenseRef = db.collection(LICENSES).doc(order.comunidadId);
-        const licenseSnap = await tx.get(licenseRef);
-        if (!licenseSnap.exists) throw new Error("Licencia no encontrada: requiere conciliación");
-        if (licenseSnap.get("estado") === "suspended") return;
-        const updated = applyVerifiedRenewal(licenseSnap.data(), {months: MONTHS});
-        tx.update(licenseRef, {...updated, lastPaymentId: paymentId,
-          updatedAt: FieldValue.serverTimestamp()});
-        tx.update(orderRef, {status: "paid", paymentId,
-          paidAt: FieldValue.serverTimestamp()});
-      });
+      await settleVerifiedPayment(getFirestore(), orderId, payment, paymentId);
       return res.status(200).send("Recibido");
     } catch (err) {
       console.error("Error verificando pago", err);
       return res.status(500).send("Reintentar");
     }
   });
-  return {crearCheckoutMiComunidad: createCheckout, webhookMercadoPagoMiComunidad: webhook};
+  // Rescate de pagos aprobados cuando la notificación no llegó.
+  // Límite por ejecución para controlar costos y cuota de API.
+  const reconcile = onSchedule({
+    schedule: "every 60 minutes",
+    secrets: [ACCESS_TOKEN],
+    timeZone: "America/Santiago",
+  }, async () => {
+    const db = getFirestore();
+    const pending = await db.collection(ORDERS)
+      .where("status", "==", "checkout_ready").limit(30).get();
+    for (const doc of pending.docs) {
+      const order = doc.data();
+      try {
+        const search = await mpRequest("/v1/payments/search?external_reference=" +
+          encodeURIComponent(doc.id) + "&limit=20", ACCESS_TOKEN.value());
+        const results = Array.isArray(search.results) ? search.results : [];
+        for (const candidate of results) {
+          if (candidate.status !== "approved") continue;
+          const paymentId = String(candidate.id);
+          if (!/^\\d{1,20}$/.test(paymentId)) continue;
+          // Siempre consultar el recurso individual, no confiar solo en la búsqueda.
+          const payment = await mpRequest("/v1/payments/" + paymentId, ACCESS_TOKEN.value());
+          if (!verifyPayment(payment, order, paymentId)) continue;
+          await settleVerifiedPayment(db, doc.id, payment, paymentId);
+          break;
+        }
+      } catch (err) {
+        console.error("Conciliación pendiente", doc.id, err);
+      }
+    }
+  });
+  return {crearCheckoutMiComunidad: createCheckout,
+    webhookMercadoPagoMiComunidad: webhook,
+    conciliarPagosMiComunidad: reconcile};
 }
 module.exports = {registerMercadoPago, validateSignature, verifyPayment};
