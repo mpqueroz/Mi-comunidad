@@ -1,7 +1,7 @@
 "use strict";
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const {createTrial, evaluateLicense, canReadLicense, TRIAL_DAYS} = require("../licencias");
+const {createTrial, evaluateLicense, canReadLicense, applyVerifiedRenewal, TRIAL_DAYS} = require("../licencias");
 
 test("prueba dura exactamente siete días", () => {
   const start = new Date("2026-10-24T12:00:00Z");
@@ -46,4 +46,32 @@ test("residentes, conserjes y tokens ajenos no consultan licencias", () => {
 
 test("identificadores de comunidad inválidos son rechazados", () => {
   assert.equal(canReadLicense({app: "mi_comunidad", role: "superadmin"}, "../otro"), false);
+});
+
+test("renovación anticipada conserva días ya pagados", () => {
+  const license = {estado: "active", paidUntil: new Date("2026-12-15T00:00:00Z")};
+  const result = applyVerifiedRenewal(license, {now: new Date("2026-10-24T00:00:00Z"), months: 12});
+  assert.equal(result.paidUntil.toISOString(), "2027-12-15T00:00:00.000Z");
+});
+
+test("renovación vencida comienza desde el nuevo pago", () => {
+  const license = {estado: "expired", paidUntil: new Date("2026-09-01T00:00:00Z")};
+  const result = applyVerifiedRenewal(license, {now: new Date("2026-10-24T00:00:00Z"), months: 12});
+  assert.equal(result.paidUntil.toISOString(), "2027-10-24T00:00:00.000Z");
+});
+
+test("renovación al fin de mes ajusta fecha correctamente", () => {
+  const result = applyVerifiedRenewal({estado: "trial"}, {
+    now: new Date("2026-01-31T10:00:00Z"), months: 1,
+  });
+  assert.equal(result.paidUntil.toISOString(), "2026-02-28T10:00:00.000Z");
+});
+
+test("no se renueva automáticamente una comunidad suspendida", () => {
+  assert.throws(() => applyVerifiedRenewal({estado: "suspended"}, {months: 12}));
+});
+
+test("no se aceptan períodos comerciales arbitrarios", () => {
+  assert.throws(() => applyVerifiedRenewal({estado: "trial"}, {months: 0}));
+  assert.throws(() => applyVerifiedRenewal({estado: "trial"}, {months: 120}));
 });
