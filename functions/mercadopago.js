@@ -187,6 +187,8 @@ function registerMercadoPago() {
     const cursorRef = db.collection("mi_comunidad_config_comercial").doc("conciliacion");
     const cursorSnap = await cursorRef.get();
     const lastId = cursorSnap.exists ? String(cursorSnap.get("lastOrderId") || "") : "";
+    // Ordenación por ID de documento para que el cursor recorra todas las órdenes.
+    // Si llega al final, vuelve al comienzo en la próxima ejecución.
     const base = db.collection(ORDERS).where("status", "==", "checkout_ready")
       .orderBy("__name__");
     let pending = await (lastId ? base.startAfter(lastId) : base).limit(30).get();
