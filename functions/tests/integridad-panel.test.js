@@ -3,24 +3,25 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const read = p => fs.readFileSync(path.join(__dirname, p), "utf8");
 
-test("la página principal tiene un solo cierre HTML", () => {
-  const html = fs.readFileSync(path.join(__dirname, "../../public/index.html"), "utf8");
-  assert.equal((html.match(/<\\/html>/gi) || []).length, 1);
-  assert.equal((html.match(/function renderComunidades\\s*\\(/g) || []).length, 1);
+test("HTML principal íntegro", () => {
+  const html = read("../../public/index.html");
+  assert.equal(html.split("</html>").length - 1, 1);
+  assert.equal(html.split("function renderComunidades(){").length - 1, 1);
 });
 
-test("el panel comercial está conectado sin duplicar la vista de comunidades", () => {
-  const html = fs.readFileSync(path.join(__dirname, "../../public/index.html"), "utf8");
-  const panel = fs.readFileSync(path.join(__dirname, "../../public/comercial-panel.js"), "utf8");
-  assert.match(html, /comercial:\\s*renderPanelComercial/);
-  assert.match(html, /src="comercial-panel\\.js"/);
-  assert.match(panel, /async function renderPanelComercial\\(/);
-  assert.match(panel, /historialPagosMiComunidad/);
+test("panel comercial conectado", () => {
+  const html = read("../../public/index.html");
+  const panel = read("../../public/comercial-panel.js");
+  assert.ok(html.includes("comercial: renderPanelComercial"));
+  assert.ok(html.includes('src="comercial-panel.js"'));
+  assert.ok(panel.includes("async function renderPanelComercial()"));
+  assert.ok(panel.includes("historialPagosMiComunidad"));
 });
 
-test("el servidor registra los controles comerciales", () => {
-  const index = fs.readFileSync(path.join(__dirname, "../index.js"), "utf8");
-  assert.match(index, /require\\("\\.\\/comercial"\\)/);
-  assert.match(index, /require\\("\\.\\/rehabilitacion"\\)/);
+test("funciones comerciales registradas", () => {
+  const index = read("../index.js");
+  assert.ok(index.includes('require("./comercial")'));
+  assert.ok(index.includes('require("./rehabilitacion")'));
 });
