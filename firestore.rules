@@ -335,6 +335,17 @@ service cloud.firestore {
 
 
 
+    // Licencias comerciales: solo el backend (Admin SDK) puede escribir.
+    // El administrador puede consultar su propia vigencia para mostrar
+    // días restantes y el enlace de renovación. El superadmin puede
+    // consultar todas las licencias. Sin acceso entre comunidades.
+    match /mi_comunidad_licencias/{comunidadId} {
+      allow get: if mcEsSuperAdmin() ||
+                     (mcEsAdmin() && mcEsDeEstaComunidad(comunidadId));
+      allow list: if mcEsSuperAdmin();
+      allow create, update, delete: if false;
+    }
+
     // ---- Comunidad (datos generales del edificio) ----
     match /mi_comunidad_comunidades/{comunidadId} {
 
