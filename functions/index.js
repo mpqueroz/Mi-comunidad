@@ -571,6 +571,14 @@ exports.crearReservaMiComunidad = onCall(async (request) => {
     throw new HttpsError("failed-precondition", "Esta comunidad no está activa.");
   }
 
+  const licenciaReserva = await db.collection(LICENCIAS_COLLECTION).doc(comunidadId).get();
+  if (licenciaReserva.exists) {
+    const {evaluateLicense} = require("./licencias");
+    if (!evaluateLicense(licenciaReserva.data()).allowed) {
+      throw new HttpsError("failed-precondition", "Licencia no vigente.");
+    }
+  }
+
   await exigirCuentaActiva(request, comunidadId);
 
   // Cuenta como deuda: "Atrasado", o cualquier gasto no pagado ya vencido
