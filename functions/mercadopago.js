@@ -114,14 +114,18 @@ function registerMercadoPago() {
       const orderRef = db.collection(ORDERS).doc(orderId);
       await db.runTransaction(async (tx) => {
         const orderSnap = await tx.get(orderRef);
-        if (!orderSnap.exists) return;
+        if (!orderSnap.exists) throw new Error("Orden no encontrada: reintentar notificación");
         const order = orderSnap.data();
         if (order.status === "paid") return;
         if (order.status !== "checkout_ready") throw new Error("Orden todavía no lista para confirmación");
-        if (!verifyPayment(payment, order, paymentId)) return;
+        if (!verifyPayment(payment, order, paymentId)) {
+          console.warn("Pago no coincide con orden", orderId);
+          return;
+        }
         const licenseRef = db.collection(LICENSES).doc(order.comunidadId);
         const licenseSnap = await tx.get(licenseRef);
-        if (!licenseSnap.exists || licenseSnap.get("estado") === "suspended") return;
+        if (!licenseSnap.exists) throw new Error("Licencia no encontrada: requiere conciliación");
+        if (licenseSnap.get("estado") === "suspended") return;
         const updated = applyVerifiedRenewal(licenseSnap.data(), {months: MONTHS});
         tx.update(licenseRef, {...updated, lastPaymentId: paymentId,
           updatedAt: FieldValue.serverTimestamp()});
