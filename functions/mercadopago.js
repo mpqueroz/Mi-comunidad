@@ -194,7 +194,7 @@ function registerMercadoPago() {
         for (const candidate of results) {
           if (candidate.status !== "approved") continue;
           const paymentId = String(candidate.id);
-          if (!/^\\d{1,20}$/.test(paymentId)) continue;
+          if (!/^[0-9]{1,20}$/.test(paymentId)) continue;
           // Siempre consultar el recurso individual, no confiar solo en la búsqueda.
           const payment = await mpRequest("/v1/payments/" + paymentId, ACCESS_TOKEN.value());
           if (!verifyPayment(payment, order, paymentId)) continue;
