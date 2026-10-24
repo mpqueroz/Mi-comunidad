@@ -30,3 +30,10 @@ Configurar desde CLI autorizada con `firebase functions:secrets:set NOMBRE`, sel
 - Autorizar explícitamente despliegue solo después de pruebas.
 
 Documentación: https://www.mercadopago.cl/developers/es/docs/checkout-pro-orders/resources/notifications/webhooks
+
+## Conciliación programada (en desarrollo)
+- Función `conciliarPagosMiComunidad`: revisión horaria de hasta 30 órdenes `checkout_ready`, buscando pagos por `external_reference` y verificando el recurso individual antes de renovar.
+- La conciliación comparte la transacción idempotente del Webhook: dos avisos del mismo pago no deben duplicar períodos.
+- **Limitación antes de publicar:** la consulta actual toma las primeras 30 órdenes pendientes. Si se acumulan más de 30 sin resolución, las órdenes posteriores podrían no revisarse. Implementar paginación/cursor o cola con reintentos y límite de antigüedad.
+- Validar en entorno TEST la disponibilidad y formato de `GET /v1/payments/search?external_reference=...` y de `preference_id` en pagos Checkout Pro.
+- Registrar y tratar reembolsos, contracargos y pagos aprobados para comunidades suspendidas, evitando habilitaciones indebidas.
