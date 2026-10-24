@@ -22,8 +22,8 @@ Configurar desde CLI autorizada con `firebase functions:secrets:set NOMBRE`, sel
 - Verificar reglas Firestore de licencias y demás funciones que operan con Admin SDK.
 - Prueba extremo a extremo con cuenta TEST, firma real, webhook duplicado, monto incorrecto, pago rechazado, pago demorado, cancelación y reembolso/contracargo.
 - Confirmar precio anual, tratamiento de IVA/documentos tributarios, política de devoluciones, soporte y condiciones de servicio.
-- Definir manejo de pagos aprobados posteriormente reembolsados o contracargados: actualmente **no** revoca automáticamente licencias.
-- Confirmar cómo se recupera una compra aprobada si el webhook no se entrega; agregar reconciliación programada.
+- Verificar con eventos reales los reversos: el webhook marca la orden en revisión y suspende la licencia cuando corresponde al último pago, pero no cubre todos los tipos de disputa ni reembolsos parciales.
+- Validar con la API de pruebas la recuperación de compras mediante conciliación programada.
 - Definir y probar flujo de retorno desde Checkout Pro. **La página de retorno no activa licencias.**
 - Asegurar que el URL de pago devuelto coincida con los dominios admitidos por el navegador.
 - Mantener `firestore.rules` de Mercado Ciudadano y Almacén Digital sin cambios ajenos a Mi Comunidad.
@@ -32,9 +32,9 @@ Configurar desde CLI autorizada con `firebase functions:secrets:set NOMBRE`, sel
 Documentación: https://www.mercadopago.cl/developers/es/docs/checkout-pro-orders/resources/notifications/webhooks
 
 ## Conciliación programada (en desarrollo)
-- Función `conciliarPagosMiComunidad`: revisión horaria de hasta 30 órdenes `checkout_ready`, buscando pagos por `external_reference` y verificando el recurso individual antes de renovar.
+- Función `conciliarPagosMiComunidad`: revisión horaria de hasta 30 órdenes `checkout_ready` por ejecución, con cursor persistente y vuelta al inicio, buscando pagos por `external_reference` y verificando el recurso individual antes de renovar.
 - La conciliación comparte la transacción idempotente del Webhook: dos avisos del mismo pago no deben duplicar períodos.
-- **Limitación antes de publicar:** la consulta actual toma las primeras 30 órdenes pendientes. Si se acumulan más de 30 sin resolución, las órdenes posteriores podrían no revisarse. Implementar paginación/cursor o cola con reintentos y límite de antigüedad.
+- **Pendiente antes de publicar:** probar el cursor con más de 30 órdenes, fallos intermedios y ejecución concurrente; definir antigüedad máxima, alertas y reintentos para evitar órdenes abandonadas.
 - Validar en entorno TEST la disponibilidad y formato de `GET /v1/payments/search?external_reference=...` y de `preference_id` en pagos Checkout Pro.
 - Registrar y tratar reembolsos, contracargos y pagos aprobados para comunidades suspendidas, evitando habilitaciones indebidas.
 
