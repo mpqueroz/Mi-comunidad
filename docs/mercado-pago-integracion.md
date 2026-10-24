@@ -37,3 +37,10 @@ Documentación: https://www.mercadopago.cl/developers/es/docs/checkout-pro-order
 - **Limitación antes de publicar:** la consulta actual toma las primeras 30 órdenes pendientes. Si se acumulan más de 30 sin resolución, las órdenes posteriores podrían no revisarse. Implementar paginación/cursor o cola con reintentos y límite de antigüedad.
 - Validar en entorno TEST la disponibilidad y formato de `GET /v1/payments/search?external_reference=...` y de `preference_id` en pagos Checkout Pro.
 - Registrar y tratar reembolsos, contracargos y pagos aprobados para comunidades suspendidas, evitando habilitaciones indebidas.
+
+## Reembolsos y contracargos (implementación preliminar)
+- El Webhook de tipo `payment` consulta el pago directamente a Mercado Pago.
+- Estados `refunded` y `charged_back`: solo si coinciden referencia, preferencia, moneda, monto, modo y pago ya registrado, la orden pasa a `payment_review`.
+- Si la licencia conserva ese pago como `lastPaymentId`, se marca `suspended` con `suspensionReason=payment_reversed`. Requiere revisión del superadministrador.
+- Una orden antigua revertida no suspende automáticamente una licencia renovada después con otro pago.
+- **Antes de producción:** comprobar notificaciones reales de contracargos, que pueden usar otros tópicos/estados; validar reembolsos parciales, conciliación de pagos ya marcados `paid`, y un procedimiento seguro de restitución. Actualmente no hay monitorización periódica de pagos previamente aprobados.
