@@ -35,3 +35,32 @@ exports.resumenComercialMiComunidad = onCall(async (request) => {
     limitado: communities.size === 200 || licenses.size === 200 || reviews.size === 100,
   };
 });
+
+/**
+ * Historial comercial por comunidad. Solo lectura y únicamente superadmin.
+ * No devuelve credenciales, datos bancarios ni datos de residentes.
+ */
+exports.historialPagosMiComunidad = onCall(async (request) => {
+  const token = request.auth?.token;
+  if (token?.app !== "mi_comunidad" || token?.role !== "superadmin") {
+    throw new HttpsError("permission-denied", "Acceso reservado al superadministrador.");
+  }
+  const comunidadId = String(request.data?.comunidadId || "");
+  if (!/^[a-z0-9-]{1,100}$/.test(comunidadId)) {
+    throw new HttpsError("invalid-argument", "Identificador de comunidad inválido.");
+  }
+  const db = getFirestore();
+  const community = await db.collection("mi_comunidad_comunidades").doc(comunidadId).get();
+  if (!community.exists) throw new HttpsError("not-found", "Comunidad no encontrada.");
+  const snapshot = await db.collection("mi_comunidad_ordenes_pago")
+    .where("comunidadId", "==", comunidadId).limit(100).get();
+  const pagos = snapshot.docs.map((doc) => {
+    const p = doc.data();
+    return {id: doc.id, estado: String(p.status || ""),
+      monto: Number(p.amount) || 0, moneda: String(p.currency || "CLP"),
+      meses: Number(p.months) || 0,
+      creado: dateString(p.createdAt), pagado: dateString(p.paidAt),
+      paymentStatus: String(p.paymentStatus || "")};
+  }).sort((a, b) => String(b.creado || "").localeCompare(String(a.creado || "")));
+  return {comunidadId, pagos, limitado: snapshot.size === 100};
+});
