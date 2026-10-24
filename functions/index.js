@@ -36,6 +36,36 @@ const COMUNIDADES_COLLECTION = "mi_comunidad_comunidades";
 const LICENCIAS_COLLECTION = "mi_comunidad_licencias";
 const {createTrial} = require("./licencias");
 
+// Consulta segura para la pantalla comercial. No habilita escrituras ni pagos.
+exports.consultarLicenciaMiComunidad = onCall(async (request) => {
+  const token = request.auth && request.auth.token;
+  if (!token || token.app !== APP_ID ||
+      !["admin", "superadmin"].includes(token.role)) {
+    throw new HttpsError("permission-denied", "No autorizado para consultar licencias.");
+  }
+  const comunidadId = token.role === "superadmin" ?
+    String((request.data || {}).comunidadId || "").trim() :
+    String(token.comunidadId || "");
+  if (!/^[a-z0-9-]+$/.test(comunidadId)) {
+    throw new HttpsError("invalid-argument", "Comunidad inválida.");
+  }
+  const licenciaSnap = await getFirestore().collection(LICENCIAS_COLLECTION).doc(comunidadId).get();
+  if (!licenciaSnap.exists) return {comunidadId, estado: "sin_licencia", acceso: false};
+  const licencia = licenciaSnap.data();
+  const {evaluateLicense} = require("./licencias");
+  const resultado = evaluateLicense(licencia, new Date());
+  return {
+    comunidadId,
+    estado: licencia.estado || "sin_estado",
+    acceso: resultado.allowed,
+    motivo: resultado.reason,
+    trialEndsAt: licencia.trialEndsAt && licencia.trialEndsAt.toDate ?
+      licencia.trialEndsAt.toDate().toISOString() : null,
+    paidUntil: licencia.paidUntil && licencia.paidUntil.toDate ?
+      licencia.paidUntil.toDate().toISOString() : null,
+  };
+});
+
 // Debe coincidir EXACTO con limpiarRut() del index.html del front-end,
 // para que el mismo RUT siempre produzca el mismo email sintético.
 function limpiarRut(rut) {
