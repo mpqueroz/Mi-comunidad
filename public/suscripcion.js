@@ -38,7 +38,9 @@
       '<p>' + descripcion + '</p>' +
       '<p><strong>' + dias + '</strong> días restantes</p>' +
       '<p>Vencimiento: ' + textoSeguro(formatoFecha(fecha)) + '</p>' +
-      '<p class="mc-suscripcion-nota">La contratación en línea estará disponible próximamente. Contacta a Nodar Logic para renovar.</p>' +
+      '<p class="mc-suscripcion-nota">La contratación en línea estará disponible próximamente. Puedes renovar tu suscripción con Mercado Pago.</p>' +
+      '<button type="button" id="mc-pagar-licencia" class="btn btn-primary" style="margin-top:16px">Pagar suscripción anual</button>' +
+      '<p id="mc-estado-pago" role="status" aria-live="polite"></p>' +
       '</section>';
   }
 
@@ -48,6 +50,26 @@
     try {
       const resultado = await functions.httpsCallable("consultarLicenciaMiComunidad")({comunidadId: comunidadId});
       contenedor.innerHTML = htmlLicencia(resultado.data);
+      const boton = contenedor.querySelector("#mc-pagar-licencia");
+      boton.addEventListener("click", async function () {
+        boton.disabled = true;
+        const estado = contenedor.querySelector("#mc-estado-pago");
+        estado.textContent = "Preparando pago seguro…";
+        try {
+          const pago = await functions.httpsCallable("crearCheckoutMiComunidad")({});
+          const url = pago.data && pago.data.checkoutUrl;
+          const parsed = new URL(url);
+          if (parsed.protocol !== "https:" || !/(^|\\.)mercadopago\\.(cl|com)$/.test(parsed.hostname) &&
+              !/(^|\\.)mercadopago\\.com\\.(cl|ar|br|mx)$/.test(parsed.hostname)) {
+            throw new Error("Destino de pago inválido");
+          }
+          window.location.assign(parsed.href);
+        } catch (err) {
+          estado.textContent = "No se pudo iniciar el pago. Intenta nuevamente.";
+          boton.disabled = false;
+          console.error(err);
+        }
+      });
     } catch (error) {
       contenedor.textContent = "No fue posible consultar la suscripción. Intenta nuevamente.";
       throw error;
