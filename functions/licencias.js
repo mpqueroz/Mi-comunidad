@@ -44,4 +44,11 @@ function evaluateLicense(license, now = new Date()) {
   return {allowed: false, reason: "expired"};
 }
 
-module.exports = {TRIAL_DAYS, STATES, createTrial, evaluateLicense};
+function canReadLicense(token, comunidadId) {
+  if (!token || token.app !== "mi_comunidad" || typeof comunidadId !== "string" ||
+      !/^[a-z0-9-]+$/.test(comunidadId)) return false;
+  return token.role === "superadmin" ||
+    (token.role === "admin" && token.comunidadId === comunidadId);
+}
+
+module.exports = {TRIAL_DAYS, STATES, createTrial, evaluateLicense, canReadLicense};
