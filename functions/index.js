@@ -167,6 +167,14 @@ exports.crearCuentaMiComunidad = onCall(async (request) => {
     );
   }
 
+  const licencia = await db.collection(LICENCIAS_COLLECTION).doc(comunidadId).get();
+  if (licencia.exists) {
+    const {evaluateLicense} = require("./licencias");
+    if (!evaluateLicense(licencia.data()).allowed) {
+      throw new HttpsError("failed-precondition", "Licencia no vigente.");
+    }
+  }
+
   const email = rutToEmail(rut);
   let userRecord;
 
