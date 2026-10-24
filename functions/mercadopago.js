@@ -87,7 +87,7 @@ function registerMercadoPago() {
         }),
       });
       if (!pref.id || !/^https:\/\/[^\s]+$/.test(pref.init_point || "")) throw new Error("Preferencia incompleta");
-      const liveMode = !String(pref.init_point).includes("sandbox");
+      const liveMode = !ACCESS_TOKEN.value().startsWith("TEST-");
       await orderRef.update({preferenceId: String(pref.id), liveMode, status: "checkout_ready"});
       return {checkoutUrl: pref.init_point, orderId: orderRef.id};
     } catch (err) {
@@ -117,7 +117,8 @@ function registerMercadoPago() {
         if (!orderSnap.exists) return;
         const order = orderSnap.data();
         if (order.status === "paid") return;
-        if (order.status !== "checkout_ready" || !verifyPayment(payment, order, paymentId)) return;
+        if (order.status !== "checkout_ready") throw new Error("Orden todavía no lista para confirmación");
+        if (!verifyPayment(payment, order, paymentId)) return;
         const licenseRef = db.collection(LICENSES).doc(order.comunidadId);
         const licenseSnap = await tx.get(licenseRef);
         if (!licenseSnap.exists || licenseSnap.get("estado") === "suspended") return;
