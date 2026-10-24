@@ -77,6 +77,31 @@ async function settleVerifiedPayment(db, orderId, payment, paymentId) {
       });
 }
 
+// Reversos: bloquear solo si esta compra es la última aplicada.
+// No recalcular ni quitar períodos históricos sin una revisión contable.
+async function flagReversedPayment(db, orderId, payment, paymentId) {
+  const orderRef = db.collection(ORDERS).doc(orderId);
+  return db.runTransaction(async (tx) => {
+    const orderSnap = await tx.get(orderRef);
+    if (!orderSnap.exists) return;
+    const order = orderSnap.data();
+    if (order.status !== "paid" || String(order.paymentId) !== paymentId) return;
+    if (payment.external_reference !== orderId ||
+        String(payment.preference_id) !== String(order.preferenceId) ||
+        Number(payment.transaction_amount) !== order.amount ||
+        payment.currency_id !== "CLP" ||
+        payment.live_mode !== order.liveMode) return;
+    const licenseRef = db.collection(LICENSES).doc(order.comunidadId);
+    const licenseSnap = await tx.get(licenseRef);
+    tx.update(orderRef, {status: "payment_review", paymentStatus: payment.status,
+      reviewedAt: FieldValue.serverTimestamp()});
+    if (licenseSnap.exists && String(licenseSnap.get("lastPaymentId")) === paymentId) {
+      tx.update(licenseRef, {estado: "suspended", suspensionReason: "payment_reversed",
+        updatedAt: FieldValue.serverTimestamp()});
+    }
+  });
+}
+
 function registerMercadoPago() {
   const createCheckout = onCall({secrets: [ACCESS_TOKEN, PLAN_PRICE, WEBHOOK_URL]}, async (request) => {
     const token = request.auth?.token;
@@ -133,6 +158,13 @@ function registerMercadoPago() {
     try {
       const paymentId = String(req.query["data.id"]);
       const payment = await mpRequest("/v1/payments/" + paymentId, ACCESS_TOKEN.value());
+      if (["refunded", "charged_back"].includes(payment.status)) {
+        const orderId = String(payment.external_reference || "");
+        if (/^[a-zA-Z0-9]{10,80}$/.test(orderId)) {
+          await flagReversedPayment(getFirestore(), orderId, payment, paymentId);
+        }
+        return res.status(200).send("Reverso registrado para revisión");
+      }
       if (payment.status !== "approved") return res.status(200).send("Pago aún no aprobado");
       const orderId = String(payment.external_reference || "");
       if (!/^[a-zA-Z0-9]{10,80}$/.test(orderId)) return res.status(200).send("Referencia inválida");
