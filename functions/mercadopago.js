@@ -183,8 +183,14 @@ function registerMercadoPago() {
     timeZone: "America/Santiago",
   }, async () => {
     const db = getFirestore();
-    const pending = await db.collection(ORDERS)
-      .where("status", "==", "checkout_ready").limit(30).get();
+    // Cursor persistente: evita revisar siempre las primeras 30 órdenes.
+    const cursorRef = db.collection("mi_comunidad_config_comercial").doc("conciliacion");
+    const cursorSnap = await cursorRef.get();
+    const lastId = cursorSnap.exists ? String(cursorSnap.get("lastOrderId") || "") : "";
+    const base = db.collection(ORDERS).where("status", "==", "checkout_ready")
+      .orderBy("__name__");
+    let pending = await (lastId ? base.startAfter(lastId) : base).limit(30).get();
+    if (pending.empty && lastId) pending = await base.limit(30).get();
     for (const doc of pending.docs) {
       const order = doc.data();
       try {
@@ -204,6 +210,10 @@ function registerMercadoPago() {
       } catch (err) {
         console.error("Conciliación pendiente", doc.id, err);
       }
+    }
+    if (!pending.empty) {
+      await cursorRef.set({lastOrderId: pending.docs[pending.docs.length - 1].id,
+        updatedAt: FieldValue.serverTimestamp()}, {merge: true});
     }
   });
   return {crearCheckoutMiComunidad: createCheckout,
