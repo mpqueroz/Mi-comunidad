@@ -967,6 +967,7 @@ exports.actualizarVencimientosMiComunidad = onSchedule(
 
 // Cobro comercial aislado de las demás aplicaciones del proyecto compartido.
 Object.assign(exports, require("./mercadopago").registerMercadoPago());
+Object.assign(exports, require("./comercial"));
 
 // Operación profesional añadida; se conservan las funciones existentes de identidad.
 const profesional = require('./profesional')({firestore: Object.assign(() => getFirestore(), {FieldValue, Timestamp})}, onCall, HttpsError);
