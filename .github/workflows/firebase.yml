@@ -50,7 +50,7 @@ jobs:
           java-version: 21
       - name: Instalar dependencias
         working-directory: tests
-        run: npm ci
+        run: npm install --no-audit --no-fund
       - name: Revisar que las functions cargan
         working-directory: functions
         run: |
