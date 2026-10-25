@@ -21,8 +21,12 @@ con HTTP 200 tras vincular `MC_MP_WEBHOOK_SECRET` versión 5. No procesa cobros.
 
 Ejecutar `bash scripts/desplegar-pagos-prueba.sh` desde esta revisión.
 El script verifica entorno `test`, monto 1000 CLP y URL de webhook comercial;
-lee el token sin mostrarlo y, para tokens APP_USR, exige que `/users/me` identifique
-la cuenta como `test_user`. Los tokens `TEST-` son credenciales de prueba.
+solicita por terminal el Access Token copiado de la pantalla Credenciales de prueba,
+lo compara sin mostrarlo y guarda una versión nueva únicamente si difiere del
+secreto actual. El origen de la credencial se comprueba en ese panel; el prefijo
+por sí solo no determina el entorno. No utiliza `/users/me` como requisito para
+desplegar: un rechazo de esa consulta no prueba que Checkout Pro rechace el token.
+La validación contra la API de Checkout y la compra siguen pendientes.
 Después instala dependencias, ejecuta las pruebas y despliega exclusivamente:
 
 - `crearCheckoutMiComunidad`

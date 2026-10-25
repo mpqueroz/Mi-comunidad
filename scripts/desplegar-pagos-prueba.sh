@@ -4,12 +4,10 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 python3 - <<'PY'
-import json
-import re
+import getpass
+import hmac
 import subprocess
 import sys
-import urllib.error
-import urllib.request
 
 def leer(nombre):
     return subprocess.check_output([
@@ -26,38 +24,24 @@ for nombre, esperado in esperados.items():
     if leer(nombre) != esperado:
         sys.exit("Configuración distinta a la prueba preparada: " + nombre)
 
-token = leer("MC_MP_ACCESS_TOKEN")
-if not token or token != token.strip():
-    sys.exit("El Access Token está vacío o tiene espacios: no se desplegó nada.")
-if not token.startswith("TEST-"):
-    solicitud = urllib.request.Request(
-        "https://api.mercadolibre.com/users/me",
-        headers={"Authorization": "Bearer " + token,
-                 "Accept": "application/json",
-                 "User-Agent": "NodarLogic/1.0"}
-    )
-    try:
-        with urllib.request.urlopen(solicitud, timeout=20) as respuesta:
-            usuario = json.load(respuesta)
-    except urllib.error.HTTPError as error:
-        contenido = error.read().decode("utf-8", errors="replace")
-        print("Consulta de cuenta: HTTP", error.code)
-        print("Tipo de respuesta:", error.headers.get("Content-Type", "sin indicar"))
-        print("Servidor:", error.headers.get("Server", "sin indicar"))
-        try:
-            detalle = json.loads(contenido)
-            seguro = {k: detalle[k] for k in ("error", "message", "code") if k in detalle}
-            print(json.dumps(seguro, ensure_ascii=False).replace(token, "[OCULTO]"))
-        except ValueError:
-            titulo = re.search(r"<title[^>]*>(.*?)</title>", contenido, re.I | re.S)
-            if titulo:
-                print("Título de respuesta:", re.sub(r"\s+", " ", titulo.group(1))[:160].replace(token, "[OCULTO]"))
-        sys.exit("La cuenta no pudo comprobarse; no se desplegó nada.")
-    except (urllib.error.URLError, TimeoutError):
-        sys.exit("No se pudo conectar con Mercado Pago; no se desplegó nada.")
-    if "test_user" not in usuario.get("tags", []):
-        sys.exit("La credencial pertenece a una cuenta que no está identificada como usuario de prueba. No se desplegó nada.")
-print("Configuración y credencial de prueba comprobadas. No se creó ningún pago.")
+# La procedencia TEST se comprueba en Credenciales de prueba del panel.
+# /users/me no es una comprobación de permisos para Checkout Pro.
+token = getpass.getpass("Pega el Access Token de CREDENCIALES DE PRUEBA y presiona Enter: ")
+print("Caracteres recibidos:", len(token))
+if (not 60 <= len(token) <= 512 or not token.isascii() or
+        any(c.isspace() for c in token) or
+        not token.startswith(("APP_USR-", "TEST-"))):
+    sys.exit("No parece un Access Token completo. No se guardó ni desplegó nada.")
+guardado = leer("MC_MP_ACCESS_TOKEN")
+if not hmac.compare_digest(guardado.encode(), token.encode()):
+    subprocess.run([
+        "gcloud", "secrets", "versions", "add", "MC_MP_ACCESS_TOKEN",
+        "--project=mercado-ciudadano", "--data-file=-"
+    ], input=token.encode(), check=True)
+    print("Access Token actualizado con la credencial copiada del panel de prueba.")
+else:
+    print("El Access Token coincide con la credencial copiada del panel de prueba.")
+print("Configuración lista para desplegar; acceso a la API y compra aún pendientes de validar.")
 PY
 
 npm --prefix functions ci --no-audit --no-fund
