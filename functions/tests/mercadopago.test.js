@@ -73,3 +73,22 @@ test("no acepta pagos de otra orden ni identificadores diferentes", () => {
   }
   assert.equal(helpers.verifyPayment(payment, {...order, months: 6}, "99"), false);
 });
+
+test("acepta espacios en encabezado x-signature de Mercado Pago", () => {
+  const secret = "clave-de-prueba";
+  const ts = "1792843200";
+  const id = "123456";
+  const requestId = "test-request";
+  const manifest = "id:" + id + ";request-id:" + requestId + ";ts:" + ts + ";";
+  const hash = crypto.createHmac("sha256", secret).update(manifest).digest("hex");
+  const now = Number(ts) * 1000;
+  for (const signature of [
+    "ts=" + ts + ", v1=" + hash,
+    "v1=" + hash + ", ts=" + ts,
+    "ts=" + ts + " , v1=" + hash,
+  ]) {
+    assert.equal(helpers.validateSignature(
+      {"x-signature": signature, "x-request-id": requestId},
+      {"data.id": id}, secret, now), true);
+  }
+});
