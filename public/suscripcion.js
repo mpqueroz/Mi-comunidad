@@ -59,8 +59,8 @@
           const pago = await functions.httpsCallable("crearCheckoutMiComunidad")({});
           const url = pago.data && pago.data.checkoutUrl;
           const parsed = new URL(url);
-          if (parsed.protocol !== "https:" || !/(^|\\.)mercadopago\\.(cl|com)$/.test(parsed.hostname) &&
-              !/(^|\\.)mercadopago\\.com\\.(cl|ar|br|mx)$/.test(parsed.hostname)) {
+          if (parsed.protocol !== "https:" || !/(^|\.)mercadopago\.(cl|com)$/.test(parsed.hostname) &&
+              !/(^|\.)mercadopago\.com\.(cl|ar|br|mx)$/.test(parsed.hostname)) {
             throw new Error("Destino de pago inválido");
           }
           window.location.assign(parsed.href);
@@ -78,3 +78,4 @@
 
   window.MiComunidadSuscripcion = {mostrar, htmlLicencia, diasRestantes};
 }());
+

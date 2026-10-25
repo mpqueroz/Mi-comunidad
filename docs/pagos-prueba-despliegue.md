@@ -48,3 +48,21 @@ Referencias primarias:
 - https://github.com/mercadopago/sdk-nodejs/blob/master/src/clients/payment/commonTypes.ts
 - https://www.mercadopago.cl/developers/es/reference/online-payments/checkout-pro-preferences/merchant-orders/search-merchant-order/get
 - https://firebase.google.com/docs/functions/config-env
+
+## Vista temporal y acceso técnico
+
+`bash scripts/publicar-pagos-prueba.sh` instala dependencias, ejecuta 36 pruebas
+locales, despliega solo la consulta de licencia y publica `payment-preview/` en el
+canal Hosting `pagos-prueba`, con vencimiento de siete días. El canal principal
+no se publica. No vuelve a desplegar las dos funciones de cobro ya activas.
+
+El script crea exclusivamente la comunidad `nodar-pagos-prueba-20261025` y el
+usuario técnico `nodar-mp-prueba-20261025`. Si los encuentra, exige que sean de la
+prueba y conserva la licencia existente; nunca reinicia una vigencia pagada.
+Genera una contraseña temporal nueva para esa cuenta y la muestra solo en Cloud
+Shell para entrar al panel. El SDK Admin usa el acceso de gcloud en memoria.
+No guarda tokens Google ni contraseñas en el repositorio o en Hosting.
+
+El panel acepta únicamente ese administrador técnico. Después del checkout,
+volver a su URL y consultar la licencia. La prueba contra la API real sigue
+pendiente hasta comprobar orden pagada, licencia y recepción del webhook.

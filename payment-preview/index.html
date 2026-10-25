@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prueba de pagos · Mi Comunidad Digital</title>
+<style>
+:root{font-family:system-ui,sans-serif;color:#172842;background:#f2f5fa;color-scheme:light}*{box-sizing:border-box}body{margin:0;padding:32px 18px}main{max-width:580px;margin:auto}.brand{font-weight:750;letter-spacing:.06em;font-size:13px;color:#2369c6}.badge{display:inline-block;background:#fff0c2;color:#715100;border-radius:20px;padding:7px 12px;font-size:13px;margin-top:18px}h1{font-size:30px;line-height:1.15;margin:18px 0 12px}p{line-height:1.6}section{background:white;border:1px solid #dbe3ef;border-radius:20px;padding:24px;margin:20px 0;box-shadow:0 5px 20px #162a4505}label{display:block;font-weight:650;margin:18px 0 7px}input,button{width:100%;font:inherit;border-radius:10px;padding:14px}input{border:1px solid #b7c4d6;background:#fff;color:#172842}button{border:0;cursor:pointer;background:#1762c5;color:white;font-weight:650;margin-top:18px}button.secondary{background:#edf3fb;color:#174b8c}button:disabled{opacity:.5;cursor:wait}.muted{color:#53657c;font-size:14px}.error{color:#a32832}.status{white-space:pre-line;padding:14px;border-radius:12px;background:#f2f6fc;line-height:1.6}.paid{background:#e8f7ee;color:#175b38}[hidden]{display:none!important}.small{font-size:13px}footer{color:#65738a;font-size:13px;text-align:center;padding:16px}a{color:#1762c5}
+</style>
+</head>
+<body><main>
+<div class="brand">NODAR LOGIC · MI COMUNIDAD DIGITAL</div>
+<span class="badge">Entorno de prueba</span>
+<h1>Comprobemos el pago y la licencia</h1>
+<p class="muted">Acceso exclusivo a la comunidad técnica de prueba. Utiliza únicamente el comprador y la tarjeta de prueba de Mercado Pago.</p>
+<section id="login"><h2>Acceso temporal</h2>
+<form id="form"><label for="email">Correo del acceso de prueba</label><input id="email" type="email" autocomplete="username" required>
+<label for="password">Contraseña temporal</label><input id="password" type="password" autocomplete="current-password" required>
+<button id="enter">Ingresar</button></form><p id="login-status" role="status" class="error"></p></section>
+<section id="panel" hidden><h2>Comunidad de prueba Nodar</h2><p class="muted">Plan de prueba: $1.000 CLP · 12 meses</p>
+<div id="license" class="status" role="status">Consultando licencia…</div>
+<button id="pay" disabled>Iniciar pago de prueba · $1.000</button>
+<button id="refresh" class="secondary">Comprobar licencia después del pago</button>
+<p id="payment-status" role="status" class="muted"></p>
+<p id="order" class="small muted"></p>
+<p class="small muted">Después de pagar, vuelve a esta página y pulsa «Comprobar licencia». La licencia solo se activa cuando el servidor verifica el pago.</p>
+<button id="logout" class="secondary">Cerrar sesión de prueba</button></section>
+<footer>Esta página no modifica la aplicación principal.</footer>
+</main>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-functions-compat.js"></script>
+<script>
+"use strict";
+firebase.initializeApp({apiKey:"AIzaSyBJ7Zusnt0i3ZN7kg7rQr0BrBfB5aby23c",authDomain:"mercado-ciudadano.firebaseapp.com",projectId:"mercado-ciudadano",appId:"1:165528119795:web:6590d7dd3f164e7c70ca86"});
+const auth=firebase.auth(), functions=firebase.functions(), target="nodar-pagos-prueba-20261025";
+const el=id=>document.getElementById(id);
+let allowed=false;
+function message(error){return error&&error.message?error.message:"No fue posible completar la operación.";}
+function allowedCheckout(raw){try{const u=new URL(raw);return u.protocol==="https:"&&/(^|\.)mercadopago\.(cl|com)$/.test(u.hostname);}catch{return false;}}
+async function refresh(){
+  if(!allowed)return;
+  el("refresh").disabled=true;
+  try{
+    const response=await functions.httpsCallable("consultarLicenciaMiComunidad")({comunidadId:target});
+    const d=response.data||{},until=d.paidUntil?new Date(d.paidUntil).toLocaleString("es-CL",{timeZone:"America/Santiago"}):"Aún sin pago confirmado";
+    el("license").textContent="Estado: "+d.estado+"\nVigencia pagada: "+until;
+    el("license").classList.toggle("paid",d.estado==="active"&&d.acceso===true);
+    el("pay").disabled=d.estado==="sin_licencia"||d.estado==="suspended"||d.estado==="active";
+    if(d.estado==="active"&&d.acceso===true)el("payment-status").textContent="Licencia activa. Ahora comprobaremos la orden pagada y el aviso duplicado.";
+  }catch(e){el("payment-status").textContent=message(e);}
+  finally{el("refresh").disabled=false;}
+}
+el("form").addEventListener("submit",async e=>{
+  e.preventDefault();el("enter").disabled=true;el("login-status").textContent="Ingresando…";
+  try{await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);await auth.signInWithEmailAndPassword(el("email").value.trim(),el("password").value);el("password").value="";}
+  catch(error){el("login-status").textContent=message(error);}
+  finally{el("enter").disabled=false;}
+});
+auth.onAuthStateChanged(async user=>{
+  allowed=false;
+  if(!user){el("login").hidden=false;el("panel").hidden=true;return;}
+  try{
+    const {claims}=await user.getIdTokenResult(true);
+    if(claims.app!=="mi_comunidad"||claims.role!=="admin"||claims.comunidadId!==target){
+      await auth.signOut();el("login-status").textContent="Usa el acceso temporal de la comunidad de prueba.";return;
+    }
+    allowed=true;el("login").hidden=true;el("panel").hidden=false;await refresh();
+    const order=sessionStorage.getItem("mc-mp-test-order");if(order)el("order").textContent="Orden de prueba: "+order;
+  }catch(error){el("login-status").textContent=message(error);}
+});
+el("pay").addEventListener("click",async()=>{
+  if(!allowed)return;
+  el("pay").disabled=true;el("payment-status").textContent="Preparando Checkout Pro…";
+  try{
+    const response=await functions.httpsCallable("crearCheckoutMiComunidad")({});
+    const d=response.data||{};
+    if(!allowedCheckout(d.checkoutUrl))throw new Error("La dirección de Checkout no es válida.");
+    sessionStorage.setItem("mc-mp-test-order",d.orderId);
+    location.assign(d.checkoutUrl);
+  }catch(error){el("payment-status").textContent=message(error);el("pay").disabled=false;}
+});
+el("refresh").addEventListener("click",refresh);
+el("logout").addEventListener("click",()=>auth.signOut());
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&allowed)refresh();});
+</script></body></html>
