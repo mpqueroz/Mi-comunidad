@@ -43,7 +43,8 @@ function validateSignature(headers, query, secret, now = Date.now()) {
 }
 
 function verifyPayment(payment, order, paymentId) {
-  return String(payment.id) === String(paymentId) &&
+  return typeof order.preferenceId === "string" && order.preferenceId.length > 0 &&
+    String(payment.id) === String(paymentId) &&
     payment.status === "approved" &&
     payment.external_reference === order.id &&
     String(payment.preference_id) === String(order.preferenceId) &&
@@ -51,6 +52,26 @@ function verifyPayment(payment, order, paymentId) {
     Number(payment.transaction_amount) === order.amount &&
     order.months === MONTHS &&
     payment.live_mode === order.liveMode;
+}
+
+// Payments no garantiza preference_id: Checkout Pro la publica en merchant_orders.
+// Consultar ambos recursos con el mismo token y verificar su relación antes de usarla.
+async function fetchCheckoutPayment(paymentId, token, request = mpRequest) {
+  if (!/^\d{1,20}$/.test(String(paymentId))) throw new Error("Identificador de pago inválido");
+  const payment = await request("/v1/payments/" + paymentId, token);
+  if (String(payment.id) !== String(paymentId)) throw new Error("Pago distinto al solicitado");
+  if (!["approved", "refunded", "charged_back"].includes(payment.status)) return payment;
+  const merchantId = String(payment.order?.id || "");
+  if (!/^\d{1,20}$/.test(merchantId)) throw new Error("Pago sin orden comercial verificable");
+  const merchant = await request("/merchant_orders/" + merchantId, token);
+  if (String(merchant.id) !== merchantId ||
+      merchant.external_reference !== payment.external_reference ||
+      typeof merchant.preference_id !== "string" || !merchant.preference_id ||
+      !Array.isArray(merchant.payments) ||
+      !merchant.payments.some(p => String(p.id) === String(paymentId))) {
+    throw new Error("El pago no corresponde a la orden comercial");
+  }
+  return {...payment, preference_id: merchant.preference_id};
 }
 
 // La misma transacción sirve para webhook y conciliación programada.
@@ -154,7 +175,7 @@ function registerMercadoPago() {
     }
   });
 
-  const webhook = onRequest({secrets: [ACCESS_TOKEN, WEBHOOK_SECRET]}, async (req, res) => {
+  const webhook = onRequest({secrets: [ACCESS_TOKEN, WEBHOOK_SECRET], invoker: "public"}, async (req, res) => {
     if (req.method !== "POST") return res.status(405).send("Método no permitido");
     if (!validateSignature(req.headers, req.query, WEBHOOK_SECRET.value())) {
       return res.status(401).send("Firma inválida");
@@ -164,7 +185,7 @@ function registerMercadoPago() {
     }
     try {
       const paymentId = String(req.query["data.id"]);
-      const payment = await mpRequest("/v1/payments/" + paymentId, ACCESS_TOKEN.value());
+      const payment = await fetchCheckoutPayment(paymentId, ACCESS_TOKEN.value());
       if (["refunded", "charged_back"].includes(payment.status)) {
         const orderId = String(payment.external_reference || "");
         if (/^[a-zA-Z0-9]{10,80}$/.test(orderId)) {
@@ -211,7 +232,7 @@ function registerMercadoPago() {
           const paymentId = String(candidate.id);
           if (!/^[0-9]{1,20}$/.test(paymentId)) continue;
           // Siempre consultar el recurso individual, no confiar solo en la búsqueda.
-          const payment = await mpRequest("/v1/payments/" + paymentId, ACCESS_TOKEN.value());
+          const payment = await fetchCheckoutPayment(paymentId, ACCESS_TOKEN.value());
           if (!verifyPayment(payment, order, paymentId)) continue;
           await settleVerifiedPayment(db, doc.id, payment, paymentId);
           break;
@@ -229,4 +250,5 @@ function registerMercadoPago() {
     webhookMercadoPagoMiComunidad: webhook,
     conciliarPagosMiComunidad: reconcile};
 }
-module.exports = {registerMercadoPago, validateSignature, verifyPayment};
+module.exports = {registerMercadoPago, validateSignature, verifyPayment, fetchCheckoutPayment};
+

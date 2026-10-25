@@ -9,6 +9,7 @@ let helpers;
 try {
   Module._load = function(name, parent, isMain) {
     if (name === "firebase-functions/v2/https") return {onCall: () => {}, onRequest: () => {}};
+    if (name === "firebase-functions/v2/scheduler") return {onSchedule: () => {}};
     if (name === "firebase-functions/params") return {defineSecret: () => ({})};
     if (name === "firebase-admin/firestore") return {getFirestore: () => {}, FieldValue: {}};
     return originalLoad.call(this, name, parent, isMain);
@@ -92,3 +93,4 @@ test("acepta espacios en encabezado x-signature de Mercado Pago", () => {
       {"data.id": id}, secret, now), true);
   }
 });
+
