@@ -31,7 +31,7 @@ if not token or token != token.strip():
     sys.exit("El Access Token está vacío o tiene espacios: no se desplegó nada.")
 if not token.startswith("TEST-"):
     solicitud = urllib.request.Request(
-        "https://api.mercadopago.com/users/me",
+        "https://api.mercadolibre.com/users/me",
         headers={"Authorization": "Bearer " + token,
                  "Accept": "application/json",
                  "User-Agent": "NodarLogic/1.0"}
