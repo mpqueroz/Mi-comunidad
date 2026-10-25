@@ -5,6 +5,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 python3 - <<'PY'
 import json
+import re
 import subprocess
 import sys
 import urllib.error
@@ -31,13 +32,29 @@ if not token or token != token.strip():
 if not token.startswith("TEST-"):
     solicitud = urllib.request.Request(
         "https://api.mercadopago.com/users/me",
-        headers={"Authorization": "Bearer " + token}
+        headers={"Authorization": "Bearer " + token,
+                 "Accept": "application/json",
+                 "User-Agent": "NodarLogic/1.0"}
     )
     try:
         with urllib.request.urlopen(solicitud, timeout=20) as respuesta:
             usuario = json.load(respuesta)
     except urllib.error.HTTPError as error:
-        sys.exit("No se pudo validar la credencial (HTTP " + str(error.code) + "). No se desplegó nada.")
+        contenido = error.read().decode("utf-8", errors="replace")
+        print("Consulta de cuenta: HTTP", error.code)
+        print("Tipo de respuesta:", error.headers.get("Content-Type", "sin indicar"))
+        print("Servidor:", error.headers.get("Server", "sin indicar"))
+        try:
+            detalle = json.loads(contenido)
+            seguro = {k: detalle[k] for k in ("error", "message", "code") if k in detalle}
+            print(json.dumps(seguro, ensure_ascii=False).replace(token, "[OCULTO]"))
+        except ValueError:
+            titulo = re.search(r"<title[^>]*>(.*?)</title>", contenido, re.I | re.S)
+            if titulo:
+                print("Título de respuesta:", re.sub(r"\s+", " ", titulo.group(1))[:160].replace(token, "[OCULTO]"))
+        sys.exit("La cuenta no pudo comprobarse; no se desplegó nada.")
+    except (urllib.error.URLError, TimeoutError):
+        sys.exit("No se pudo conectar con Mercado Pago; no se desplegó nada.")
     if "test_user" not in usuario.get("tags", []):
         sys.exit("La credencial pertenece a una cuenta que no está identificada como usuario de prueba. No se desplegó nada.")
 print("Configuración y credencial de prueba comprobadas. No se creó ningún pago.")
