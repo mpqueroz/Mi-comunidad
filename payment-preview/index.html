@@ -40,15 +40,17 @@ function allowedCheckout(raw){try{const u=new URL(raw);return u.protocol==="http
 async function refresh(){
   if(!allowed)return;
   el("refresh").disabled=true;
+  el("refresh").textContent="Consultando licencia…";
+  el("payment-status").textContent="Consultando el estado guardado en el servidor…";
   try{
     const response=await functions.httpsCallable("consultarLicenciaMiComunidad")({comunidadId:target});
     const d=response.data||{},until=d.paidUntil?new Date(d.paidUntil).toLocaleString("es-CL",{timeZone:"America/Santiago"}):"Aún sin pago confirmado";
     el("license").textContent="Estado: "+d.estado+"\nVigencia pagada: "+until;
     el("license").classList.toggle("paid",d.estado==="active"&&d.acceso===true);
     el("pay").disabled=d.estado==="sin_licencia"||d.estado==="suspended"||d.estado==="active";
-    if(d.estado==="active"&&d.acceso===true)el("payment-status").textContent="Licencia activa. Ahora comprobaremos la orden pagada y el aviso duplicado.";
+    el("payment-status").textContent=d.estado==="active"&&d.acceso===true ? "Pago confirmado. Licencia activa." : "Consulta completada. El servidor todavía no registra una licencia pagada.";
   }catch(e){el("payment-status").textContent=message(e);}
-  finally{el("refresh").disabled=false;}
+  finally{el("refresh").disabled=false;el("refresh").textContent="Comprobar licencia después del pago";}
 }
 el("form").addEventListener("submit",async e=>{
   e.preventDefault();el("enter").disabled=true;el("login-status").textContent="Ingresando…";

@@ -94,3 +94,54 @@ test("acepta espacios en encabezado x-signature de Mercado Pago", () => {
   }
 });
 
+
+test("firma acepta segundos y milisegundos sin cambiar el manifest", () => {
+  for (const ts of ["1792843200", "1792843200123"]) {
+    const now = ts.length === 13 ? Number(ts) : Number(ts)*1000;
+    const hash = crypto.createHmac("sha256", "secreto").update("id:99;request-id:r;ts:"+ts+";").digest("hex");
+    const headers={"x-signature":"ts="+ts+",v1="+hash,"x-request-id":"r"};
+    assert.equal(helpers.validateSignature(headers,{"data.id":"99"},"secreto",now),true);
+    assert.equal(helpers.signatureFailure(headers,{"data.id":"99"},"secreto",now+660000),"timestamp_outside_window");
+    assert.equal(helpers.signatureFailure(headers,{"data.id":"99"},"otra",now),"hmac_mismatch");
+  }
+});
+
+test("live_mode de cuenta de prueba requiere vendedor configurado y coincidencia del cobro", () => {
+  const expected={collectorId:"123",liveMode:true};
+  assert.deepEqual(helpers.checkoutIdentity("test",{collector_id:123},expected),expected);
+  assert.throws(()=>helpers.checkoutIdentity("test",{collector_id:456},expected));
+  assert.throws(()=>helpers.checkoutIdentity("test",{collector_id:123},null));
+  assert.deepEqual(helpers.checkoutIdentity("production",{collector_id:456},expected),{collectorId:"456",liveMode:true});
+  const order={id:"order0000000001",preferenceId:"p",amount:1000,months:12,...expected};
+  const payment={id:99,status:"approved",external_reference:order.id,preference_id:"p",transaction_amount:1000,currency_id:"CLP",live_mode:true,collector_id:123};
+  assert.equal(helpers.verifyPayment(payment,order,"99"),true);
+  assert.equal(helpers.verifyPayment({...payment,collector_id:456},order,"99"),false);
+  assert.equal(helpers.verifyPayment({...payment,live_mode:false},order,"99"),false);
+});
+
+const {planRecovery}=require("../../scripts/recuperar-pago-prueba");
+function recoveryFixture(){
+  const order={id:"bMD6LqqClo6nUQ2VETv3",comunidadId:"nodar-pagos-prueba-20261025",adminUid:"nodar-mp-prueba-20261025",amount:1000,currency:"CLP",months:12,preferenceId:"p",liveMode:false,status:"checkout_ready"};
+  const payment={id:186051318596,status:"approved",external_reference:order.id,preference_id:"p",transaction_amount:1000,currency_id:"CLP",live_mode:true,collector_id:3791682940};
+  return {community:{mpTestFixture:true},order,license:{estado:"trial",paidUntil:null},payment};
+}
+test("recuperación verifica pago real de API y no duplica los 12 meses",()=>{
+  const f=recoveryFixture();
+  const plan=planRecovery(f.community,f.order,f.license,f.payment,helpers.verifyPayment);
+  assert.equal(plan.license.estado,"active");
+  assert.equal(plan.order.liveMode,true);
+  assert.equal(plan.order.collectorId,"3791682940");
+  assert.equal(planRecovery(f.community,{...f.order,...plan.order},{...f.license,...plan.license},f.payment,helpers.verifyPayment),null);
+});
+test("recuperación no activa órdenes, vendedores, montos o pagos ajenos",()=>{
+  const f=recoveryFixture();
+  for (const change of [{collector_id:123},{transaction_amount:1},{external_reference:"otra"},{status:"pending"},{preference_id:"otra"},{live_mode:false}]){
+    assert.throws(()=>planRecovery(f.community,f.order,f.license,{...f.payment,...change},helpers.verifyPayment));
+  }
+  for (const change of [{comunidadId:"otra"},{amount:800000},{adminUid:"otro"},{months:24},{status:"checkout_error"}]){
+    assert.throws(()=>planRecovery(f.community,{...f.order,...change},f.license,f.payment,helpers.verifyPayment));
+  }
+  assert.throws(()=>planRecovery({mpTestFixture:false},f.order,f.license,f.payment,helpers.verifyPayment));
+  assert.throws(()=>planRecovery(f.community,f.order,{estado:"suspended"},f.payment,helpers.verifyPayment));
+  assert.throws(()=>planRecovery(f.community,f.order,{...f.license,lastPaymentId:"otro"},f.payment,helpers.verifyPayment));
+});

@@ -12,6 +12,7 @@ const WEBHOOK_SECRET = defineSecret("MC_MP_WEBHOOK_SECRET");
 const PLAN_PRICE = defineSecret("MC_PLAN_ANUAL_CLP");
 const WEBHOOK_URL = defineSecret("MC_MP_WEBHOOK_URL");
 const MP_ENVIRONMENT = defineSecret("MC_MP_ENVIRONMENT");
+const TEST_ACCOUNT = defineSecret("MC_MP_TEST_ACCOUNT");
 const ORDERS = "mi_comunidad_ordenes_pago";
 const LICENSES = "mi_comunidad_licencias";
 const API = "https://api.mercadopago.com";
@@ -27,19 +28,35 @@ async function mpRequest(path, token, options = {}) {
   return response.json();
 }
 
-function validateSignature(headers, query, secret, now = Date.now()) {
+function signatureFailure(headers, query, secret, now = Date.now()) {
   const signature = String(headers["x-signature"] || "");
   const requestId = String(headers["x-request-id"] || "");
   const id = String(query["data.id"] || "");
   // Mercado Pago may include spaces after commas in x-signature.
   const ts = /(?:^|,)\s*ts=(\d+)\s*(?=,|$)/.exec(signature)?.[1];
   const hash = /(?:^|,)\s*v1=([a-f0-9]{64})\s*(?=,|$)/i.exec(signature)?.[1];
-  if (!id || !/^\d{1,20}$/.test(id) || !requestId || !ts || !hash || !secret) return false;
-  const milliseconds = Number(ts) * 1000;
-  if (!Number.isFinite(milliseconds) || Math.abs(now - milliseconds) > 10 * 60 * 1000) return false;
+  if (!id || !/^\d{1,20}$/.test(id) || !requestId || !ts || !hash || !secret) return "missing_or_invalid_fields";
+  // Preserve the original ts in the HMAC; normalize only for the age check.
+  const milliseconds = /^\d{13}$/.test(ts) ? Number(ts) : /^\d{10}$/.test(ts) ? Number(ts) * 1000 : NaN;
+  if (!Number.isSafeInteger(milliseconds) || Math.abs(now - milliseconds) > 10 * 60 * 1000) return "timestamp_outside_window";
   const manifest = "id:" + id.toLowerCase() + ";request-id:" + requestId + ";ts:" + ts + ";";
   const expected = crypto.createHmac("sha256", secret).update(manifest).digest();
-  return crypto.timingSafeEqual(expected, Buffer.from(hash, "hex"));
+  return crypto.timingSafeEqual(expected, Buffer.from(hash, "hex")) ? null : "hmac_mismatch";
+}
+
+function validateSignature(headers, query, secret, now = Date.now()) {
+  return signatureFailure(headers, query, secret, now) === null;
+}
+
+function checkoutIdentity(environment, pref, testAccount) {
+  const collectorId = String(pref.collector_id || "");
+  if (!/^\d{1,20}$/.test(collectorId)) throw new Error("Preferencia sin vendedor verificable");
+  if (environment === "production") return {collectorId, liveMode: true};
+  if (environment !== "test" || !testAccount ||
+      String(testAccount.collectorId) !== collectorId || typeof testAccount.liveMode !== "boolean") {
+    throw new Error("La preferencia no pertenece al vendedor de prueba configurado");
+  }
+  return {collectorId, liveMode: testAccount.liveMode};
 }
 
 function verifyPayment(payment, order, paymentId) {
@@ -51,7 +68,8 @@ function verifyPayment(payment, order, paymentId) {
     payment.currency_id === "CLP" &&
     Number(payment.transaction_amount) === order.amount &&
     order.months === MONTHS &&
-    payment.live_mode === order.liveMode;
+    payment.live_mode === order.liveMode &&
+    (!order.collectorId || String(payment.collector_id) === order.collectorId);
 }
 
 // Payments no garantiza preference_id: Checkout Pro la publica en merchant_orders.
@@ -125,7 +143,7 @@ async function flagReversedPayment(db, orderId, payment, paymentId) {
 }
 
 function registerMercadoPago() {
-  const createCheckout = onCall({secrets: [ACCESS_TOKEN, PLAN_PRICE, WEBHOOK_URL, MP_ENVIRONMENT]}, async (request) => {
+  const createCheckout = onCall({secrets: [ACCESS_TOKEN, PLAN_PRICE, WEBHOOK_URL, MP_ENVIRONMENT, TEST_ACCOUNT]}, async (request) => {
     const token = request.auth?.token;
     if (!token || token.app !== "mi_comunidad" || token.role !== "admin" ||
         !/^[a-z0-9-]+$/.test(String(token.comunidadId || ""))) {
@@ -164,10 +182,10 @@ function registerMercadoPago() {
         }),
       });
       if (!pref.id || !/^https:\/\/[^\s]+$/.test(pref.init_point || "")) throw new Error("Preferencia incompleta");
-      // Las credenciales de prueba actuales también pueden comenzar con APP_USR.
-      // El entorno se declara explícitamente; nunca inferirlo del prefijo del token.
-      const liveMode = environment === "production";
-      await orderRef.update({preferenceId: String(pref.id), liveMode, status: "checkout_ready"});
+      // El entorno comercial y live_mode de la API son conceptos distintos.
+      // La cuenta de prueba se configura desde Cloud Shell, nunca desde el cliente.
+      const identity = checkoutIdentity(environment, pref, environment === "test" ? JSON.parse(TEST_ACCOUNT.value()) : null);
+      await orderRef.update({preferenceId: String(pref.id), ...identity, environment, status: "checkout_ready"});
       return {checkoutUrl: pref.init_point, orderId: orderRef.id};
     } catch (err) {
       await orderRef.update({status: "checkout_error"});
@@ -177,7 +195,9 @@ function registerMercadoPago() {
 
   const webhook = onRequest({secrets: [ACCESS_TOKEN, WEBHOOK_SECRET], invoker: "public"}, async (req, res) => {
     if (req.method !== "POST") return res.status(405).send("Método no permitido");
-    if (!validateSignature(req.headers, req.query, WEBHOOK_SECRET.value())) {
+    const failure = signatureFailure(req.headers, req.query, WEBHOOK_SECRET.value());
+    if (failure) {
+      console.warn("Webhook rechazado", {reason: failure});
       return res.status(401).send("Firma inválida");
     }
     if (req.body?.type !== "payment" || String(req.body?.data?.id) !== String(req.query["data.id"])) {
@@ -250,5 +270,5 @@ function registerMercadoPago() {
     webhookMercadoPagoMiComunidad: webhook,
     conciliarPagosMiComunidad: reconcile};
 }
-module.exports = {registerMercadoPago, validateSignature, verifyPayment, fetchCheckoutPayment};
+module.exports = {registerMercadoPago, validateSignature, signatureFailure, checkoutIdentity, verifyPayment, fetchCheckoutPayment};
 

@@ -13,13 +13,13 @@ function harness() {
     ["mi_comunidad_licencias/test-edificio", {estado: "trial", paidUntil: null}],
   ]);
   const secrets = {MC_MP_ACCESS_TOKEN: "ficticio", MC_MP_WEBHOOK_SECRET: "firma-ficticia",
-    MC_MP_ENVIRONMENT: "test", MC_PLAN_ANUAL_CLP: "1000",
+    MC_MP_ENVIRONMENT: "test", MC_MP_TEST_ACCOUNT: JSON.stringify({collectorId:"123",liveMode:false}), MC_PLAN_ANUAL_CLP: "1000",
     MC_MP_WEBHOOK_URL: "https://example.invalid/webhook"};
   const state = {
     calls: [],
     payment: {id: 99, status: "approved", external_reference: orderId,
       order: {id: 55, type: "mercadopago"}, transaction_amount: 1000,
-      currency_id: "CLP", live_mode: false},
+      currency_id: "CLP", live_mode: false, collector_id:123},
     merchant: {id: 55, external_reference: orderId, preference_id: "pref-1", payments: [{id: 99}]},
   };
   function ref(path) {
@@ -57,7 +57,7 @@ function harness() {
       let result;
       if (path === "/checkout/preferences") {
         state.preference = JSON.parse(options.body);
-        result = {id: "pref-1", init_point: "https://www.mercadopago.cl/checkout/v1/redirect?pref_id=pref-1"};
+        result = {id: "pref-1", collector_id:123, init_point: "https://www.mercadopago.cl/checkout/v1/redirect?pref_id=pref-1"};
       } else if (path === "/v1/payments/99") result = {...state.payment};
       else if (path === "/merchant_orders/55") result = {...state.merchant};
       else throw new Error("Unexpected API request " + path);
@@ -154,4 +154,26 @@ test("pago sin orden comercial no se habilita aunque declare preference_id", asy
   h.state.payment.preference_id = "pref-1";
   assert.equal((await h.webhook()).code, 500);
   assert.equal(h.license().estado, "trial");
+});
+
+test("Checkout con cuenta de prueba API live conserva validación del vendedor", async()=>{
+  const h=harness();
+  h.secrets.MC_MP_TEST_ACCOUNT=JSON.stringify({collectorId:"123",liveMode:true});
+  h.state.payment.live_mode=true;
+  await h.create();
+  assert.equal(h.order().liveMode,true);
+  assert.equal(h.order().collectorId,"123");
+  assert.equal((await h.webhook()).code,200);
+  assert.equal(h.license().estado,"active");
+  const end=h.license().paidUntil.getTime();
+  await h.webhook();
+  assert.equal(h.license().paidUntil.getTime(),end);
+});
+
+test("un vendedor ajeno no genera una orden habilitada", async()=>{
+  const h=harness();
+  h.secrets.MC_MP_TEST_ACCOUNT=JSON.stringify({collectorId:"999",liveMode:true});
+  await assert.rejects(h.create());
+  assert.equal(h.order().status,"checkout_error");
+  assert.equal(h.license().estado,"trial");
 });
