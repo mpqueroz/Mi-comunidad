@@ -66,3 +66,11 @@ No guarda tokens Google ni contraseñas en el repositorio o en Hosting.
 El panel acepta únicamente ese administrador técnico. Después del checkout,
 volver a su URL y consultar la licencia. La prueba contra la API real sigue
 pendiente hasta comprobar orden pagada, licencia y recepción del webhook.
+
+### Reanudar después de la consulta desplegada
+
+`bash scripts/reanudar-pagos-prueba.sh` omite el despliegue de funciones y reanuda
+la creación del acceso y el canal Hosting temporal. Firestore se inicializa por
+REST con OAuth de gcloud y un Commit de creaciones con `exists=false`, porque el
+SDK Admin de Firestore no acepta la credencial OAuth personalizada del primer
+script. Las pruebas locales de REST y del acceso técnico pasan (38 en total).

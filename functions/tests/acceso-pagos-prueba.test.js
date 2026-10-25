@@ -36,10 +36,10 @@ function fixture(environment = "test") {
     if(name === "../functions/licencias") return {createTrial};
     throw Error(name);
   };
-  const ctx = {__dirname:"/repo/scripts",require:customRequire,module:{exports:{}},
+  const ctx = {Date,AbortSignal,__dirname:"/repo/scripts",require:customRequire,module:{exports:{}},
     console:{log:line=>logs.push(line),error(){}},process:{}};
   vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,"../../scripts/crear-acceso-pagos-prueba.js"),"utf8"),ctx);
-  return {run:ctx.module.exports.main,docs,users,logs,communityPath,licensePath,initialized:()=>initialized};
+  return {run:()=>ctx.module.exports.main({db}),rest:ctx.module.exports.firestoreRest,docs,users,logs,communityPath,licensePath,initialized:()=>initialized};
 }
 test("el acceso técnico solo crea su comunidad y licencia; repetir conserva vigencia", async()=>{
   const f=fixture();await f.run();assert.equal(f.docs.size,2);assert.equal(f.users.size,1);
@@ -56,4 +56,34 @@ test("no modifica una comunidad ajena con el mismo identificador", async()=>{
   const f=fixture();f.docs.set(f.communityPath,{name:"Existente"});
   await assert.rejects(f.run(),/no pertenece/);assert.equal(f.users.size,0);
   assert.equal(f.docs.get(f.communityPath).name,"Existente");
+});
+
+test("Firestore REST usa OAuth y crea el lote con precondiciones y tipos correctos", async()=>{
+  const f=fixture(),calls=[];
+  const request=async(url,options)=>{
+    calls.push({url,options});
+    assert.equal(options.headers.Authorization,"Bearer token-ficticio");
+    return options.method==="GET" ? {status:404,ok:false} : {ok:true,json:async()=>({})};
+  };
+  const db=f.rest("mercado-ciudadano",{getAccessToken:async()=>({access_token:"token-ficticio"})},request);
+  const ref=db.collection("mi_comunidad_licencias").doc("nodar-pagos-prueba-20261025");
+  assert.equal((await ref.get()).exists,false);
+  await db.runTransaction(async tx=>tx.create(ref,{estado:"trial",fecha:new Date("2026-10-25T00:00:00Z"),n:0,marca:true,pago:null}));
+  const commit=calls.at(-1);
+  assert.equal(commit.url,"https://firestore.googleapis.com/v1/projects/mercado-ciudadano/databases/(default)/documents:commit");
+  const body=JSON.parse(commit.options.body),write=body.writes[0];
+  assert.deepEqual(write.currentDocument,{exists:false});
+  assert.deepEqual(write.update.fields,{estado:{stringValue:"trial"},fecha:{timestampValue:"2026-10-25T00:00:00.000Z"},n:{integerValue:"0"},marca:{booleanValue:true},pago:{nullValue:null}});
+});
+
+test("REST identifica la marca técnica y propaga rechazo sin escribir", async()=>{
+  const f=fixture();let writes=0;
+  const db=f.rest("mercado-ciudadano",{getAccessToken:async()=>({access_token:"ficticio"})},async(url,options)=>{
+    if(options.method==="GET")return {ok:true,status:200,json:async()=>({fields:{mpTestFixture:{booleanValue:true}}})};
+    writes++;return {ok:false,status:403};
+  });
+  const ref=db.collection("mi_comunidad_comunidades").doc("nodar-pagos-prueba-20261025");
+  const existing=await ref.get();assert.equal(existing.exists,true);assert.equal(existing.get("mpTestFixture"),true);
+  await assert.rejects(db.runTransaction(async tx=>tx.create(ref,{mpTestFixture:true})),/HTTP 403/);
+  assert.equal(writes,1);
 });
