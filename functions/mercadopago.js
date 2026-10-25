@@ -31,9 +31,9 @@ function validateSignature(headers, query, secret, now = Date.now()) {
   const signature = String(headers["x-signature"] || "");
   const requestId = String(headers["x-request-id"] || "");
   const id = String(query["data.id"] || "");
-  const ts = /^ts=(\d+)(?:,|$)/.exec(signature)?.[1] ||
-    /(?:^|,)ts=(\d+)(?:,|$)/.exec(signature)?.[1];
-  const hash = /(?:^|,)v1=([a-f0-9]{64})(?:,|$)/i.exec(signature)?.[1];
+  // Mercado Pago may include spaces after commas in x-signature.
+  const ts = /(?:^|,)\s*ts=(\d+)\s*(?=,|$)/.exec(signature)?.[1];
+  const hash = /(?:^|,)\s*v1=([a-f0-9]{64})\s*(?=,|$)/i.exec(signature)?.[1];
   if (!id || !/^\d{1,20}$/.test(id) || !requestId || !ts || !hash || !secret) return false;
   const milliseconds = Number(ts) * 1000;
   if (!Number.isFinite(milliseconds) || Math.abs(now - milliseconds) > 10 * 60 * 1000) return false;
