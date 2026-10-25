@@ -18,6 +18,7 @@
 <button id="enter">Ingresar</button></form><p id="login-status" role="status" class="error"></p></section>
 <section id="panel" hidden><h2>Comunidad de prueba Nodar</h2><p class="muted">Plan de prueba: $1.000 CLP · 12 meses</p>
 <div id="license" class="status" role="status">Consultando licencia…</div>
+<p id="renewal-note" class="small muted" hidden>Esta compra ficticia prueba la renovación automática: si se confirma, debe sumar 12 meses a la vigencia actual. Usa únicamente el comprador y la tarjeta de prueba.</p>
 <button id="pay" disabled>Iniciar pago de prueba · $1.000</button>
 <button id="refresh" class="secondary">Comprobar licencia después del pago</button>
 <p id="payment-status" role="status" class="muted"></p>
@@ -34,7 +35,7 @@
 firebase.initializeApp({apiKey:"AIzaSyBJ7Zusnt0i3ZN7kg7rQr0BrBfB5aby23c",authDomain:"mercado-ciudadano.firebaseapp.com",projectId:"mercado-ciudadano",appId:"1:165528119795:web:6590d7dd3f164e7c70ca86"});
 const auth=firebase.auth(), functions=firebase.functions(), target="nodar-pagos-prueba-20261025";
 const el=id=>document.getElementById(id);
-let allowed=false;
+let allowed=false, currentPaidUntil=null, preparingPayment=false;
 function message(error){return error&&error.message?error.message:"No fue posible completar la operación.";}
 function allowedCheckout(raw){try{const u=new URL(raw);return u.protocol==="https:"&&/(^|\.)mercadopago\.(cl|com)$/.test(u.hostname);}catch{return false;}}
 async function refresh(){
@@ -47,8 +48,13 @@ async function refresh(){
     const d=response.data||{},until=d.paidUntil?new Date(d.paidUntil).toLocaleString("es-CL",{timeZone:"America/Santiago"}):"Aún sin pago confirmado";
     el("license").textContent="Estado: "+d.estado+"\nVigencia pagada: "+until;
     el("license").classList.toggle("paid",d.estado==="active"&&d.acceso===true);
-    el("pay").disabled=d.estado==="sin_licencia"||d.estado==="suspended"||d.estado==="active";
-    el("payment-status").textContent=d.estado==="active"&&d.acceso===true ? "Pago confirmado. Licencia activa." : "Consulta completada. El servidor todavía no registra una licencia pagada.";
+    currentPaidUntil=d.paidUntil || null;
+    const baseline=Number(sessionStorage.getItem("mc-mp-test-baseline")), current=currentPaidUntil?Date.parse(currentPaidUntil):0;
+    const renewed=baseline>0 && current>baseline;
+    el("pay").disabled=preparingPayment||d.estado==="sin_licencia"||d.estado==="suspended"||renewed;
+    el("pay").textContent=d.estado==="active" ? "Probar renovación · $1.000" : "Iniciar pago de prueba · $1.000";
+    el("renewal-note").hidden=d.estado!=="active"||renewed;
+    el("payment-status").textContent=renewed ? "Renovación registrada: la vigencia aumentó. Ahora verifica el aviso automático en Mercado Pago." : baseline>0 ? "La licencia anterior sigue vigente. La nueva renovación todavía no aparece confirmada." : d.estado==="active"&&d.acceso===true ? "Licencia actual activa. Puedes probar una renovación ficticia." : "Consulta completada. El servidor todavía no registra una licencia pagada.";
   }catch(e){el("payment-status").textContent=message(e);}
   finally{el("refresh").disabled=false;el("refresh").textContent="Comprobar licencia después del pago";}
 }
@@ -72,14 +78,16 @@ auth.onAuthStateChanged(async user=>{
 });
 el("pay").addEventListener("click",async()=>{
   if(!allowed)return;
-  el("pay").disabled=true;el("payment-status").textContent="Preparando Checkout Pro…";
+  preparingPayment=true;el("pay").disabled=true;el("payment-status").textContent="Preparando Checkout Pro…";
   try{
     const response=await functions.httpsCallable("crearCheckoutMiComunidad")({});
     const d=response.data||{};
     if(!allowedCheckout(d.checkoutUrl))throw new Error("La dirección de Checkout no es válida.");
     sessionStorage.setItem("mc-mp-test-order",d.orderId);
+    if(currentPaidUntil)sessionStorage.setItem("mc-mp-test-baseline",String(Date.parse(currentPaidUntil)));
+    else sessionStorage.removeItem("mc-mp-test-baseline");
     location.assign(d.checkoutUrl);
-  }catch(error){el("payment-status").textContent=message(error);el("pay").disabled=false;}
+  }catch(error){preparingPayment=false;el("payment-status").textContent=message(error);el("pay").disabled=false;}
 });
 el("refresh").addEventListener("click",refresh);
 el("logout").addEventListener("click",()=>auth.signOut());
