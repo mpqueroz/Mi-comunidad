@@ -42,10 +42,10 @@ async function renderPanelComercial() {
           const items = (history.pagos || []).map(p => '<tr><td>' + esc(p.id) +
             '</td><td>' + esc(p.estado) + '</td><td>$' +
             Number(p.monto || 0).toLocaleString("es-CL") + '</td><td>' +
-            esc(fecha(p.creado)) + '</td><td>' + esc(fecha(p.pagado)) + '</td></tr>').join("");
+            esc(fecha(p.creado)) + '</td><td>' + esc(fecha(p.pagado)) + '</td><td>' + detalleDocumentoTributario(p) + '</td></tr>').join("");
           target.innerHTML = '<h2>Historial: ' + esc(button.dataset.id) +
-            '</h2><div style="overflow-x:auto"><table><thead><tr><th>Orden</th><th>Estado</th><th>Monto</th><th>Creada</th><th>Pagada</th></tr></thead><tbody>' +
-            (items || '<tr><td colspan="5">Sin pagos</td></tr>') + '</tbody></table></div>';
+            '</h2><div style="overflow-x:auto"><table><thead><tr><th>Orden</th><th>Estado</th><th>Monto</th><th>Creada</th><th>Pagada</th><th>Documento tributario</th></tr></thead><tbody>' +
+            (items || '<tr><td colspan="6">Sin pagos</td></tr>') + '</tbody></table></div>';
         } catch (err) { console.error(err); target.textContent = "Error al consultar historial."; }
         finally { button.disabled = false; }
       });
@@ -54,4 +54,15 @@ async function renderPanelComercial() {
     console.error(err);
     panel.textContent = "No fue posible consultar los datos comerciales.";
   }
+}
+
+// Los datos provienen de la orden protegida; todo texto se escapa antes de mostrarlo.
+function detalleDocumentoTributario(pago) {
+  const d = pago.documentoTributario;
+  if (!d) return "Sin solicitud registrada";
+  const estado = pago.estado === "paid" ? "Por emitir manualmente en SII" :
+    pago.estado === "payment_review" ? "Revisión de pago y documento tributario" : "Pendiente de pago";
+  const datos = [d.tipo === "factura" ? "Factura electrónica" : "Boleta electrónica", estado, d.correo];
+  if (d.tipo === "factura") datos.push(d.rut, d.razonSocial, d.giro, d.direccion, d.comuna);
+  return datos.map(v => esc(v || "")).join("<br>");
 }

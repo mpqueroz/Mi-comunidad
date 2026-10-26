@@ -67,9 +67,9 @@ function harness() {
   vm.runInNewContext(fs.readFileSync(require.resolve("../mercadopago"), "utf8"), context);
   const helpers = context.module.exports;
   const functions = helpers.registerMercadoPago();
-  const create = () => functions.crearCheckoutMiComunidad({auth: {uid: "admin-test",
+  const create = (documentoTributario = {tipo: "boleta", correo: "comprador@example.test"}) => functions.crearCheckoutMiComunidad({auth: {uid: "admin-test",
     token: {app: "mi_comunidad", role: "admin", comunidadId: "test-edificio"}},
-    data: {amount: 1, months: 999}});
+    data: {amount: 1, months: 999, documentoTributario}});
   async function webhook(validSignature = true) {
     const ts = String(Math.floor(Date.now() / 1000)), requestId = "test-request";
     const hash = crypto.createHmac("sha256", secrets.MC_MP_WEBHOOK_SECRET)
@@ -256,4 +256,35 @@ test("cursor recorre 65 órdenes, tolera fallo intermedio y vuelve al inicio",as
  assert.equal(new Set(seen).size,65);assert.equal(cursor.lastOrderId,orders[64].id);
  await h.helpers.reconcilePayments(db,"ficticio",request);
  assert.equal(seen.filter(id=>id===orders[12].id).length,2);
+});
+
+const factura = {tipo: "factura", correo: "contabilidad@example.test", rut: "76.123.456-0",
+  razonSocial: "Comunidad de prueba", giro: "Administración", direccion: "Calle de prueba 123", comuna: "Peñalolén"};
+test("datos tributarios inválidos no crean orden ni contactan Mercado Pago", async () => {
+  for (const input of [null, {}, {tipo:"otro",correo:"a@b.cl"}, {tipo:"boleta",correo:"invalido"},
+    {...factura,rut:"76.123.456-1"}, {...factura,giro:""}, {...factura,comuna:"x".repeat(101)},
+    {...factura,razonSocial:"Nombre\nInyectado"}]) {
+    const h = harness();
+    await assert.rejects(h.create(input));
+    assert.equal(h.order(), undefined);
+    assert.equal(h.state.calls.length, 0);
+  }
+});
+test("factura queda ligada a orden y conserva datos tras pago sin emitir un DTE", async () => {
+  const h = harness(); await h.create({...factura, estado:"emitido", folio:"falso"});
+  const d = h.order().documentoTributario;
+  assert.equal(d.tipo,"factura"); assert.equal(d.rut,"76123456-0");
+  assert.equal(d.estado,"no_emitido"); assert.equal(d.folio,undefined);
+  assert.equal(d.modalidad,"manual_sii");
+  assert.equal(h.state.preference.documentoTributario,undefined);
+  await h.webhook();
+  assert.equal(h.order().status,"paid");
+  assert.equal(h.order().documentoTributario,d);
+  assert.equal(d.estado,"no_emitido");
+});
+test("boleta guarda correo y descarta datos de factura y estados enviados por cliente", async () => {
+  const h = harness(); await h.create({...factura,tipo:"boleta",correo:" comprador@example.test ",estado:"emitido"});
+  assert.equal(h.order().documentoTributario.correo,"comprador@example.test");
+  assert.equal(h.order().documentoTributario.rut,undefined);
+  assert.equal(h.order().documentoTributario.estado,"no_emitido");
 });

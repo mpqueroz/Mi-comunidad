@@ -18,6 +18,34 @@ const LICENSES = "mi_comunidad_licencias";
 const API = "https://api.mercadopago.com";
 const MONTHS = 12;
 
+// Solo recoge la solicitud: no emite DTE ni considera el recibo de pago una boleta.
+function validarDocumentoTributario(input) {
+  const fail = () => { throw new HttpsError("invalid-argument", "Revisa el tipo de documento y los datos tributarios."); };
+  if (!input || typeof input !== "object" || !["boleta", "factura"].includes(input.tipo)) return fail();
+  const texto = (value, max) => {
+    if (typeof value !== "string" || !value.trim() || value.length > max || /[\x00-\x1f\x7f]/.test(value)) return fail();
+    return value.trim();
+  };
+  const correo = texto(input.correo, 254);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) return fail();
+  const documento = {tipo: input.tipo, correo, estado: "no_emitido", modalidad: "manual_sii"};
+  if (input.tipo === "factura") {
+    const rut = texto(input.rut, 16).replace(/\./g, "").toUpperCase();
+    if (!/^[1-9]\d{6,7}-[0-9K]$/.test(rut)) return fail();
+    const [numero, dv] = rut.split("-");
+    let suma = 0, factor = 2;
+    for (const digit of numero.split("").reverse()) {
+      suma += Number(digit) * factor;
+      factor = factor === 7 ? 2 : factor + 1;
+    }
+    const resto = 11 - suma % 11;
+    if (dv !== (resto === 11 ? "0" : resto === 10 ? "K" : String(resto))) return fail();
+    Object.assign(documento, {rut, razonSocial: texto(input.razonSocial, 150),
+      giro: texto(input.giro, 150), direccion: texto(input.direccion, 200), comuna: texto(input.comuna, 100)});
+  }
+  return documento;
+}
+
 async function mpRequest(path, token, options = {}) {
   const response = await fetch(API + path, {
     ...options,
@@ -204,6 +232,7 @@ function registerMercadoPago() {
         !/^[a-z0-9-]+$/.test(String(token.comunidadId || ""))) {
       throw new HttpsError("permission-denied", "Solo el administrador de la comunidad puede pagar.");
     }
+    const documentoTributario = validarDocumentoTributario(request.data?.documentoTributario);
     const environment = String(MP_ENVIRONMENT.value() || "");
     if (!["test", "production"].includes(environment)) {
       throw new HttpsError("failed-precondition", "Entorno de Mercado Pago no configurado.");
@@ -227,7 +256,7 @@ function registerMercadoPago() {
     const orderRef = db.collection(ORDERS).doc();
     const order = {id: orderRef.id, comunidadId, adminUid: request.auth.uid,
       amount, currency: "CLP", months: MONTHS, status: "pending",
-      createdAt: FieldValue.serverTimestamp()};
+      documentoTributario, createdAt: FieldValue.serverTimestamp()};
     await orderRef.create(order);
     try {
       const pref = await mpRequest("/checkout/preferences", ACCESS_TOKEN.value(), {

@@ -4,7 +4,7 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Prueba de pagos · Mi Comunidad Digital</title>
 <style>
-:root{font-family:system-ui,sans-serif;color:#172842;background:#f2f5fa;color-scheme:light}*{box-sizing:border-box}body{margin:0;padding:32px 18px}main{max-width:580px;margin:auto}.brand{font-weight:750;letter-spacing:.06em;font-size:13px;color:#2369c6}.badge{display:inline-block;background:#fff0c2;color:#715100;border-radius:20px;padding:7px 12px;font-size:13px;margin-top:18px}h1{font-size:30px;line-height:1.15;margin:18px 0 12px}p{line-height:1.6}section{background:white;border:1px solid #dbe3ef;border-radius:20px;padding:24px;margin:20px 0;box-shadow:0 5px 20px #162a4505}label{display:block;font-weight:650;margin:18px 0 7px}input,button{width:100%;font:inherit;border-radius:10px;padding:14px}input{border:1px solid #b7c4d6;background:#fff;color:#172842}button{border:0;cursor:pointer;background:#1762c5;color:white;font-weight:650;margin-top:18px}button.secondary{background:#edf3fb;color:#174b8c}button:disabled{opacity:.5;cursor:wait}.muted{color:#53657c;font-size:14px}.error{color:#a32832}.status{white-space:pre-line;padding:14px;border-radius:12px;background:#f2f6fc;line-height:1.6}.paid{background:#e8f7ee;color:#175b38}[hidden]{display:none!important}.small{font-size:13px}footer{color:#65738a;font-size:13px;text-align:center;padding:16px}a{color:#1762c5}
+:root{font-family:system-ui,sans-serif;color:#172842;background:#f2f5fa;color-scheme:light}*{box-sizing:border-box}body{margin:0;padding:32px 18px}main{max-width:580px;margin:auto}.brand{font-weight:750;letter-spacing:.06em;font-size:13px;color:#2369c6}.badge{display:inline-block;background:#fff0c2;color:#715100;border-radius:20px;padding:7px 12px;font-size:13px;margin-top:18px}h1{font-size:30px;line-height:1.15;margin:18px 0 12px}p{line-height:1.6}section{background:white;border:1px solid #dbe3ef;border-radius:20px;padding:24px;margin:20px 0;box-shadow:0 5px 20px #162a4505}label{display:block;font-weight:650;margin:18px 0 7px}input,select,button{width:100%;font:inherit;border-radius:10px;padding:14px}input,select{border:1px solid #b7c4d6;background:#fff;color:#172842}button{border:0;cursor:pointer;background:#1762c5;color:white;font-weight:650;margin-top:18px}button.secondary{background:#edf3fb;color:#174b8c}button:disabled{opacity:.5;cursor:wait}.muted{color:#53657c;font-size:14px}.error{color:#a32832}.status{white-space:pre-line;padding:14px;border-radius:12px;background:#f2f6fc;line-height:1.6}.paid{background:#e8f7ee;color:#175b38}[hidden]{display:none!important}.small{font-size:13px}footer{color:#65738a;font-size:13px;text-align:center;padding:16px}a{color:#1762c5}
 </style>
 </head>
 <body><main>
@@ -19,7 +19,12 @@
 <section id="panel" hidden><h2>Comunidad de prueba Nodar</h2><p class="muted">Plan de prueba: $1.000 CLP · 12 meses</p>
 <div id="license" class="status" role="status">Consultando licencia…</div>
 <p id="renewal-note" class="small muted" hidden>Esta compra ficticia prueba la renovación automática: si se confirma, debe sumar 12 meses a la vigencia actual. Usa únicamente el comprador y la tarjeta de prueba.</p>
-<button id="pay" disabled>Iniciar pago de prueba · $1.000</button>
+<form id="tax-form"><label for="tax-type">Documento tributario de prueba</label>
+<select id="tax-type"><option value="boleta">Boleta electrónica</option><option value="factura">Factura electrónica</option></select>
+<label for="tax-email">Correo del documento de prueba</label><input id="tax-email" type="email" required maxlength="254">
+<div id="tax-invoice" hidden><label for="tax-rut">RUT ficticio válido</label><input id="tax-rut" maxlength="16" disabled><label for="tax-razonSocial">Razón social ficticia</label><input id="tax-razonSocial" maxlength="150" disabled><label for="tax-giro">Giro</label><input id="tax-giro" maxlength="150" disabled><label for="tax-direccion">Dirección</label><input id="tax-direccion" maxlength="200" disabled><label for="tax-comuna">Comuna</label><input id="tax-comuna" maxlength="100" disabled></div>
+<p class="small muted">Esta prueba registra la solicitud; no emite documentos tributarios reales.</p>
+<button type="submit" id="pay" disabled>Iniciar pago de prueba · $1.000</button></form>
 <button id="refresh" class="secondary">Comprobar licencia después del pago</button>
 <p id="payment-status" role="status" class="muted"></p>
 <p id="order" class="small muted"></p>
@@ -76,11 +81,22 @@ auth.onAuthStateChanged(async user=>{
     const order=sessionStorage.getItem("mc-mp-test-order");if(order)el("order").textContent="Orden de prueba: "+order;
   }catch(error){el("login-status").textContent=message(error);}
 });
-el("pay").addEventListener("click",async()=>{
-  if(!allowed)return;
+el("tax-type").addEventListener("change",()=>{
+  const factura=el("tax-type").value==="factura";
+  el("tax-invoice").hidden=!factura;
+  ["rut","razonSocial","giro","direccion","comuna"].forEach(name=>{
+    el("tax-"+name).disabled=!factura;el("tax-"+name).required=factura;
+  });
+});
+el("tax-form").addEventListener("submit",async(event)=>{
+  event.preventDefault();
+  if(!el("tax-form").reportValidity())return;
+  if(!allowed||preparingPayment)return;
   preparingPayment=true;el("pay").disabled=true;el("payment-status").textContent="Preparando Checkout Pro…";
   try{
-    const response=await functions.httpsCallable("crearCheckoutMiComunidad")({});
+    const documentoTributario={tipo:el("tax-type").value,correo:el("tax-email").value.trim()};
+    if(documentoTributario.tipo==="factura")["rut","razonSocial","giro","direccion","comuna"].forEach(name=>documentoTributario[name]=el("tax-"+name).value.trim());
+    const response=await functions.httpsCallable("crearCheckoutMiComunidad")({documentoTributario});
     const d=response.data||{};
     if(!allowedCheckout(d.checkoutUrl))throw new Error("La dirección de Checkout no es válida.");
     sessionStorage.setItem("mc-mp-test-order",d.orderId);

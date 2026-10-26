@@ -60,7 +60,8 @@ exports.historialPagosMiComunidad = onCall(async (request) => {
       monto: Number(p.amount) || 0, moneda: String(p.currency || "CLP"),
       meses: Number(p.months) || 0,
       creado: dateString(p.createdAt), pagado: dateString(p.paidAt),
-      paymentStatus: String(p.paymentStatus || "")};
+      paymentStatus: String(p.paymentStatus || ""),
+      documentoTributario: p.documentoTributario || null};
   }).sort((a, b) => String(b.creado || "").localeCompare(String(a.creado || "")));
   return {comunidadId, pagos, limitado: snapshot.size === 100};
 });
