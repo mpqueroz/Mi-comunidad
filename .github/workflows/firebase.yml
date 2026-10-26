@@ -115,7 +115,7 @@ jobs:
       - name: Desplegar funciones de Mi Comunidad
         run: >
           ./tests/node_modules/.bin/firebase deploy --non-interactive
-          --only "functions:generarCobrosMiComunidad,functions:crearCuentaMiComunidad,functions:restablecerClaveMiComunidad,functions:crearComunidadMiComunidad,functions:crearReservaMiComunidad,functions:directorioConserjeriaMiComunidad,functions:cambiarEstadoAdminMiComunidad,functions:crearAdministradorMiComunidad,functions:definirPreguntaSecretaMiComunidad,functions:verificarPreguntaSecretaMiComunidad,functions:migrarRespuestasSecretasMiComunidad,functions:actualizarVencimientosMiComunidad,functions:configurarPagosMiComunidad,functions:guardarPlanMantencionMiComunidad,functions:registrarRevisionMantencionMiComunidad,functions:gestionarAvisoMiComunidad,functions:confirmarAvisoMiComunidad,functions:gestionarVisitaMiComunidad,functions:cancelarReservaMiComunidad,functions:registrarEncomiendaMiComunidad,functions:gestionarTurnoMiComunidad,functions:gestionarEncomiendaMiComunidad,functions:verificarFichaMiComunidad"
+          --only "functions:generarCobrosMiComunidad,functions:crearCuentaMiComunidad,functions:restablecerClaveMiComunidad,functions:crearComunidadMiComunidad,functions:crearReservaMiComunidad,functions:directorioConserjeriaMiComunidad,functions:cambiarEstadoAdminMiComunidad,functions:crearAdministradorMiComunidad,functions:definirPreguntaSecretaMiComunidad,functions:verificarPreguntaSecretaMiComunidad,functions:migrarRespuestasSecretasMiComunidad,functions:actualizarVencimientosMiComunidad,functions:depurarRegistrosMiComunidad,functions:configurarPagosMiComunidad,functions:guardarPlanMantencionMiComunidad,functions:registrarRevisionMantencionMiComunidad,functions:gestionarAvisoMiComunidad,functions:confirmarAvisoMiComunidad,functions:gestionarVisitaMiComunidad,functions:cancelarReservaMiComunidad,functions:registrarEncomiendaMiComunidad,functions:gestionarTurnoMiComunidad,functions:gestionarEncomiendaMiComunidad,functions:verificarFichaMiComunidad"
       - name: Publicar reglas compartidas
         run: ./tests/node_modules/.bin/firebase deploy --non-interactive --only firestore:rules
       - name: Verificar reglas publicadas
@@ -124,6 +124,12 @@ jobs:
         run: ./tests/node_modules/.bin/firebase deploy --non-interactive --only hosting
       - name: Comprobar servicio y rechazos sin sesión
         run: node scripts/comprobar-despliegue.cjs --release
+      # Solo lectura: cuántos registros vencidos borraría la depuración programada.
+      # Si la cuenta de servicio no puede leer Firestore, el aviso queda en el
+      # registro sin marcar como fallido un despliegue que ya terminó.
+      - name: Simular depuración de registros
+        continue-on-error: true
+        run: node scripts/simular-depuracion.cjs
 
   public-smoke:
     name: Comprobación pública sin credenciales

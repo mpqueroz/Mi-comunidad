@@ -1195,6 +1195,24 @@ exports.actualizarVencimientosMiComunidad = onSchedule(
     });
 
 
+/* =====================================================================
+ * DEPURACIÓN (tarea programada, todos los días 03:30 hora de Chile)
+ *
+ * Aplica los plazos de conservación de la política de privacidad a las
+ * bitácoras y a la auditoría (ver depuracion.js). Mientras DEPURACION_ACTIVA
+ * sea false solo cuenta y deja el resumen en el registro de la función.
+ * ===================================================================== */
+const {depurar} = require("./depuracion");
+
+exports.depurarRegistrosMiComunidad = onSchedule(
+    {schedule: "30 3 * * *", timeZone: "America/Santiago", timeoutSeconds: 540},
+    async () => {
+      const resumen = await depurar(getFirestore(), {Timestamp, FieldValue});
+      const total = resumen.reduce((n, c) => n + c.total, 0);
+      console.log(`Depuración: ${total} registros vencidos`, JSON.stringify(resumen));
+    });
+
+
 // Operación profesional añadida; se conservan las funciones existentes de identidad.
 const profesional = require('./profesional')({firestore: Object.assign(() => getFirestore(), {FieldValue, Timestamp})}, onCall, HttpsError);
 // La verificación de fichas vive arriba (verificarFichaMiComunidad), sobre
