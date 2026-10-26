@@ -177,3 +177,29 @@ test("un vendedor ajeno no genera una orden habilitada", async()=>{
   assert.equal(h.order().status,"checkout_error");
   assert.equal(h.license().estado,"trial");
 });
+
+test("producción cobra 800000 CLP y aplica exactamente 12 meses", async()=>{
+  const h=harness();
+  h.secrets.MC_MP_ENVIRONMENT="production";
+  h.secrets.MC_PLAN_ANUAL_CLP="800000";
+  h.state.payment.transaction_amount=800000;
+  h.state.payment.live_mode=true;
+  await h.create();
+  assert.equal(h.state.preference.items[0].unit_price,800000);
+  assert.equal(h.order().months,12);
+  await h.webhook();
+  assert.equal(h.order().status,"paid");
+  const until=h.license().paidUntil.getTime();
+  await h.webhook();
+  assert.equal(h.license().paidUntil.getTime(),until);
+});
+
+test("producción bloquea fixture antes de crear orden o preferencia", async()=>{
+  const h=harness();
+  h.secrets.MC_MP_ENVIRONMENT="production";
+  h.secrets.MC_PLAN_ANUAL_CLP="800000";
+  h.docs.get("mi_comunidad_comunidades/test-edificio").mpTestFixture=true;
+  await assert.rejects(h.create(), /failed-precondition/);
+  assert.equal(h.order(),undefined);
+  assert.equal(h.state.calls.length,0);
+});

@@ -165,6 +165,10 @@ function registerMercadoPago() {
     if (!comunidad.exists || !licencia.exists || licencia.get("estado") === "suspended") {
       throw new HttpsError("failed-precondition", "Comunidad no habilitada para compra.");
     }
+    if (environment === "production" && (comunidad.get("mpTestFixture") === true ||
+        comunidadId === "nodar-pagos-prueba-20261025" || request.auth.uid === "nodar-mp-prueba-20261025")) {
+      throw new HttpsError("failed-precondition", "La comunidad de prueba no admite cobros reales.");
+    }
     const orderRef = db.collection(ORDERS).doc();
     const order = {id: orderRef.id, comunidadId, adminUid: request.auth.uid,
       amount, currency: "CLP", months: MONTHS, status: "pending",
