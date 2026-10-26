@@ -63,6 +63,6 @@ test('borrado real respeta plazos, encomiendas pendientes y datos financieros', 
   assert.equal(segunda.total, 0, 'repetir no borra nada más');
 });
 
-test('la tarea queda en simulación hasta activarla', () => {
-  assert.equal(require('../functions/depuracion').DEPURACION_ACTIVA, false);
+test('la tarea diaria borra de verdad (activada tras la simulación)', () => {
+  assert.equal(require('../functions/depuracion').DEPURACION_ACTIVA, true);
 });
