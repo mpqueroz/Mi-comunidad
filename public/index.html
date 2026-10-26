@@ -6977,6 +6977,12 @@ function renderPerfil(){
 
         </div>
 
+        ${currentRole === "admin" ? `
+        <div class="card" style="padding:20px;margin-bottom:20px">
+            <h2 style="font-size:18px;margin-bottom:8px">Suscripción de la comunidad</h2>
+            <p style="margin-bottom:14px">Consulta la vigencia y las opciones de renovación.</p>
+            <button type="button" class="btn btn-primary" onclick="navigate('suscripcion')">Mi suscripción</button>
+        </div>` : ""}
 
         <div class="card">
 
@@ -13997,3 +14003,4 @@ window.addEventListener("popstate", function(event){
 <script src="cierre.js"></script>
 </body>
 </html>
+
