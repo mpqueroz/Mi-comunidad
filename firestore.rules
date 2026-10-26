@@ -131,9 +131,24 @@ service cloud.firestore {
     && request.resource.data.mensaje is string && request.resource.data.mensaje.size()>=10 && request.resource.data.mensaje.size()<=2000
     && request.resource.data.estado=='pendiente' && request.resource.data.fecha==request.time;
   }
+  // Perfil privado: se crea una vez al registrarse, con los campos del
+  // formulario y fechas del servidor. Después el titular solo puede corregir
+  // nombre, apellido, nacionalidad y domicilio; RUT, correo y consentimiento
+  // no se reescriben desde el cliente.
+  function textoPerfil(d, campo, max) { return d.get(campo, '') is string && d.get(campo, '').size() <= max; }
+  function perfilValido(d) {
+   return textoPerfil(d,'nombre',80) && textoPerfil(d,'apellido',80) && textoPerfil(d,'rut',20)
+    && textoPerfil(d,'nacionalidad',60) && textoPerfil(d,'domicilio',200) && textoPerfil(d,'correo',160)
+    && textoPerfil(d,'consentimientoVersion',20);
+  }
   match /usuarios/{uid} {
    allow read: if admin() || owner(uid);
-   allow create, update: if owner(uid);
+   allow create: if owner(uid)
+    && request.resource.data.keys().hasOnly(['nombre','apellido','rut','nacionalidad','domicilio','correo','consentimientoVersion','consentimientoFecha','fechaRegistro'])
+    && perfilValido(request.resource.data)
+    && request.resource.data.fechaRegistro == request.time
+    && request.resource.data.consentimientoFecha == request.time;
+   allow update: if owner(uid) && only(['nombre','apellido','nacionalidad','domicilio']) && perfilValido(request.resource.data);
    allow delete: if admin();
    match /serviciosContactados/{id} { allow read: if owner(uid); allow write: if false; }
    match /preferencias/{id} {

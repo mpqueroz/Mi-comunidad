@@ -67,17 +67,31 @@ En cada pull request y antes de cada despliegue (`.github/workflows/firebase.yml
 
 ## Las otras aplicaciones del proyecto compartido
 
-El despliegue de este repositorio publica solo la sección de Mi Comunidad y
-conserva tal cual las reglas vigentes de Mercado Ciudadano y Almacén Digital.
-Estas dos observaciones deben corregirse en sus propios repositorios:
+Firestore y Storage admiten **un solo archivo de reglas** para todo el
+proyecto `mercado-ciudadano`. Para que ninguna app pise a otra, cada
+despliegue publica solo su propia sección encima de las reglas vigentes y
+verifica después lo publicado:
 
-- **Almacén Digital** (`userStores/{uid}`): el propio dueño puede crear y
-  modificar su documento, incluido el estado de aprobación. El cambio de
-  estado debería quedar solo para el administrador, y `esAdminAlmacen()`
-  debería exigir `email_verified == true`.
-- **Mercado Ciudadano** (`usuarios/{uid}`): el usuario puede escribir
-  cualquier campo de su perfil; conviene una lista blanca de campos que
-  excluya los que otorgan confianza (verificado, rol, reputación, etc.).
+| App | Sección que publica | Cómo |
+|---|---|---|
+| Mi Comunidad | De `function mcEsMiComunidad` al final del bloque `mi_comunidad_comunidades` | `scripts/preparar-reglas-compartidas.cjs` (este repositorio) |
+| Mercado Ciudadano | De `function login()` hasta el comentario `// ALMACÉN DIGITAL Y MI COMUNIDAD` | `scripts/preparar-reglas-compartidas.cjs` (repositorio `mercado-ciudadano`) |
+| Almacén Digital | Sin publicación automática conocida | Ver pendiente abajo |
+
+Si un script no encuentra exactamente los límites de su sección, se detiene
+sin publicar nada. Storage lo publica solo Mercado Ciudadano, y se detiene si
+las reglas vigentes tienen rutas de otra app.
+
+Las copias de `firestore.rules` de Mi Comunidad y de Mercado Ciudadano se
+mantienen idénticas, para que las pruebas de cada repositorio corran contra
+el archivo completo.
+
+Pendiente de **Almacén Digital** (su código no está en los repositorios
+revisados): en `userStores/{uid}` el propio dueño puede crear y modificar su
+documento, incluido el estado de aprobación, y `esAdminAlmacen()` no exige
+`email_verified == true`. Además, si esa app se publica con `firebase deploy
+--only firestore:rules` desde una carpeta propia, reemplazaría las reglas de
+las otras dos: debe adoptar el mismo script por secciones.
 
 ## Datos existentes al desplegar
 
