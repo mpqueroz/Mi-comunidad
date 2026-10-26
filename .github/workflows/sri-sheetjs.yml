@@ -1,0 +1,19 @@
+# Temporal: calcula la huella SRI de SheetJS (este entorno no llega a su CDN).
+name: Huella SheetJS
+on:
+  push:
+    branches: [claude/serene-archimedes-srx727]
+    paths: [".github/workflows/sri-sheetjs.yml"]
+permissions:
+  contents: read
+jobs:
+  huella:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar y calcular
+        run: |
+          curl -sSf -D cabeceras.txt -H "Origin: https://mi-comunidad-md.web.app" -o xlsx.full.min.js https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js
+          grep -i -E "^(access-control-allow-origin|content-type|content-length):" cabeceras.txt
+          echo "SRI sha384-$(openssl dgst -sha384 -binary xlsx.full.min.js | openssl base64 -A)"
+          echo "SHA256 $(sha256sum xlsx.full.min.js)"
+          wc -c xlsx.full.min.js
