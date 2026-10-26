@@ -2141,10 +2141,10 @@ td, .stat-number, .rc-monto, .cj-monto{ font-variant-numeric:tabular-nums; }
 </div>
 
 
-<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-functions-compat.js"></script>
+<script src="vendor/firebase-10.13.2/firebase-app-compat.js"></script>
+<script src="vendor/firebase-10.13.2/firebase-auth-compat.js"></script>
+<script src="vendor/firebase-10.13.2/firebase-firestore-compat.js"></script>
+<script src="vendor/firebase-10.13.2/firebase-functions-compat.js"></script>
 
 <script>
 
@@ -5015,12 +5015,14 @@ async function login(){
                    err.code === "auth/wrong-password" ||
                    err.code === "auth/invalid-credential")){
             mensaje = "RUT o contraseña incorrectos.";
+        } else if(err && err.code === "auth/user-disabled"){
+            mensaje = "Esta cuenta fue desactivada. Contacta a administración o a soporte.";
         } else if(err && err.code === "auth/too-many-requests"){
             mensaje = "Demasiados intentos. Intenta de nuevo en unos minutos.";
         } else if(err && err.code === "mi-comunidad/comunidad-suspendida"){
             mensaje = err.message;
         } else if(err && err.code === "permission-denied"){
-            mensaje = "Tu clave es correcta, pero Firebase bloqueó la lectura de los datos del edificio (reglas de seguridad de Firestore).";
+            mensaje = "Tu clave es correcta, pero tu cuenta no tiene acceso a este edificio (puede estar desactivada o haber cambiado de departamento). Contacta a administración.";
         } else if(err && String(err.code || "").startsWith("auth/api-key")){
             mensaje = "La configuración de Firebase (firebaseConfig) de esta página no es válida.";
         } else if(err && err.code === "auth/network-request-failed"){
@@ -5133,6 +5135,21 @@ async function iniciarSesionComunidad(comunidadId){
         const miFichaSnap = await miFichaRef.get();
         aplicarSnapshotResidentes(miFichaSnap);
         residentesUnsub = miFichaRef.onSnapshot(aplicarSnapshotResidentes, err => console.error(err));
+
+    } else if(currentRole === "conserje"){
+
+        // Conserjería no lee la colección de residentes: recibe del servidor
+        // un directorio reducido (sin RUT ni motivos de restricción) y lo
+        // vuelve a pedir cada 5 minutos para ver altas y cambios.
+        pasoLogin = "residentes";
+        await cargarDirectorioConserjeria();
+        const intervalo = setInterval(() => cargarDirectorioConserjeria().catch(err => console.error(err)), 5 * 60 * 1000);
+        residentesUnsub = () => clearInterval(intervalo);
+
+        pasoLogin = "conserjes";
+        const conserjeRef = comunidadRef.collection("conserjes").doc(currentUid);
+        aplicarSnapshotConserjes(await conserjeRef.get());
+        conserjesUnsub = conserjeRef.onSnapshot(aplicarSnapshotConserjes, err => console.error(err));
 
     } else {
 
@@ -5284,6 +5301,8 @@ async function iniciarSesionComunidad(comunidadId){
 }
 
 function detenerListenersComunidad(){
+    fichasProtegidas = {};
+    fichaVerificada = {};
     if(comunidadUnsub){ comunidadUnsub(); comunidadUnsub = null; }
     if(residentesUnsub){ residentesUnsub(); residentesUnsub = null; }
     if(conserjesUnsub){ conserjesUnsub(); conserjesUnsub = null; }
@@ -5473,6 +5492,35 @@ function aplicarSnapshotResidentes(snap){
 
 }
 
+// Directorio reducido de conserjería (ver directorioConserjeriaMiComunidad).
+async function cargarDirectorioConserjeria(){
+    const res = await functions.httpsCallable("directorioConserjeriaMiComunidad")({comunidadId: community.id});
+    const lista = (res && res.data && res.data.residentes) || [];
+    residentesDirectorio.length = 0;
+    lista.forEach(r => residentesDirectorio.push(r));
+    rerenderSiAppVisible();
+}
+
+// Datos protegidos de una ficha que conserjería recibió al verificar la
+// identidad. Duran 10 minutos y se borran al cerrar sesión.
+const FICHA_VERIFICADA_MS = 10 * 60 * 1000;
+let fichasProtegidas = {};
+
+function guardarFichaProtegida(depto, ficha){
+    fichasProtegidas[depto] = {ficha: ficha || {}, hasta: Date.now() + FICHA_VERIFICADA_MS};
+    fichaVerificada[depto] = true;
+}
+
+function fichaProtegidaVigente(depto){
+    const f = fichasProtegidas[depto];
+    if(f && f.hasta > Date.now()){
+        return f.ficha;
+    }
+    delete fichasProtegidas[depto];
+    delete fichaVerificada[depto];
+    return null;
+}
+
 // "profile" (nombre/depto/teléfono) es lo que usa Mi perfil para saber
 // "quién soy" (renderPerfil busca residentesDirectorio por profile.depto).
 // Antes era un dato de demostración fijo; ahora, si el usuario logueado
@@ -5524,24 +5572,25 @@ function residenteDocRef(residente){
 // enviarle un email de "olvidé mi contraseña" a nadie. Por eso, si un
 // residente o conserje olvida su clave, administración se la restablece
 // acá mismo (vía Cloud Function, con el Admin SDK).
-async function restablecerClave(uid, nombre){
+// comunidadId solo lo pasa el superadmin (no tiene comunidad propia).
+async function restablecerClave(uid, nombre, comunidadId){
 
     const nuevaClave = window.prompt(
-        `Nueva contraseña para ${nombre} (mínimo 6 caracteres):`
+        `Nueva contraseña para ${nombre} (mínimo 8 caracteres):`
     );
 
     if(!nuevaClave){
         return;
     }
 
-    if(nuevaClave.length < 6){
-        showToast("La contraseña debe tener al menos 6 caracteres");
+    if(nuevaClave.length < 8){
+        showToast("La contraseña debe tener al menos 8 caracteres");
         return;
     }
 
     try {
         const restablecer = functions.httpsCallable("restablecerClaveMiComunidad");
-        await restablecer({comunidadId: community.id, uid: uid, nuevaClave: nuevaClave});
+        await restablecer({comunidadId: comunidadId || community.id, uid: uid, nuevaClave: nuevaClave});
         showToast(`Contraseña de ${nombre} actualizada correctamente`);
     } catch(err){
         console.error(err);
@@ -7652,6 +7701,70 @@ async function toggleEstadoComunidad(id){
 }
 
 
+// Solo superadmin: el servidor valida rol y comunidad, deshabilita la
+// cuenta en Auth y cierra sus sesiones al desactivarla.
+async function cambiarEstadoAdminComunidad(id, estado){
+
+    const comunidad = comunidadesDirectorio.find(c => c.id === id);
+
+    if(!comunidad || !comunidad.adminUid){
+        return;
+    }
+
+    const texto = estado === "Inactivo"
+        ? `¿Desactivar la cuenta de administración de "${comunidad.adminNombre || comunidad.name}"? No podrá ingresar hasta que la reactives.`
+        : `¿Reactivar la cuenta de administración de "${comunidad.adminNombre || comunidad.name}"?`;
+
+    if(!window.confirm(texto)){
+        return;
+    }
+
+    try {
+        await functions.httpsCallable("cambiarEstadoAdminMiComunidad")({comunidadId: id, uid: comunidad.adminUid, estado});
+        showToast(estado === "Inactivo" ? "Cuenta de administración desactivada" : "Cuenta de administración reactivada");
+    } catch(err){
+        console.error(err);
+        showToast(err && err.message ? err.message : "No se pudo cambiar la cuenta. Revisa tu conexión.");
+    }
+
+}
+
+
+async function crearNuevoAdminComunidad(id){
+
+    const comunidad = comunidadesDirectorio.find(c => c.id === id);
+    const nombre = document.getElementById("mNuevoAdminNombre").value.trim();
+    const rut = document.getElementById("mNuevoAdminRut").value.trim();
+    const password = document.getElementById("mNuevoAdminClave").value;
+
+    if(!comunidad){
+        return;
+    }
+
+    if(!nombre || !validarRut(rut)){
+        showToast("Completa el nombre y un RUT válido");
+        return;
+    }
+
+    if(password.length < 8){
+        showToast("La contraseña debe tener al menos 8 caracteres");
+        return;
+    }
+
+    try {
+        const res = await functions.httpsCallable("crearAdministradorMiComunidad")({comunidadId: id, nombre, rut, password});
+        comunidad.adminNombre = nombre;
+        comunidad.adminUid = res.data.uid;
+        showToast("Cuenta de administración creada. Ya puede ingresar con su RUT.");
+        openModal("detalleComunidad", comunidad);
+    } catch(err){
+        console.error(err);
+        showToast(err && err.message ? err.message : "No se pudo crear la cuenta. Revisa tu conexión.");
+    }
+
+}
+
+
 async function guardarPlanComunidad(id){
 
     const comunidad = comunidadesDirectorio.find(c => c.id === id);
@@ -9355,7 +9468,13 @@ function fichaDeptoHtml(r){
     }
 
     const esAdmin = currentRole === "admin";
-    const puedeVer = esAdmin || !!fichaVerificada[r.depto];
+    // Conserjería recibe RUT, familiares con RUT, motivos y datos de
+    // propiedad solo al verificar en el servidor (fichaProtegidaVigente).
+    const protegida = esAdmin ? null : fichaProtegidaVigente(r.depto);
+    if(protegida){
+        r = Object.assign({}, r, protegida);
+    }
+    const puedeVer = esAdmin || !!protegida;
     if(!esAdmin && fichaTabActual.tab === "pagos"){
         fichaTabActual.tab = "resumen";
     }
@@ -9395,7 +9514,7 @@ function fichaDeptoHtml(r){
                 <div class="fx-avatar">${esc(iniciales)}</div>
                 <div style="min-width:0">
                     <div class="fx-nombre">${esc(r.nombre)}</div>
-                    <div class="fx-sub">Departamento ${esc(r.depto)}${esc(r.nombreArrendatario ? ", arrendado" : "")}</div>
+                    <div class="fx-sub">Departamento ${esc(r.depto)}${esc(r.nombreArrendatario || r.arrendado ? ", arrendado" : "")}</div>
                     <div class="fx-chips">
                         ${esAdmin ? `<span class="fx-chip is-${esc(est)}">${esc(ESTADOS_DEPTO[est].label)}</span>` : ""}
                         <span class="badge ${esc(r.estado === "Activo" ? "badge-green" : "badge-yellow")}">${esc(r.estado === "Activo" ? "Cuenta activa" : "Cuenta sin activar")}</span>
@@ -9420,10 +9539,10 @@ function fichaDeptoHtml(r){
             <div class="fx-pane" data-pane="resumen">
 
                 <dl class="fx-datos">
-                    <div><dt>RUT</dt><dd>${esc(r.rut ? formatearRut(r.rut) : "No registrado")}</dd></div>
+                    <div><dt>RUT</dt><dd>${esc(!puedeVer ? "Visible al verificar" : r.rut ? formatearRut(r.rut) : "No registrado")}</dd></div>
                     <div><dt>Teléfono</dt><dd>${esc(r.telefono || "No registrado")}</dd></div>
-                    <div><dt>Propietario</dt><dd>${esc(r.nombreDueno || "No registrado")}</dd></div>
-                    <div><dt>Arrendatario</dt><dd>${esc(r.nombreArrendatario || "No aplica")}</dd></div>
+                    <div><dt>Propietario</dt><dd>${esc(!puedeVer ? "Visible al verificar" : r.nombreDueno || "No registrado")}</dd></div>
+                    <div><dt>Arrendatario</dt><dd>${esc(!puedeVer ? (r.arrendado ? "Arrendado" : "Visible al verificar") : r.nombreArrendatario || "No aplica")}</dd></div>
                 </dl>
 
                 ${esAdmin ? `
@@ -9496,10 +9615,10 @@ function fichaDeptoHtml(r){
                                 <div class="list-title">${esc(f.nombre)}</div>
                                 <div class="list-meta">${esc(f.parentesco)}${esc(f.rut ? ", RUT " + f.rut : "")}</div>
                             </div>
-                            <button class="outline-btn" onclick="quitarFamiliar('${escJs(r.depto)}', ${escJs(idx)})">Quitar</button>
+                            ${esAdmin ? `<button class="outline-btn" onclick="quitarFamiliar('${escJs(r.depto)}', ${escJs(idx)})">Quitar</button>` : ""}
                         </div>
                     `).join("") : '<div class="fx-vacio">No hay familiares registrados.</div>'}
-                    <button class="outline-btn" style="margin-top:8px" onclick="abrirModalFamiliar('${escJs(r.depto)}')">+ Agregar familiar</button>
+                    ${esAdmin ? `<button class="outline-btn" style="margin-top:8px" onclick="abrirModalFamiliar('${escJs(r.depto)}')">+ Agregar familiar</button>` : ""}
 
                     <h4 class="fx-h">${icon('ban')} Personas sin acceso <span class="fx-count">${esc(restringidos.length)}</span></h4>
                     <p class="fx-nota">Si alguna intenta registrar su ingreso, conserjería recibe una alerta inmediata.</p>
@@ -9510,10 +9629,10 @@ function fichaDeptoHtml(r){
                                 <div class="list-title">${esc(p.nombre)}</div>
                                 <div class="list-meta">${esc(p.rut || "Sin RUT")}${esc(p.motivo ? ", " + p.motivo : "")}</div>
                             </div>
-                            <button class="outline-btn" onclick="quitarRestringido('${escJs(r.depto)}', ${escJs(idx)})">Quitar</button>
+                            ${esAdmin ? `<button class="outline-btn" onclick="quitarRestringido('${escJs(r.depto)}', ${escJs(idx)})">Quitar</button>` : ""}
                         </div>
                     `).join("") : '<div class="fx-vacio">Nadie tiene el acceso restringido a este departamento.</div>'}
-                    <button class="outline-btn" style="margin-top:8px" onclick="abrirModalRestringido('${escJs(r.depto)}')">+ Agregar persona sin acceso</button>
+                    ${esAdmin ? `<button class="outline-btn" style="margin-top:8px" onclick="abrirModalRestringido('${escJs(r.depto)}')">+ Agregar persona sin acceso</button>` : ""}
                 ` : ""}
             </div>
 
@@ -9597,8 +9716,8 @@ function fichaDeptoHtml(r){
                             </div>
                             <button class="primary-btn" style="width:auto" onclick="verificarIdentidadFicha('${escJs(r.depto)}')">Verificar identidad</button>
                         ` : `
-                            <p class="fx-nota">Este departamento no tiene una pregunta de seguridad configurada. Verifica la identidad por otro medio.</p>
-                            <button class="outline-btn" onclick="mostrarFichaSinVerificar('${escJs(r.depto)}')">Mostrar de todas formas (bajo tu responsabilidad)</button>
+                            <p class="fx-nota">Este departamento no tiene una pregunta de seguridad configurada. Verifica la identidad por otro medio; la consulta queda registrada y se avisa al departamento.</p>
+                            <button class="outline-btn" onclick="mostrarFichaSinVerificar('${escJs(r.depto)}')">Registrar verificación manual</button>
                         `}
                     </div>
                 </div>
@@ -10296,14 +10415,14 @@ const modalFormBuilders = {
 
         <div class="form-group">
             <label>Nombre de quien te va a visitar</label>
-            <input id="mVisitaProgNombre"
+            <input id="mVisitaProgNombre" maxlength="150"
                    class="form-control"
                    placeholder="Nombre completo">
         </div>
 
         <div class="form-group">
             <label>RUT (opcional)</label>
-            <input id="mVisitaProgRut"
+            <input id="mVisitaProgRut" maxlength="12"
                    class="form-control"
                    placeholder="Ej: 12.345.678-5"
                    oninput="validarRutEnVivo(this)">
@@ -10322,7 +10441,7 @@ const modalFormBuilders = {
 
         <div class="form-group">
             <label>Motivo (opcional)</label>
-            <input id="mVisitaProgMotivo"
+            <input id="mVisitaProgMotivo" maxlength="500"
                    class="form-control"
                    placeholder="Ej: Visita familiar">
         </div>
@@ -10333,7 +10452,7 @@ const modalFormBuilders = {
 
         <div class="form-group">
             <label>Patente</label>
-            <input id="mVehiculoPatente"
+            <input id="mVehiculoPatente" maxlength="12"
                    class="form-control"
                    placeholder="Ej: AB-CD-12"
                    style="text-transform:uppercase">
@@ -10360,7 +10479,7 @@ const modalFormBuilders = {
 
         <div class="form-group">
             <label>Patente</label>
-            <input id="mVehRegPatente"
+            <input id="mVehRegPatente" maxlength="12"
                    class="form-control"
                    placeholder="Ej: AB-CD-12"
                    style="text-transform:uppercase">
@@ -10383,7 +10502,7 @@ const modalFormBuilders = {
 
         <div class="form-group">
             <label>Notas (opcional)</label>
-            <textarea id="mVehRegNotas"
+            <textarea id="mVehRegNotas" maxlength="500"
                       class="form-control"
                       placeholder="Ej: vehículo del arrendatario, avistado merodeando, etc."></textarea>
         </div>
@@ -10394,7 +10513,7 @@ const modalFormBuilders = {
 
         <div class="form-group">
             <label>Nombre</label>
-            <input id="mAccesoNombre"
+            <input id="mAccesoNombre" maxlength="150"
                    class="form-control"
                    placeholder="Nombre de la persona"
                    oninput="chequearRestriccionAcceso()">
@@ -10402,7 +10521,7 @@ const modalFormBuilders = {
 
         <div class="form-group">
             <label>RUT</label>
-            <input id="mAccesoRut"
+            <input id="mAccesoRut" maxlength="12"
                    class="form-control"
                    placeholder="Ej: 12.345.678-5"
                    oninput="validarRutEnVivo(this); chequearRestriccionAcceso();">
@@ -10411,7 +10530,7 @@ const modalFormBuilders = {
 
         <div class="form-group">
             <label>Motivo</label>
-            <input id="mAccesoMotivo"
+            <input id="mAccesoMotivo" maxlength="500"
                    class="form-control"
                    placeholder="Ej: Proveedor, contratista, delivery...">
         </div>
@@ -10504,7 +10623,7 @@ const modalFormBuilders = {
             <input id="mResidenteClave"
                    class="form-control"
                    type="text"
-                   placeholder="Mínimo 6 caracteres">
+                   placeholder="Mínimo 8 caracteres">
             <small style="display:block;color:var(--muted);font-size:12px;margin-top:5px">
                 El residente ingresará con su RUT y esta contraseña. Podrá pedirte que se la cambies después si la olvida.
             </small>
@@ -10700,7 +10819,7 @@ const modalFormBuilders = {
             <input id="mConserjeClave"
                    class="form-control"
                    type="text"
-                   placeholder="Mínimo 6 caracteres">
+                   placeholder="Mínimo 8 caracteres">
             <small style="display:block;color:var(--muted);font-size:12px;margin-top:5px">
                 El conserje ingresará con su RUT y esta contraseña.
             </small>
@@ -11274,7 +11393,7 @@ const modalFormBuilders = {
             <input id="mComunidadAdminClave"
                    class="form-control"
                    type="text"
-                   placeholder="Mínimo 6 caracteres">
+                   placeholder="Mínimo 8 caracteres">
         </div>
 
     `,
@@ -11353,6 +11472,27 @@ const modalFormBuilders = {
             <div class="form-group">
                 <label>Administrador principal</label>
                 <p style="font-size:14px;margin:0">${esc(c.adminNombre || "—")}</p>
+                ${c.adminUid ? `
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+                        <button class="outline-btn" style="width:auto;color:var(--danger);border-color:var(--danger)" onclick="cambiarEstadoAdminComunidad('${escJs(c.id)}', 'Inactivo')">Desactivar cuenta</button>
+                        <button class="outline-btn" style="width:auto" onclick="cambiarEstadoAdminComunidad('${escJs(c.id)}', 'Activo')">Reactivar cuenta</button>
+                        <button class="outline-btn" style="width:auto" onclick="restablecerClave('${escJs(c.adminUid)}', '${escJs(c.adminNombre || "Administración")}', '${escJs(c.id)}')">${icon('key')} Restablecer clave</button>
+                    </div>
+                ` : ""}
+                <details style="margin-top:10px">
+                    <summary style="cursor:pointer;font-size:13px">Crear una nueva cuenta de administración</summary>
+                    <div class="form-group" style="margin-top:8px">
+                        <input id="mNuevoAdminNombre" class="form-control" maxlength="150" placeholder="Nombre completo">
+                    </div>
+                    <div class="form-group">
+                        <input id="mNuevoAdminRut" class="form-control" maxlength="12" placeholder="RUT (Ej: 12.345.678-9)">
+                    </div>
+                    <div class="form-group">
+                        <input id="mNuevoAdminClave" type="password" class="form-control" maxlength="128" autocomplete="new-password" placeholder="Contraseña inicial (mínimo 8 caracteres)">
+                    </div>
+                    <button class="outline-btn" style="width:auto" onclick="crearNuevoAdminComunidad('${escJs(c.id)}')">Crear cuenta</button>
+                    <p class="fx-nota">La nueva cuenta pasa a ser la administración principal. Desactiva la anterior si ya no debe ingresar.</p>
+                </details>
             </div>
 
             <div class="form-group">
@@ -11505,7 +11645,7 @@ async function registrarVisitaReal({nombre, rut, depto, motivo}){
             depto:depto
         });
 
-        showToast(`${icon('ban')} Esta persona no tiene acceso autorizado a este departamento. Se generó una alerta.`);
+        showToast(`Esta persona no tiene acceso autorizado a este departamento. Se generó una alerta.`);
         navigate("conserjeria");
         return true;
 
@@ -12178,9 +12318,10 @@ async function verificarIdentidadFicha(depto){
         return;
     }
 
+    let resultado;
     try {
         const verificar = functions.httpsCallable("verificarPreguntaSecretaMiComunidad");
-        const resultado = await verificar({comunidadId: community.id, uid: residente.uid, respuesta: respuesta});
+        resultado = await verificar({comunidadId: community.id, uid: residente.uid, respuesta: respuesta});
         if(!resultado || !resultado.data || !resultado.data.ok){
             const restantes = resultado && resultado.data ? resultado.data.intentosRestantes : null;
             showToast("Respuesta incorrecta." + (restantes !== null && restantes !== undefined ? ` Te quedan ${restantes} intento(s).` : ""));
@@ -12192,19 +12333,17 @@ async function verificarIdentidadFicha(depto){
         return;
     }
 
-    fichaVerificada[depto] = true;
+    guardarFichaProtegida(depto, resultado.data.ficha);
     showToast("Identidad verificada correctamente.");
     openModal("detalleResidente", residente);
 
 }
 
 
+// Reemplazada en profesional.js por la verificación manual registrada en
+// el servidor; sin ella no se muestran datos protegidos.
 function mostrarFichaSinVerificar(depto){
-    fichaVerificada[depto] = true;
-    const residente = residentesDirectorio.find(r => r.depto === depto);
-    if(residente){
-        openModal("detalleResidente", residente);
-    }
+    showToast("La verificación manual debe registrarse en el servidor.");
 }
 
 
@@ -12848,7 +12987,7 @@ async function saveModal(){
             });
 
             closeModal();
-            showToast(`${icon('triangle-alert')} Vehículo marcado como SOSPECHOSO. Se generó una alerta.`);
+            showToast(`Atención: vehículo marcado como SOSPECHOSO. Se generó una alerta.`);
             navigate("conserjeria");
             return;
 
@@ -12958,11 +13097,11 @@ async function saveModal(){
                 icon:"🚫",
                 titulo:`Acceso restringido: ${nombre} intentó ingresar`,
                 meta:`No autorizado por depto ${restriccionAcceso.depto}`,
-                paraTodos:true
+                depto:restriccionAcceso.depto
             });
 
             closeModal();
-            showToast(`${icon('ban')} Esta persona no tiene acceso autorizado. Se generó una alerta.`);
+            showToast(`Esta persona no tiene acceso autorizado. Se generó una alerta.`);
             navigate("conserjeria");
             return;
 
@@ -12995,8 +13134,8 @@ async function saveModal(){
             return;
         }
 
-        if(!clave || clave.length < 6){
-            showToast("La contraseña debe tener al menos 6 caracteres");
+        if(!clave || clave.length < 8){
+            showToast("La contraseña debe tener al menos 8 caracteres");
             return;
         }
 
@@ -13219,8 +13358,8 @@ async function saveModal(){
             return;
         }
 
-        if(!clave || clave.length < 6){
-            showToast("La contraseña debe tener al menos 6 caracteres");
+        if(!clave || clave.length < 8){
+            showToast("La contraseña debe tener al menos 8 caracteres");
             return;
         }
 
@@ -13295,8 +13434,8 @@ async function saveModal(){
             return;
         }
 
-        if(!adminClave || adminClave.length < 6){
-            showToast("La contraseña del administrador debe tener al menos 6 caracteres");
+        if(!adminClave || adminClave.length < 8){
+            showToast("La contraseña del administrador debe tener al menos 8 caracteres");
             return;
         }
 

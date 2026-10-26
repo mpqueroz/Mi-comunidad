@@ -226,3 +226,52 @@ test("invitados de una reserva deben ser una lista acotada", async () => {
   await assertFails(residente().doc(`${BASE}/reservas/r1`).update({invitados: "texto"}));
   await assertFails(residente().doc(`${BASE}/reservas/r1`).update({invitados: Array(101).fill({nombre: "x", rut: ""})}));
 });
+
+// ---- fichas, administración desactivada y altas acotadas ----
+
+test("conserjería NO lee fichas de residentes; administración y el propio residente sí", async () => {
+  await assertFails(conserje().doc(`${BASE}/residentes/res1`).get());
+  await assertFails(conserje().collection(`${BASE}/residentes`).get());
+  await assertSucceeds(adminDb().collection(`${BASE}/residentes`).get());
+  await assertSucceeds(residente().doc(`${BASE}/residentes/res1`).get());
+});
+
+test("administración desactivada pierde el acceso aunque su token siga vigente", async () => {
+  await assertSucceeds(adminDb().doc(`${BASE}/residentes/res1`).get());
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.firestore().doc(`${BASE}/administradores/adm1`).set({nombre: "Admin", estado: "Activo"});
+  });
+  await assertSucceeds(adminDb().doc(`${BASE}/residentes/res1`).get());
+  await assertSucceeds(adminDb().doc(`${BASE}/administradores/adm1`).get());
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.firestore().doc(`${BASE}/administradores/adm1`).update({estado: "Inactivo"});
+  });
+  await assertFails(adminDb().doc(`${BASE}/residentes/res1`).get());
+  await assertFails(adminDb().doc(BASE).get());
+});
+
+test("nadie escribe la lista de administradores desde el cliente", async () => {
+  await assertFails(adminDb().doc(`${BASE}/administradores/adm1`).set({estado: "Activo"}));
+  await assertFails(conserje().doc(`${BASE}/administradores/adm1`).get());
+  await assertFails(residente().doc(`${BASE}/administradores/adm1`).get());
+});
+
+test("notificación de residente: solo campos conocidos y tamaños acotados", async () => {
+  const n = {icon: "💵", titulo: "Pago informado", meta: "Depto 101", depto: "101", paraTodos: false, leidaPor: [], fecha: "26-10-2026", hora: "10:00", ts: 1};
+  await assertSucceeds(residente().collection(`${BASE}/notificaciones`).add(n));
+  await assertFails(residente().collection(`${BASE}/notificaciones`).add({...n, enlace: "https://x"}));
+  await assertFails(residente().collection(`${BASE}/notificaciones`).add({...n, titulo: "x".repeat(201)}));
+});
+
+test("bitácoras de conserjería aceptan solo los campos de la app", async () => {
+  const v = {patente: "ABCD12", depto: "101", tipo: "Ingreso", fecha: "2026-10-26", hora: "09:08\u202fp.\u00a0m.", ts: 1};
+  await assertSucceeds(conserje().collection(`${BASE}/vehiculos`).add(v));
+  await assertFails(conserje().collection(`${BASE}/vehiculos`).add({...v, extra: 1}));
+  await assertFails(conserje().collection(`${BASE}/vehiculos`).add({...v, patente: "X".repeat(13)}));
+  const a = {nombre: "Repartidor", rut: "", motivo: "Delivery", tipo: "Entrada", fecha: "2026-10-26", hora: "10:00", restringido: false, ts: 1};
+  await assertSucceeds(conserje().collection(`${BASE}/accesos`).add(a));
+  await assertFails(conserje().collection(`${BASE}/accesos`).add({...a, tipo: "Otro"}));
+  const r = {patente: "ABCD12", depto: "101", categoria: "Sospechoso", notas: "", ts: 1};
+  await assertSucceeds(conserje().collection(`${BASE}/vehiculosRegistrados`).add(r));
+  await assertFails(conserje().collection(`${BASE}/vehiculosRegistrados`).add({...r, notas: "x".repeat(501)}));
+});

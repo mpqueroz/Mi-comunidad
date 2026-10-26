@@ -281,10 +281,13 @@ service cloud.firestore {
 
     // Consultar la ficha en cada solicitud corta el acceso aunque el token
     // de una sesión anterior todavía no haya vencido. No se confía en la UI.
+    // Administración: sin documento en administradores sigue habilitada
+    // (comunidades anteriores a esa colección), pero "Inactivo" la corta.
     function mcCuentaHabilitada(comunidadId) {
       let residente = /databases/$(database)/documents/mi_comunidad_comunidades/$(comunidadId)/residentes/$(request.auth.uid);
       let conserje = /databases/$(database)/documents/mi_comunidad_comunidades/$(comunidadId)/conserjes/$(request.auth.uid);
-      return mcEsAdmin() ||
+      let administrador = /databases/$(database)/documents/mi_comunidad_comunidades/$(comunidadId)/administradores/$(request.auth.uid);
+      return (mcEsAdmin() && (!exists(administrador) || get(administrador).data.get('estado', 'Activo') != 'Inactivo')) ||
              (mcEsConserje() && exists(conserje) && get(conserje).data.get('estado', 'Activo') != 'Inactivo') ||
              (mcEsResidente() && exists(residente) && get(residente).data.get('estado', 'Activo') != 'Inactivo' &&
               get(residente).data.get('depto', '') == mcMiDepto());
@@ -382,10 +385,13 @@ service cloud.firestore {
       // ---- Residentes (una ficha por departamento, doc id = uid del residente) ----
       match /residentes/{uid} {
 
-        // Admin y conserjería necesitan ver todas las fichas (control de acceso total).
-        // Un residente solo puede leer su propia ficha.
+        // Administración ve todas las fichas; un residente solo la propia.
+        // Conserjería NO lee esta colección: recibe un directorio reducido
+        // (directorioConserjeriaMiComunidad) y el RUT, familiares con RUT,
+        // motivos de restricción y datos de propiedad solo al verificar la
+        // identidad en el servidor, que deja registro en auditoría.
         allow read: if mcEsDeEstaComunidadActiva(comunidadId) &&
-                       (mcEsAdmin() || mcEsConserje() || (mcEsResidente() && request.auth.uid == uid));
+                       (mcEsAdmin() || (mcEsResidente() && request.auth.uid == uid));
 
         // Crear/eliminar cuentas de residentes SOLO vía Cloud Function (Admin SDK),
         // nunca directo desde el cliente.
@@ -424,6 +430,15 @@ service cloud.firestore {
       // (Admin SDK) leen y escriben aquí. Ni administración puede leerla.
       match /secretos/{uid} {
         allow read, write: if false;
+      }
+
+      // ---- Cuentas de administración (lista de bajas) ----
+      // Las escribe solo el servidor (crearComunidad, crearAdministrador,
+      // cambiarEstadoAdmin). Administración lee la propia; el superadmin todas.
+      match /administradores/{uid} {
+        allow read: if mcEsSuperAdmin() ||
+                       (mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin() && request.auth.uid == uid);
+        allow write: if false;
       }
 
       // ---- Conserjes (doc id = uid del conserje) ----
@@ -471,7 +486,7 @@ service cloud.firestore {
                          request.resource.data.nombre is string && request.resource.data.nombre.size() > 0 && request.resource.data.nombre.size() <= 150 &&
                          request.resource.data.get('rut', '') is string && request.resource.data.get('rut', '').size() <= 20 &&
                          request.resource.data.get('fecha', '') is string && request.resource.data.get('fecha', '').size() <= 10 &&
-                         request.resource.data.get('hora', '') is string && request.resource.data.get('hora', '').size() <= 10 &&
+                         request.resource.data.get('hora', '') is string && request.resource.data.get('hora', '').size() <= 20 &&
                          request.resource.data.get('motivo', '') is string && request.resource.data.get('motivo', '').size() <= 500;
         allow update: if false;
         allow delete: if mcEsDeEstaComunidadActiva(comunidadId) &&
@@ -482,7 +497,13 @@ service cloud.firestore {
       match /vehiculos/{id} {
         allow read: if mcEsDeEstaComunidadActiva(comunidadId) &&
                        (mcEsAdmin() || mcEsConserje() || (mcEsResidente() && resource.data.depto == mcMiDepto()));
-        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje());
+        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje()) &&
+                         request.resource.data.keys().hasOnly(['patente', 'depto', 'tipo', 'fecha', 'hora', 'ts']) &&
+                         request.resource.data.patente is string && request.resource.data.patente.size() > 0 && request.resource.data.patente.size() <= 12 &&
+                         request.resource.data.depto is string && request.resource.data.depto.size() <= 40 &&
+                         request.resource.data.get('tipo', '') is string && request.resource.data.get('tipo', '').size() <= 20 &&
+                         request.resource.data.get('fecha', '') is string && request.resource.data.get('fecha', '').size() <= 10 &&
+                         request.resource.data.get('hora', '') is string && request.resource.data.get('hora', '').size() <= 20;
         allow update, delete: if false;
       }
 
@@ -773,7 +794,12 @@ service cloud.firestore {
       // de la lista queda solo para administración (única UI de borrado).
       match /vehiculosRegistrados/{id} {
         allow read: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje());
-        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje());
+        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje()) &&
+                         request.resource.data.keys().hasOnly(['patente', 'depto', 'categoria', 'notas', 'ts']) &&
+                         request.resource.data.patente is string && request.resource.data.patente.size() > 0 && request.resource.data.patente.size() <= 12 &&
+                         request.resource.data.get('depto', '') is string && request.resource.data.get('depto', '').size() <= 40 &&
+                         request.resource.data.get('categoria', '') is string && request.resource.data.get('categoria', '').size() <= 40 &&
+                         request.resource.data.get('notas', '') is string && request.resource.data.get('notas', '').size() <= 500;
         allow update: if false;
         allow delete: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
       }
@@ -783,7 +809,13 @@ service cloud.firestore {
       // consultan administración y conserjería.
       match /accesos/{id} {
         allow read: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje());
-        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje());
+        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje()) &&
+                         request.resource.data.keys().hasOnly(['nombre', 'rut', 'motivo', 'tipo', 'fecha', 'hora', 'restringido', 'ts']) &&
+                         request.resource.data.nombre is string && request.resource.data.nombre.size() > 0 && request.resource.data.nombre.size() <= 150 &&
+                         request.resource.data.get('rut', '') is string && request.resource.data.get('rut', '').size() <= 20 &&
+                         request.resource.data.get('motivo', '') is string && request.resource.data.get('motivo', '').size() <= 500 &&
+                         request.resource.data.get('tipo', '') in ['Entrada', 'Salida'] &&
+                         request.resource.data.get('restringido', false) is bool;
         allow update, delete: if false;
       }
 
@@ -810,7 +842,11 @@ service cloud.firestore {
                          (mcEsAdmin() || mcEsConserje() ||
                           (mcEsResidente() &&
                            request.resource.data.paraTodos == false &&
-                           request.resource.data.depto == mcMiDepto()));
+                           request.resource.data.depto == mcMiDepto() &&
+                           request.resource.data.keys().hasOnly(['icon', 'titulo', 'meta', 'depto', 'paraTodos', 'leidaPor', 'fecha', 'hora', 'ts']) &&
+                           request.resource.data.get('icon', '') is string && request.resource.data.get('icon', '').size() <= 40 &&
+                           request.resource.data.titulo is string && request.resource.data.titulo.size() <= 200 &&
+                           request.resource.data.get('meta', '') is string && request.resource.data.get('meta', '').size() <= 500));
 
         allow update: if mcEsDeEstaComunidadActiva(comunidadId) &&
                          (mcEsAdmin() || mcEsConserje() ||

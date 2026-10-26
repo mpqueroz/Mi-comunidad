@@ -67,6 +67,19 @@ function rutToEmail(rut) {
   return `${limpiarRut(rut).toLowerCase()}@${EMAIL_DOMAIN}`;
 }
 
+// Mínimo 8 caracteres en todas las vías de alta o cambio de clave.
+const MIN_CLAVE = 8;
+function exigirClaveValida(clave, mensaje = "La contraseña") {
+  if (typeof clave !== "string" || clave.length < MIN_CLAVE || clave.length > 128) {
+    throw new HttpsError(
+        "invalid-argument",
+        `${mensaje} debe tener entre ${MIN_CLAVE} y 128 caracteres.`,
+    );
+  }
+}
+
+const ESTADOS_CUENTA = ["Activo", "Pendiente", "Inactivo", "En turno", "Fuera de turno"];
+
 exports.crearCuentaMiComunidad = onCall(async (request) => {
   const auth = request.auth;
 
@@ -104,15 +117,14 @@ exports.crearCuentaMiComunidad = onCall(async (request) => {
     throw new HttpsError("invalid-argument", "El RUT ingresado no es válido.");
   }
 
-  if (!password || String(password).length < 6) {
-    throw new HttpsError(
-        "invalid-argument",
-        "La contraseña debe tener al menos 6 caracteres.",
-    );
+  exigirClaveValida(password);
+
+  if (!nombre || nombre.length > 150) {
+    throw new HttpsError("invalid-argument", "Falta el nombre.");
   }
 
-  if (!nombre) {
-    throw new HttpsError("invalid-argument", "Falta el nombre.");
+  if (data.estado !== undefined && !ESTADOS_CUENTA.includes(data.estado)) {
+    throw new HttpsError("invalid-argument", "Estado de cuenta inválido.");
   }
 
   // Un residente sin depto quedaría con claim depto:"" y ninguna regla
@@ -134,6 +146,7 @@ exports.crearCuentaMiComunidad = onCall(async (request) => {
         "Esta comunidad no está activa.",
     );
   }
+  await exigirCuentaActiva(request, comunidadId);
 
   const email = rutToEmail(rut);
   let userRecord;
@@ -198,14 +211,17 @@ async function escribirFichaNuevaCuenta(comunidadRef, uid, rolNuevo, data, nombr
       depto: data.depto,
       nombre,
       rut: limpiarRut(rut),
-      telefono: String(data.telefono || "").trim(),
+      telefono: String(data.telefono || "").trim().slice(0, 40),
       estado: data.estado || "Activo",
       familiares: [],
       restringidos: [],
-      preguntaSecreta: String(data.preguntaSecreta || "").trim(),
+      // La pregunta solo se guarda si viene con su respuesta: una pregunta
+      // sin respuesta dejaba la ficha sin forma de verificarse.
+      preguntaSecreta: String(data.respuestaSecreta || "").trim() ?
+        String(data.preguntaSecreta || "").trim().slice(0, 200) : "",
     });
 
-    const respuestaInicial = String(data.respuestaSecreta || "").trim();
+    const respuestaInicial = String(data.respuestaSecreta || "").trim().slice(0, 100);
     if (respuestaInicial) {
       await comunidadRef.collection("secretos").doc(uid)
           .set(await docSecretoNuevo(respuestaInicial));
@@ -213,8 +229,8 @@ async function escribirFichaNuevaCuenta(comunidadRef, uid, rolNuevo, data, nombr
   } else {
     await comunidadRef.collection("conserjes").doc(uid).set({
       nombre,
-      turno: String(data.turno || "").trim(),
-      telefono: String(data.telefono || "").trim(),
+      turno: String(data.turno || "").trim().slice(0, 100),
+      telefono: String(data.telefono || "").trim().slice(0, 40),
       estado: data.estado || "Activo",
       sueldo: parseInt(data.sueldo, 10) || 0,
     });
@@ -267,12 +283,7 @@ exports.restablecerClaveMiComunidad = onCall(async (request) => {
     throw new HttpsError("invalid-argument", "Falta el uid de la cuenta.");
   }
 
-  if (!nuevaClave || String(nuevaClave).length < 6) {
-    throw new HttpsError(
-        "invalid-argument",
-        "La contraseña debe tener al menos 6 caracteres.",
-    );
-  }
+  exigirClaveValida(nuevaClave, "La nueva contraseña");
 
   if (!esSuperAdmin) await exigirCuentaActiva(request, comunidadId);
 
@@ -296,8 +307,20 @@ exports.restablecerClaveMiComunidad = onCall(async (request) => {
         "Esa cuenta no pertenece a tu comunidad.",
     );
   }
+  // Administración solo restablece residentes y conserjes; las cuentas de
+  // administración las gestiona el superadmin, y la del superadmin solo el
+  // script con la llave del proyecto.
+  const rolesPermitidos = esSuperAdmin ? ["admin", "conserje", "residente"] : ["conserje", "residente"];
+  if (!rolesPermitidos.includes(claimsObjetivo.role)) {
+    throw new HttpsError(
+        "permission-denied",
+        "No puedes cambiar la contraseña de esa cuenta.",
+    );
+  }
 
   await getAuth().updateUser(uid, {password: nuevaClave});
+  // Cierra las sesiones abiertas con la clave anterior.
+  await getAuth().revokeRefreshTokens(uid);
 
   return {ok: true};
 });
@@ -349,11 +372,11 @@ exports.crearComunidadMiComunidad = onCall(async (request) => {
     );
   }
 
-  if (!name) {
+  if (!name || name.length > 150) {
     throw new HttpsError("invalid-argument", "Falta el nombre del edificio.");
   }
 
-  if (!adminNombre) {
+  if (!adminNombre || adminNombre.length > 150) {
     throw new HttpsError("invalid-argument", "Falta el nombre del administrador.");
   }
 
@@ -361,12 +384,7 @@ exports.crearComunidadMiComunidad = onCall(async (request) => {
     throw new HttpsError("invalid-argument", "El RUT del administrador no es válido.");
   }
 
-  if (!adminPassword || String(adminPassword).length < 6) {
-    throw new HttpsError(
-        "invalid-argument",
-        "La contraseña del administrador debe tener al menos 6 caracteres.",
-    );
-  }
+  exigirClaveValida(adminPassword, "La contraseña del administrador");
 
   const db = getFirestore();
   const comunidadRef = db.collection(COMUNIDADES_COLLECTION).doc(comunidadId);
@@ -398,29 +416,44 @@ exports.crearComunidadMiComunidad = onCall(async (request) => {
     throw new HttpsError("internal", "No se pudo crear la cuenta del administrador: " + (err && err.message ? err.message : err));
   }
 
-  await getAuth().setCustomUserClaims(userRecord.uid, {
-    app: APP_ID,
-    role: "admin",
-    comunidadId: comunidadId,
-  });
+  try {
+    await getAuth().setCustomUserClaims(userRecord.uid, {
+      app: APP_ID,
+      role: "admin",
+      comunidadId: comunidadId,
+    });
 
-  await comunidadRef.create({
-    name,
-    address: String(data.address || "").trim(),
-    apartments: parseInt(data.apartments, 10) || 0,
-    residents: 0,
-    telefonoAdministracion: String(data.telefonoAdministracion || "").trim(),
-    // Campos del panel de superadmin (Nodar Logic → Mi Comunidad):
-    estado: "Activa",
-    plan: plan,
-    fechaContratacion: new Date().toISOString().slice(0, 10),
-    notasSoporte: "",
-    numResidentes: 0,
-    numConserjes: 0,
-    adminNombre: adminNombre,
-    adminUid: userRecord.uid,
-    ultimoAcceso: null,
-  });
+    const batch = db.batch();
+    batch.create(comunidadRef, {
+      name,
+      address: String(data.address || "").trim().slice(0, 300),
+      apartments: parseInt(data.apartments, 10) || 0,
+      residents: 0,
+      telefonoAdministracion: String(data.telefonoAdministracion || "").trim().slice(0, 40),
+      // Campos del panel de superadmin (Nodar Logic → Mi Comunidad):
+      estado: "Activa",
+      plan: plan,
+      fechaContratacion: new Date().toISOString().slice(0, 10),
+      notasSoporte: "",
+      numResidentes: 0,
+      numConserjes: 0,
+      adminNombre: adminNombre,
+      adminUid: userRecord.uid,
+      ultimoAcceso: null,
+    });
+    batch.set(comunidadRef.collection("administradores").doc(userRecord.uid), {
+      nombre: adminNombre,
+      estado: "Activo",
+      creadoEn: FieldValue.serverTimestamp(),
+    });
+    await batch.commit();
+  } catch (err) {
+    // Sin esto quedaba una cuenta de administración sin edificio.
+    await getAuth().deleteUser(userRecord.uid).catch((e) =>
+      console.error("No se pudo borrar la cuenta a medio crear:", userRecord.uid, e));
+    console.error("crearComunidadMiComunidad falló, cuenta revertida:", err);
+    throw new HttpsError("internal", "No se pudo crear la comunidad. Intenta de nuevo.");
+  }
 
   return {comunidadId, adminUid: userRecord.uid, adminEmail: email};
 });
@@ -477,7 +510,7 @@ exports.crearReservaMiComunidad = onCall(async (request) => {
     throw new HttpsError("invalid-argument", "Espacio no válido.");
   }
 
-  const icon = String(data.icon || "").trim();
+  const icon = String(data.icon || "").trim().slice(0, 40);
   const fecha = String(data.fecha || "").trim();
   const bloqueId = String(data.bloqueId || "").trim();
 
@@ -652,6 +685,16 @@ async function exigirCuentaActiva(request, comunidadId) {
   if (!comunidad.exists || comunidad.get("estado") === "Suspendida") {
     throw new HttpsError("failed-precondition", "Esta comunidad no está activa.");
   }
+  if (token.role === "admin") {
+    // Lista de bajas: una cuenta de administración sin documento sigue
+    // habilitada (comunidades creadas antes de que existiera), pero una
+    // marcada "Inactivo" por el superadmin queda cortada al instante.
+    const adminDoc = await comunidadRef.collection("administradores").doc(request.auth.uid).get();
+    if (adminDoc.exists && adminDoc.get("estado") === "Inactivo") {
+      throw new HttpsError("permission-denied", "La cuenta de administración fue desactivada.");
+    }
+    return;
+  }
   const coleccion = token.role === "residente" ? "residentes" : token.role === "conserje" ? "conserjes" : null;
   if (!coleccion) return;
   const ficha = await comunidadRef.collection(coleccion).doc(request.auth.uid).get();
@@ -746,19 +789,38 @@ exports.definirPreguntaSecretaMiComunidad = onCall(async (request) => {
   return {ok: true};
 });
 
+// Datos de la ficha que conserjería solo recibe tras verificar la
+// identidad (RUT, familiares con su RUT, personas sin acceso con su motivo
+// y datos de propiedad). El resto viaja en directorioConserjeriaMiComunidad.
+function fichaProtegida(residente) {
+  return {
+    rut: residente.rut || "",
+    familiares: Array.isArray(residente.familiares) ? residente.familiares : [],
+    restringidos: Array.isArray(residente.restringidos) ? residente.restringidos : [],
+    nombreDueno: residente.nombreDueno || "",
+    nombreArrendatario: residente.nombreArrendatario || "",
+  };
+}
+
+// Tope adicional al bloqueo de 15 minutos: más de 15 respuestas erradas en
+// 24 horas bloquean la ficha hasta que se cumpla ese plazo.
+const MAX_FALLOS_DIA = 15;
+const DIA_MS = 24 * 60 * 60 * 1000;
+
 exports.verificarPreguntaSecretaMiComunidad = onCall(async (request) => {
   const data = request.data || {};
   const comunidadId = String(data.comunidadId || "").trim();
   const uid = String(data.uid || "").trim();
-  const respuesta = String(data.respuesta || "");
+  const respuesta = String(data.respuesta || "").slice(0, 200);
 
-  await exigirRol(request, comunidadId, ["admin", "conserje"]);
+  const token = await exigirRol(request, comunidadId, ["admin", "conserje"]);
 
-  if (!uid || !respuesta.trim()) {
+  if (!uid || uid.includes("/") || !respuesta.trim()) {
     throw new HttpsError("invalid-argument", "Falta la respuesta.");
   }
 
-  const comunidadRef = getFirestore().collection(COMUNIDADES_COLLECTION).doc(comunidadId);
+  const db = getFirestore();
+  const comunidadRef = db.collection(COMUNIDADES_COLLECTION).doc(comunidadId);
   const secretoSnap = await migrarSecretoSiHaceFalta(comunidadRef, uid);
 
   if (!secretoSnap.exists) {
@@ -767,12 +829,14 @@ exports.verificarPreguntaSecretaMiComunidad = onCall(async (request) => {
 
   // El hash (lento a propósito) se calcula fuera de la transacción.
   const hashIngresado = await hashRespuesta(respuesta, secretoSnap.get("sal"));
+  const actor = await nombreActor(request, comunidadRef);
 
   // Leer y actualizar el contador de intentos en una transacción: antes,
   // varias respuestas enviadas en paralelo leían el mismo contador y
   // se podían probar más de MAX_INTENTOS_SECRETO sin llegar al bloqueo.
-  const resultado = await getFirestore().runTransaction(async (t) => {
+  const resultado = await db.runTransaction(async (t) => {
     const snap = await t.get(secretoSnap.ref);
+    const residenteSnap = await t.get(comunidadRef.collection("residentes").doc(uid));
     const secreto = snap.data();
     const ahora = Date.now();
 
@@ -786,19 +850,37 @@ exports.verificarPreguntaSecretaMiComunidad = onCall(async (request) => {
         Buffer.from(secreto.hash, "hex"),
     );
 
+    t.create(comunidadRef.collection("auditoria").doc(), {
+      tipo: "Verificación de ficha",
+      residenteUid: uid,
+      depto: residenteSnap.exists ? residenteSnap.get("depto") || "" : "",
+      actorUid: request.auth.uid,
+      actorNombre: actor,
+      actorRol: token.role,
+      resultado: esCorrecta ? "Correcta" : "Incorrecta",
+      ts: FieldValue.serverTimestamp(),
+    });
+
     if (esCorrecta) {
       t.update(snap.ref, {intentosFallidos: 0, bloqueadoHasta: 0});
-      return {ok: true};
+      return {ok: true, ficha: residenteSnap.exists ? fichaProtegida(residenteSnap.data()) : null};
     }
 
+    const ventanaVigente = (secreto.ventanaInicio || 0) + DIA_MS > ahora;
+    const fallosDia = (ventanaVigente ? secreto.fallosDia || 0 : 0) + 1;
+    const ventanaInicio = ventanaVigente ? secreto.ventanaInicio : ahora;
     const intentos = (secreto.intentosFallidos || 0) + 1;
 
+    if (fallosDia >= MAX_FALLOS_DIA) {
+      t.update(snap.ref, {intentosFallidos: 0, fallosDia, ventanaInicio, bloqueadoHasta: ventanaInicio + DIA_MS});
+      return {recienBloqueado: true, horas: true};
+    }
     if (intentos >= MAX_INTENTOS_SECRETO) {
-      t.update(snap.ref, {intentosFallidos: 0, bloqueadoHasta: ahora + BLOQUEO_SECRETO_MS});
+      t.update(snap.ref, {intentosFallidos: 0, fallosDia, ventanaInicio, bloqueadoHasta: ahora + BLOQUEO_SECRETO_MS});
       return {recienBloqueado: true};
     }
 
-    t.update(snap.ref, {intentosFallidos: intentos});
+    t.update(snap.ref, {intentosFallidos: intentos, fallosDia, ventanaInicio});
     return {ok: false, intentosRestantes: MAX_INTENTOS_SECRETO - intentos};
   });
 
@@ -811,10 +893,226 @@ exports.verificarPreguntaSecretaMiComunidad = onCall(async (request) => {
   if (resultado.recienBloqueado) {
     throw new HttpsError(
         "resource-exhausted",
-        "Demasiados intentos fallidos. Este departamento quedó bloqueado por 15 minutos.",
+        resultado.horas ?
+          "Demasiados intentos fallidos hoy. Este departamento quedó bloqueado por 24 horas." :
+          "Demasiados intentos fallidos. Este departamento quedó bloqueado por 15 minutos.",
     );
   }
   return resultado;
+});
+
+// Nombre de quien opera, para la auditoría: la ficha propia si existe y,
+// para administración, el nombre de su cuenta (no el del primer admin).
+async function nombreActor(request, comunidadRef) {
+  const token = request.auth.token || {};
+  const coleccion = token.role === "conserje" ? "conserjes" : token.role === "admin" ? "administradores" : null;
+  if (coleccion) {
+    const ficha = await comunidadRef.collection(coleccion).doc(request.auth.uid).get();
+    if (ficha.exists && ficha.get("nombre")) return String(ficha.get("nombre"));
+  }
+  return String(token.name || (token.role === "superadmin" ? "Superadministración" : "Administración"));
+}
+
+/**
+ * directorioConserjeriaMiComunidad:
+ *   Conserjería ya no lee la colección de residentes: recibe solo lo que
+ *   necesita para operar (depto, nombre, teléfono, familiares autorizados
+ *   por nombre y las personas sin acceso para la alerta de ingreso). El RUT
+ *   de residentes y familiares, el motivo de cada restricción y los datos
+ *   de propiedad se entregan únicamente al verificar la identidad.
+ */
+exports.directorioConserjeriaMiComunidad = onCall(async (request) => {
+  const data = request.data || {};
+  const comunidadId = String(data.comunidadId || "").trim();
+  await exigirRol(request, comunidadId, ["admin", "conserje"]);
+
+  const comunidadRef = getFirestore().collection(COMUNIDADES_COLLECTION).doc(comunidadId);
+  const [residentes, secretos] = await Promise.all([
+    comunidadRef.collection("residentes").get(),
+    comunidadRef.collection("secretos").get(),
+  ]);
+  const conSecreto = new Set(secretos.docs.map((d) => d.id));
+
+  const texto = (v, max) => String(v || "").slice(0, max);
+  return {
+    residentes: residentes.docs.map((d) => {
+      const r = d.data();
+      const tienePregunta = conSecreto.has(d.id) || !!String(r.respuestaSecreta || "").trim();
+      return {
+        uid: d.id,
+        depto: texto(r.depto, 40),
+        nombre: texto(r.nombre, 150),
+        estado: texto(r.estado, 20),
+        telefono: texto(r.telefono, 40),
+        esAirbnb: r.esAirbnb === true,
+        arrendado: !!r.nombreArrendatario,
+        preguntaSecreta: tienePregunta ? texto(r.preguntaSecreta, 200) || "Pregunta de seguridad" : "",
+        familiares: (Array.isArray(r.familiares) ? r.familiares : []).slice(0, 50)
+            .map((f) => ({nombre: texto(f && f.nombre, 150), parentesco: texto(f && f.parentesco, 60)})),
+        restringidos: (Array.isArray(r.restringidos) ? r.restringidos : []).slice(0, 50)
+            .map((p) => ({nombre: texto(p && p.nombre, 150), rut: texto(p && p.rut, 20)})),
+      };
+    }),
+  };
+});
+
+/**
+ * verificarFichaMiComunidad:
+ *   Verificación manual (por otro medio) SOLO para fichas sin pregunta de
+ *   seguridad. Queda en auditoría y se avisa al propio departamento; si la
+ *   ficha tiene pregunta, hay que responderla.
+ */
+exports.verificarFichaMiComunidad = onCall(async (request) => {
+  const data = request.data || {};
+  const comunidadId = String(data.comunidadId || "").trim();
+  const uid = String(data.uid || "").trim();
+  const motivo = String(data.motivo || "").trim().slice(0, 500);
+  const token = await exigirRol(request, comunidadId, ["admin", "conserje"]);
+
+  if (!uid || uid.includes("/")) {
+    throw new HttpsError("invalid-argument", "Identificador inválido.");
+  }
+  if (motivo.length < 10) {
+    throw new HttpsError("invalid-argument", "Describe cómo verificaste la identidad (mínimo 10 caracteres).");
+  }
+
+  const db = getFirestore();
+  const comunidadRef = db.collection(COMUNIDADES_COLLECTION).doc(comunidadId);
+  const residenteRef = comunidadRef.collection("residentes").doc(uid);
+  const [residenteSnap, secretoSnap] = await Promise.all([
+    residenteRef.get(),
+    comunidadRef.collection("secretos").doc(uid).get(),
+  ]);
+  if (!residenteSnap.exists) {
+    throw new HttpsError("not-found", "No se encontró la ficha.");
+  }
+  if (secretoSnap.exists || String(residenteSnap.get("respuestaSecreta") || "").trim()) {
+    throw new HttpsError("failed-precondition", "Esta ficha tiene pregunta de seguridad: verifica con la respuesta.");
+  }
+
+  const actor = await nombreActor(request, comunidadRef);
+  const depto = String(residenteSnap.get("depto") || "");
+  const batch = db.batch();
+  batch.create(comunidadRef.collection("auditoria").doc(), {
+    tipo: "Verificación manual de ficha",
+    residenteUid: uid,
+    depto,
+    actorUid: request.auth.uid,
+    actorNombre: actor,
+    actorRol: token.role,
+    motivo,
+    ts: FieldValue.serverTimestamp(),
+  });
+  batch.create(comunidadRef.collection("notificaciones").doc(), {
+    icon: "lock",
+    titulo: "Se consultó la ficha de tu departamento",
+    meta: `${actor} · verificación manual. Configura tu pregunta de seguridad en Mi perfil.`,
+    depto,
+    paraTodos: false,
+    leidaPor: [],
+    ts: Date.now(),
+  });
+  await batch.commit();
+
+  return {ok: true, ficha: fichaProtegida(residenteSnap.data())};
+});
+
+/**
+ * cambiarEstadoAdminMiComunidad (solo superadmin):
+ *   Desactiva o reactiva una cuenta de administración. Desactivar marca la
+ *   lista de bajas que revisan reglas y funciones, deshabilita la cuenta de
+ *   Auth y cierra sus sesiones, así el corte es inmediato.
+ */
+exports.cambiarEstadoAdminMiComunidad = onCall(async (request) => {
+  const token = (request.auth && request.auth.token) || {};
+  if (!request.auth || token.app !== APP_ID || token.role !== "superadmin") {
+    throw new HttpsError("permission-denied", "Solo el superadministrador puede gestionar administradores.");
+  }
+  const data = request.data || {};
+  const comunidadId = String(data.comunidadId || "").trim();
+  const uid = String(data.uid || "").trim();
+  const estado = data.estado;
+  if (!comunidadId || !uid || uid.includes("/") || !["Activo", "Inactivo"].includes(estado)) {
+    throw new HttpsError("invalid-argument", "Datos inválidos.");
+  }
+
+  let cuenta;
+  try {
+    cuenta = await getAuth().getUser(uid);
+  } catch (err) {
+    throw new HttpsError("not-found", "No se encontró esa cuenta.");
+  }
+  const claims = cuenta.customClaims || {};
+  if (claims.app !== APP_ID || claims.role !== "admin" || claims.comunidadId !== comunidadId) {
+    throw new HttpsError("permission-denied", "Esa cuenta no es administración de esta comunidad.");
+  }
+
+  const comunidadRef = getFirestore().collection(COMUNIDADES_COLLECTION).doc(comunidadId);
+  await comunidadRef.collection("administradores").doc(uid).set({
+    nombre: cuenta.displayName || "",
+    estado,
+    actualizadoEn: FieldValue.serverTimestamp(),
+    actualizadoPor: request.auth.uid,
+  }, {merge: true});
+  await getAuth().updateUser(uid, {disabled: estado === "Inactivo"});
+  if (estado === "Inactivo") await getAuth().revokeRefreshTokens(uid);
+
+  return {ok: true, estado};
+});
+
+/**
+ * crearAdministradorMiComunidad (solo superadmin):
+ *   Da de alta una nueva cuenta de administración para una comunidad que ya
+ *   existe (por ejemplo, al cambiar de administradora).
+ */
+exports.crearAdministradorMiComunidad = onCall(async (request) => {
+  const token = (request.auth && request.auth.token) || {};
+  if (!request.auth || token.app !== APP_ID || token.role !== "superadmin") {
+    throw new HttpsError("permission-denied", "Solo el superadministrador puede crear administradores.");
+  }
+  const data = request.data || {};
+  const comunidadId = String(data.comunidadId || "").trim();
+  const nombre = String(data.nombre || "").trim();
+  if (!comunidadId || comunidadId.includes("/")) {
+    throw new HttpsError("invalid-argument", "Falta la comunidad.");
+  }
+  if (!nombre || nombre.length > 150) {
+    throw new HttpsError("invalid-argument", "Falta el nombre del administrador.");
+  }
+  if (!data.rut || !validarRut(data.rut)) {
+    throw new HttpsError("invalid-argument", "El RUT del administrador no es válido.");
+  }
+  exigirClaveValida(data.password, "La contraseña del administrador");
+
+  const comunidadRef = getFirestore().collection(COMUNIDADES_COLLECTION).doc(comunidadId);
+  if (!(await comunidadRef.get()).exists) {
+    throw new HttpsError("not-found", "No existe esa comunidad.");
+  }
+
+  const email = rutToEmail(data.rut);
+  let userRecord;
+  try {
+    userRecord = await getAuth().createUser({email, password: data.password, displayName: nombre});
+  } catch (err) {
+    if (err && err.code === "auth/email-already-exists") {
+      throw new HttpsError("already-exists", "Ya existe una cuenta creada con ese RUT.");
+    }
+    throw new HttpsError("internal", "No se pudo crear la cuenta del administrador.");
+  }
+  try {
+    await getAuth().setCustomUserClaims(userRecord.uid, {app: APP_ID, role: "admin", comunidadId});
+    const batch = getFirestore().batch();
+    batch.set(comunidadRef.collection("administradores").doc(userRecord.uid), {
+      nombre, estado: "Activo", creadoEn: FieldValue.serverTimestamp(), creadoPor: request.auth.uid,
+    });
+    batch.update(comunidadRef, {adminNombre: nombre, adminUid: userRecord.uid});
+    await batch.commit();
+  } catch (err) {
+    await getAuth().deleteUser(userRecord.uid).catch(() => {});
+    console.error("crearAdministradorMiComunidad falló, cuenta revertida:", err);
+    throw new HttpsError("internal", "No se pudo crear la cuenta del administrador.");
+  }
+  return {uid: userRecord.uid, email};
 });
 
 // Migra de una vez todas las respuestas en texto plano de una comunidad.
@@ -899,6 +1197,8 @@ exports.actualizarVencimientosMiComunidad = onSchedule(
 
 // Operación profesional añadida; se conservan las funciones existentes de identidad.
 const profesional = require('./profesional')({firestore: Object.assign(() => getFirestore(), {FieldValue, Timestamp})}, onCall, HttpsError);
-delete profesional.configurarIdentidadMiComunidad;
-delete profesional.migrarPrivacidadMiComunidad;
-Object.assign(exports, profesional);
+// La verificación de fichas vive arriba (verificarFichaMiComunidad), sobre
+// la colección secretos; el módulo no debe pisarla.
+Object.keys(profesional).forEach((nombre) => {
+  if (!exports[nombre]) exports[nombre] = profesional[nombre];
+});
