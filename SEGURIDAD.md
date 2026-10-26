@@ -72,6 +72,14 @@ En cada pull request y antes de cada despliegue (`.github/workflows/firebase.yml
    inicialización en la app y los dominios de reCAPTCHA a la CSP, y luego se
    activa su cumplimiento en Firestore y Functions.
 
+**Depuración programada.** Una tarea diaria (`depurarRegistrosMiComunidad`,
+03:30 hora de Chile) aplica los plazos de la política de privacidad: visitas,
+visitas anunciadas, accesos, vehículos y encomiendas entregadas con más de 12
+meses, y auditoría con más de 2 años. Cobros, multas, contabilidad,
+remuneraciones y fichas no se tocan. Está en **simulación**
+(`DEPURACION_ACTIVA = false` en `functions/depuracion.js`): cada despliegue
+imprime cuántos registros borraría; se activa cambiando esa constante.
+
 SheetJS (lectura de cartolas) se carga desde `cdn.sheetjs.com` con huella de
 integridad SRI: si la CDN entregara otro archivo, el navegador no lo ejecuta.
 

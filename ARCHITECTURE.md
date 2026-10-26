@@ -682,4 +682,6 @@ Se conservan las reglas de otras apps en el proyecto compartido. La suite suma 8
 - Altas desde clientes con lista blanca de campos y topes de tamaño: visitas anunciadas, invitados, notificaciones de residentes, vehículos, vehículos registrados y accesos.
 - Hosting con CSP, `X-Frame-Options`, `nosniff`, `Referrer-Policy` y `Permissions-Policy`; el SDK de Firebase se sirve desde `public/vendor`.
 
-La suite (`tests/`, `npm test`) corre con los emuladores de Firestore y Auth: 144 pruebas.
+- Depuración programada de bitácoras y auditoría según los plazos de la política de privacidad (`functions/depuracion.js`), en simulación hasta activarla.
+
+La suite (`tests/`, `npm test`) corre con los emuladores de Firestore y Auth: 148 pruebas.
