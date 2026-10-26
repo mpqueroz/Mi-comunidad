@@ -671,3 +671,15 @@ La configuración de pagos vive en configuracionPago del documento de comunidad;
 Las preguntas secretas mantienen las funciones y colección secretos del repositorio. Las funciones auxiliares configurarIdentidadMiComunidad y migrarPrivacidadMiComunidad del módulo adicional no se exportan en producción, evitando un segundo formato. La comprobación manual de identidad añade auditoría.
 
 Se conservan las reglas de otras apps en el proyecto compartido. La suite suma 81 pruebas de reglas, lógica, interfaz simulada e integración real con emulador, sin cuentas ni datos productivos.
+
+## Endurecimiento de seguridad · octubre de 2026
+
+- Conserjería ya no lee `residentes`: usa `directorioConserjeriaMiComunidad` (depto, nombre, teléfono, familiares por nombre y personas sin acceso con nombre y RUT para la alerta de ingreso). El RUT de residentes y familiares, el motivo de cada restricción y los datos de propiedad llegan solo al verificar la identidad (`verificarPreguntaSecretaMiComunidad` o, si la ficha no tiene pregunta, `verificarFichaMiComunidad` con motivo). Cada consulta queda en `auditoria` y la manual avisa al departamento. La vista protegida dura 10 minutos.
+- Las funciones `configurarIdentidadMiComunidad` y `migrarPrivacidadMiComunidad` y la subcolección `residentes/{uid}/privado` se eliminaron: hay un solo sistema de respuestas (`secretos`), con bloqueo de 15 minutos tras 5 fallos y de 24 horas tras 15 fallos en el día.
+- `administradores/{uid}` es la lista de bajas de administración: sin documento la cuenta sigue habilitada; con `estado: "Inactivo"` reglas y funciones la cortan al instante. El superadmin la gestiona con `cambiarEstadoAdminMiComunidad` (además deshabilita la cuenta de Auth y cierra sus sesiones) y da de alta otra con `crearAdministradorMiComunidad`.
+- Contraseñas de 8 a 128 caracteres en todas las altas y cambios. Administración solo restablece claves de residentes y conserjes; restablecer cierra las sesiones abiertas.
+- El documento de la comunidad: administración solo cambia datos de contacto y `ultimoAcceso`; plan, estado, contadores, `adminUid` y `configuracionPago` quedan para el superadmin o las funciones.
+- Altas desde clientes con lista blanca de campos y topes de tamaño: visitas anunciadas, invitados, notificaciones de residentes, vehículos, vehículos registrados y accesos.
+- Hosting con CSP, `X-Frame-Options`, `nosniff`, `Referrer-Policy` y `Permissions-Policy`; el SDK de Firebase se sirve desde `public/vendor`.
+
+La suite (`tests/`, `npm test`) corre con los emuladores de Firestore y Auth: 144 pruebas.

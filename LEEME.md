@@ -28,13 +28,16 @@ Validación: 81 pruebas locales aprobadas, con emulador real de Firestore, concu
 
 # Mi Comunidad: archivos para deploy
 
-## Qué hay en este zip
+> Seguridad: ver [SEGURIDAD.md](SEGURIDAD.md) (modelo de permisos y pasos pendientes en las consolas).
+
+## Qué hay en este repositorio
 
 ```
 firestore.rules              ← reglas de las 3 apps del proyecto (ver nota abajo)
 public/
 ├── index.html               ← la app real (login por RUT), con tu firebaseConfig ya puesto
 ├── jsQR.min.js              ← lector de QR (sin cambios)
+├── vendor/firebase-10.13.2/ ← SDK de Firebase servido desde el propio sitio
 └── demo/index.html          ← demo para clientes: mi-comunidad-md.web.app/demo
 functions/
 ├── index.js                 ← Cloud Functions de Mi Comunidad

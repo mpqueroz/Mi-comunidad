@@ -5,9 +5,6 @@ module.exports = function profesional(admin, onCall, HttpsError) {
   const stamp = () => admin.firestore.FieldValue.serverTimestamp();
   const text = (v, max = 2000) => String(v || '').trim().slice(0, max);
   const normalize = v => text(v, 200).toLocaleLowerCase('es-CL');
-  const hash = (answer, salt) => crypto.scryptSync(normalize(answer), salt, 32).toString('hex');
-  function secret(answer) {const salt = crypto.randomBytes(16).toString('hex'); return {salt, hash: hash(answer, salt), actualizadoEn: stamp()};}
-  function matches(answer, stored) {if(!stored?.salt || !/^[a-f0-9]{64}$/.test(stored.hash || ''))return false;return crypto.timingSafeEqual(Buffer.from(hash(answer, stored.salt), 'hex'), Buffer.from(stored.hash, 'hex'));}
   async function scope(req, roles) {
     const token = req.auth?.token;
     if(!token || token.app !== 'mi_comunidad' || !roles.includes(token.role))throw new HttpsError('permission-denied', 'Tu cuenta no puede realizar esta operación.');
@@ -18,7 +15,10 @@ module.exports = function profesional(admin, onCall, HttpsError) {
     if(!community.exists || community.data().estado === 'Suspendida')throw new HttpsError('failed-precondition', 'La comunidad no está activa.');
     const person = token.role === 'conserje' ? await base.collection('conserjes').doc(req.auth.uid).get() : token.role === 'residente' ? await base.collection('residentes').doc(req.auth.uid).get() : null;
     if(person && (!person.exists || person.data().estado === 'Inactivo' || (token.role === 'residente' && person.data().depto !== token.depto)))throw new HttpsError('permission-denied', 'La cuenta no está habilitada.');
-    const nombre = person?.data()?.nombre || community.data().adminNombre || 'Administración';
+    // Administración: sin documento sigue habilitada; "Inactivo" la corta.
+    const adminDoc = token.role === 'admin' ? await base.collection('administradores').doc(req.auth.uid).get() : null;
+    if(adminDoc?.exists && adminDoc.data().estado === 'Inactivo')throw new HttpsError('permission-denied', 'La cuenta de administración fue desactivada.');
+    const nombre = person?.data()?.nombre || adminDoc?.data()?.nombre || token.name || community.data().adminNombre || 'Administración';
     return {base, uid:req.auth.uid, role:token.role, nombre};
   }
   function docId(id) {if(typeof id!=='string'||!id||id.includes('/')||id.length>200)throw new HttpsError('invalid-argument','Identificador inválido.');return id;}
@@ -112,51 +112,6 @@ module.exports = function profesional(admin, onCall, HttpsError) {
       throw new HttpsError('invalid-argument','Acción no válida.');
     });
   });
-  const configurarIdentidadMiComunidad=onCall(async req=>{
-    const s=await scope(req,['admin','residente']);const uid=docId(req.data.uid);
-    if(s.role==='residente'&&uid!==s.uid)throw new HttpsError('permission-denied','Solo puedes cambiar tu propia respuesta.');
-    const ref=s.base.collection('residentes').doc(uid);const snap=await ref.get();
-    if(!snap.exists)throw new HttpsError('not-found','No se encontró la ficha.');
-    const pregunta=text(req.data.pregunta,200),respuesta=text(req.data.respuesta,200);
-    if(!pregunta||!respuesta)throw new HttpsError('invalid-argument','Completa pregunta y respuesta.');
-    const batch=db.batch();batch.set(ref.collection('privado').doc('identidad'),secret(respuesta));batch.update(ref,{preguntaSecreta:pregunta,respuestaSecreta:admin.firestore.FieldValue.delete()});await batch.commit();return {ok:true};
-  });
-  const verificarFichaMiComunidad=onCall(async req=>{
-    const s=await scope(req,['admin','conserje']);const uid=docId(req.data.uid);const ref=s.base.collection('residentes').doc(uid);const snap=await ref.get();
-    if(!snap.exists)throw new HttpsError('not-found','No se encontró la ficha.');
-    const motivo=text(req.data.motivo,500);
-    if(motivo.length>=10) {await s.base.collection('auditoria').add({tipo:'Verificación manual de ficha',residenteUid:uid,actorUid:s.uid,actorNombre:s.nombre,motivo,ts:stamp()});return {ok:true};}
-    const secretSnap=await ref.collection('privado').doc('identidad').get();
-    if(!secretSnap.exists)throw new HttpsError('failed-precondition','Administración debe actualizar la privacidad de esta ficha.');
-    const valid=matches(req.data.respuesta,secretSnap.data());
-    const attempts=s.base.collection('verificaciones').doc(`${s.uid}_${uid}`);
-    const result=await db.runTransaction(async tx=>{
-      const a=await tx.get(attempts);const data=a.exists?a.data():{};const now=Date.now();const fresh=!data.inicio||now-data.inicio>900000;const intentos=fresh?0:data.intentos||0;
-      if(intentos>=5)return 'limit';
-      tx.set(attempts,{inicio:fresh?now:data.inicio,intentos:intentos+1,ultimo:stamp()});
-      tx.create(s.base.collection('auditoria').doc(),{tipo:'Verificación de ficha',residenteUid:uid,actorUid:s.uid,actorNombre:s.nombre,resultado:valid?'Correcta':'Incorrecta',ts:stamp()});return valid?'ok':'wrong';
-    });
-    if(result==='limit')throw new HttpsError('resource-exhausted','Se alcanzó el límite de intentos. Espera 15 minutos.');
-    if(result!=='ok')throw new HttpsError('permission-denied','La respuesta no coincide.');
-    return {ok:true};
-  });
-  const migrarPrivacidadMiComunidad=onCall({timeoutSeconds:120},async req=>{
-    const s=await scope(req,['admin']);const snap=await s.base.collection('residentes').get();let migrados=0;let pendientes=0;
-    for(const doc of snap.docs) {
-      const answer=doc.data().respuestaSecreta;
-      if(typeof answer!=='string')continue;
-      if(migrados>=100){pendientes++;continue;}
-      // La transacción evita sobrescribir una respuesta que el residente cambie durante la migración.
-      await db.runTransaction(async tx=>{
-        const current=await tx.get(doc.ref);if(typeof current.data()?.respuestaSecreta!=='string')return;
-        const a=current.data().respuestaSecreta;
-        if(a.trim())tx.set(doc.ref.collection('privado').doc('identidad'),secret(a));
-        tx.update(doc.ref,{respuestaSecreta:admin.firestore.FieldValue.delete()});
-      });migrados++;
-    }
-    await s.base.collection('auditoria').add({tipo:'Migración de respuestas',actorUid:s.uid,actorNombre:s.nombre,migrados,ts:stamp()});return {migrados,mas:pendientes>0};
-  });
-
   function hoyChile(){return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
   function rutValido(value){
     if(!/^[0-9]{7,8}[0-9K]$/.test(value))return false;
@@ -381,5 +336,5 @@ module.exports = function profesional(admin, onCall, HttpsError) {
     if(configuracion.correo&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(configuracion.correo))throw new HttpsError('invalid-argument','El correo de comprobantes no es válido.');
     return db.runTransaction(async tx=>{const snap=await tx.get(s.base);const version=snap.data().configuracionPago?.version||0;if(version!==(d.version||0))throw new HttpsError('failed-precondition','La configuración cambió. Vuelve a abrirla.');configuracion.version=version+1;tx.update(s.base,{configuracionPago:configuracion,configuracionPagoActualizadaEn:stamp(),configuracionPagoActualizadaPor:s.uid});log(tx,s,'Configuración de pagos actualizada',configuracion.metodos.join(', '));return {configuracion};});
   });
-  return {generarCobrosMiComunidad,configurarPagosMiComunidad,guardarPlanMantencionMiComunidad,registrarRevisionMantencionMiComunidad,gestionarAvisoMiComunidad,confirmarAvisoMiComunidad,gestionarVisitaMiComunidad,cancelarReservaMiComunidad,registrarEncomiendaMiComunidad,gestionarTurnoMiComunidad,gestionarEncomiendaMiComunidad,configurarIdentidadMiComunidad,verificarFichaMiComunidad,migrarPrivacidadMiComunidad};
+  return {generarCobrosMiComunidad,configurarPagosMiComunidad,guardarPlanMantencionMiComunidad,registrarRevisionMantencionMiComunidad,gestionarAvisoMiComunidad,confirmarAvisoMiComunidad,gestionarVisitaMiComunidad,cancelarReservaMiComunidad,registrarEncomiendaMiComunidad,gestionarTurnoMiComunidad,gestionarEncomiendaMiComunidad};
 };
