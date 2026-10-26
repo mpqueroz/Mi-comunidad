@@ -1,7 +1,7 @@
 'use strict';
 const {test,before,after,beforeEach}=require('node:test');
 const assert=require('node:assert/strict');
-const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
+const fs=require('node:fs'),path=require('node:path');
 const {initializeTestEnvironment}=require('@firebase/rules-unit-testing');
 const {serverTimestamp}=require('firebase/firestore');
 let env;
@@ -17,7 +17,8 @@ function helpers(){
   if(name==='firebase-functions/v2/scheduler')return {};
   throw Error(name);
  }};
- vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../functions/mercadopago.js'),'utf8'),context);
+ // Execute with injected dependencies in this realm: Firebase rejects cross-realm objects.
+ new Function('require','module',fs.readFileSync(path.join(__dirname,'../functions/mercadopago.js'),'utf8'))(context.require,context.module);
  return context.module.exports;
 }
 const api=helpers();
