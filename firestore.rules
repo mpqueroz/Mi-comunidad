@@ -358,8 +358,16 @@ service cloud.firestore {
       // alimenta la columna Actividad del panel de superadmin. Se acota
       // por campo (affectedKeys().hasOnly) para que esa apertura no sirva
       // para tocar ningún otro dato de la comunidad.
+      // Administración solo toca los datos de contacto del edificio: plan,
+      // estado, contadores, adminUid y configuracionPago los fija el
+      // superadmin o una Cloud Function que valida cada valor (por ejemplo,
+      // configurarPagosMiComunidad exige un enlace HTTPS).
       allow update: if mcEsSuperAdmin() ||
-                       (mcEsAdmin() && mcEsDeEstaComunidadActiva(comunidadId)) ||
+                       (mcEsAdmin() && mcEsDeEstaComunidadActiva(comunidadId) &&
+                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'address', 'apartments', 'telefonoAdministracion', 'ultimoAcceso']) &&
+                        request.resource.data.get('name', '') is string && request.resource.data.get('name', '').size() <= 150 &&
+                        request.resource.data.get('address', '') is string && request.resource.data.get('address', '').size() <= 300 &&
+                        request.resource.data.get('telefonoAdministracion', '') is string && request.resource.data.get('telefonoAdministracion', '').size() <= 40) ||
                        (mcEsDeEstaComunidadActiva(comunidadId) &&
                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ultimoAcceso']) &&
                         // Solo un timestamp (ms) cercano a la hora real: sin esto se
@@ -454,8 +462,17 @@ service cloud.firestore {
       match /visitasProgramadas/{id} {
         allow read: if mcEsDeEstaComunidadActiva(comunidadId) &&
                        (mcEsAdmin() || mcEsConserje() || (mcEsResidente() && resource.data.depto == mcMiDepto()));
+        // Mismos campos que guarda la app, con tope de tamaño: sin esto un
+        // residente podía crear la visita ya "Ingresó" o inflar el documento.
         allow create: if mcEsDeEstaComunidadActiva(comunidadId) &&
-                         mcEsResidente() && request.resource.data.depto == mcMiDepto();
+                         mcEsResidente() && request.resource.data.depto == mcMiDepto() &&
+                         request.resource.data.keys().hasOnly(['depto', 'nombre', 'rut', 'fecha', 'hora', 'motivo', 'estado', 'ts']) &&
+                         request.resource.data.estado == 'Pendiente' &&
+                         request.resource.data.nombre is string && request.resource.data.nombre.size() > 0 && request.resource.data.nombre.size() <= 150 &&
+                         request.resource.data.get('rut', '') is string && request.resource.data.get('rut', '').size() <= 20 &&
+                         request.resource.data.get('fecha', '') is string && request.resource.data.get('fecha', '').size() <= 10 &&
+                         request.resource.data.get('hora', '') is string && request.resource.data.get('hora', '').size() <= 10 &&
+                         request.resource.data.get('motivo', '') is string && request.resource.data.get('motivo', '').size() <= 500;
         allow update: if false;
         allow delete: if mcEsDeEstaComunidadActiva(comunidadId) &&
                          ((mcEsResidente() && resource.data.depto == mcMiDepto()) || mcEsAdmin());
@@ -532,7 +549,8 @@ service cloud.firestore {
                          request.resource.data.hora == resource.data.hora &&
                          request.resource.data.bloqueId == resource.data.bloqueId &&
                          request.resource.data.estado == resource.data.estado &&
-                         resource.data.estado == "Confirmada" && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["invitados"]);
+                         resource.data.estado == "Confirmada" && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["invitados"]) &&
+                         request.resource.data.invitados is list && request.resource.data.invitados.size() <= 100;
         allow delete: if false;
       }
 

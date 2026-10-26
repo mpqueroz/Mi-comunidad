@@ -200,3 +200,29 @@ test('conversación de solicitud respeta departamento y autor',async()=>{
  const mensaje={texto:'Gracias',foto:'',autorUid:'res1',autorNombre:'Ana',rol:'residente',ts:serverTimestamp()};
  await assertSucceeds(residente().doc(`${BASE}/incidencias/propia/mensajes/m1`).set(mensaje));await assertFails(residente().doc(`${BASE}/incidencias/ajena/mensajes/m1`).set({...mensaje,ts:serverTimestamp()}));await assertFails(residente().doc(`${BASE}/incidencias/propia/mensajes/m2`).set({...mensaje,autorUid:'adm1',ts:serverTimestamp()}));
 });
+
+// ---- datos del edificio, visitas anunciadas e invitados ----
+
+test("administración edita contacto del edificio pero no plan, contadores ni pagos", async () => {
+  await assertSucceeds(adminDb().doc(BASE).update({telefonoAdministracion: "+56 2 2222 2222"}));
+  await assertFails(adminDb().doc(BASE).update({plan: "Enterprise"}));
+  await assertFails(adminDb().doc(BASE).update({numResidentes: 0}));
+  await assertFails(adminDb().doc(BASE).update({configuracionPago: {enlace: "javascript:alert(1)"}}));
+});
+
+test("visita anunciada solo con los campos de la app y en estado Pendiente", async () => {
+  const visita = {depto: "101", nombre: "Pedro", rut: "", fecha: "2026-10-26", hora: "18:00", motivo: "", estado: "Pendiente", ts: 1};
+  await assertSucceeds(residente().collection(`${BASE}/visitasProgramadas`).add(visita));
+  await assertFails(residente().collection(`${BASE}/visitasProgramadas`).add({...visita, estado: "Ingresó"}));
+  await assertFails(residente().collection(`${BASE}/visitasProgramadas`).add({...visita, extra: true}));
+  await assertFails(residente().collection(`${BASE}/visitasProgramadas`).add({...visita, nombre: "x".repeat(151)}));
+});
+
+test("invitados de una reserva deben ser una lista acotada", async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.firestore().doc(`${BASE}/reservas/r1`).set({depto: "101", lugar: "Quincho", fecha: "2099-01-01", hora: "10:00 - 14:00", bloqueId: "b1", estado: "Confirmada", invitados: []});
+  });
+  await assertSucceeds(residente().doc(`${BASE}/reservas/r1`).update({invitados: [{nombre: "Luis", rut: ""}]}));
+  await assertFails(residente().doc(`${BASE}/reservas/r1`).update({invitados: "texto"}));
+  await assertFails(residente().doc(`${BASE}/reservas/r1`).update({invitados: Array(101).fill({nombre: "x", rut: ""})}));
+});
