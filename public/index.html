@@ -3891,6 +3891,10 @@ function cargarXLSX(){
     xlsxCargando = new Promise((resolve, reject) => {
         const script = document.createElement("script");
         script.src = "https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js";
+        // Huella SRI del archivo publicado: si la CDN entregara otro contenido,
+        // el navegador no lo ejecuta.
+        script.integrity = "sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT";
+        script.crossOrigin = "anonymous";
         script.onload = () => resolve();
         script.onerror = () => {
             xlsxCargando = null;

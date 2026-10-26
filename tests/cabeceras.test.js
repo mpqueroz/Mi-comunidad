@@ -29,3 +29,10 @@ test('el SDK de Firebase se sirve desde el sitio y coincide con su registro', ()
     assert.ok(leeme.includes(`${hash}  ${file}`), 'hash registrado de ' + file);
   }
 });
+
+test('SheetJS se carga desde su CDN solo con huella de integridad', () => {
+  const html = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+  const carga = html.slice(html.indexOf('cdn.sheetjs.com/xlsx-0.20.3'), html.indexOf('cdn.sheetjs.com/xlsx-0.20.3') + 400);
+  assert.match(carga, /script\.integrity = "sha384-EnyY0\/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP\+39Ckmn92stwABZynq1JyzdT"/);
+  assert.match(carga, /script\.crossOrigin = "anonymous"/);
+});

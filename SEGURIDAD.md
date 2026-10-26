@@ -45,11 +45,9 @@ En cada pull request y antes de cada despliegue (`.github/workflows/firebase.yml
    - Si el proyecto usa Identity Platform, fijar una política de contraseñas
      de mínimo 8 caracteres (el servidor ya lo exige; esto cubre también los
      scripts locales).
-2. **App Check** (reCAPTCHA Enterprise) para el sitio `mi-comunidad-md` y,
-   una vez que se vean solicitudes válidas en las métricas, activar su
-   cumplimiento en Firestore y Cloud Functions. Esto necesita una clave de
-   sitio que se crea en la consola; con ella se agrega la inicialización de
-   App Check en `public/index.html`.
+2. **Política de privacidad**: completar y revisar con un abogado el borrador
+   (Ley 19.628 y Ley 21.719) y firmar con cada comunidad el contrato de encargo
+   de tratamiento.
 3. **Cuenta de servicio del despliegue** (`FIREBASE_SERVICE_ACCOUNT`):
    rotar la llave si alguna vez se compartió fuera de GitHub, y de
    preferencia reemplazarla por *Workload Identity Federation*. Borrar las
@@ -58,12 +56,24 @@ En cada pull request y antes de cada despliegue (`.github/workflows/firebase.yml
    "Firebase" esté verde y una revisión antes de fusionar.
 5. **Google Cloud → Facturación**: alertas de presupuesto para el proyecto.
 6. **Cuenta de Google dueña del proyecto**: verificación en dos pasos.
-7. **SheetJS** (lectura de cartolas en conciliación) todavía se carga desde
-   `cdn.sheetjs.com`. Para fijarlo, descargar
-   `https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js` en un
-   equipo con internet, copiarlo a `public/vendor/` y cambiar la ruta en
-   `public/index.html` (o agregar su `integrity` con
-   `openssl dgst -sha384 -binary xlsx.full.min.js | openssl base64 -A`).
+7. **Respaldos de Firestore** (cubren las tres apps del proyecto, porque es una
+   sola base de datos). Desde Cloud Shell o un equipo con `gcloud`:
+
+   ```
+   gcloud firestore databases update --database='(default)' --enable-pitr --project=mercado-ciudadano
+   gcloud firestore backups schedules create --database='(default)' --recurrence=daily --retention=14w --project=mercado-ciudadano
+   ```
+
+   El primero permite volver a cualquier minuto de los últimos 7 días; el
+   segundo guarda una copia diaria por 14 semanas. Ambos tienen costo de
+   almacenamiento; revisar el presupuesto (punto 5).
+8. **App Check** (reCAPTCHA Enterprise): crear la clave del sitio
+   `mi-comunidad-md.web.app` en la consola. Con ella se agrega la
+   inicialización en la app y los dominios de reCAPTCHA a la CSP, y luego se
+   activa su cumplimiento en Firestore y Functions.
+
+SheetJS (lectura de cartolas) se carga desde `cdn.sheetjs.com` con huella de
+integridad SRI: si la CDN entregara otro archivo, el navegador no lo ejecuta.
 
 ## Las otras aplicaciones del proyecto compartido
 
