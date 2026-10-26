@@ -3,11 +3,11 @@
 // privacidad. Solo bitácoras operativas y auditoría: cobros, multas,
 // contabilidad, remuneraciones y fichas no se tocan.
 //
-// Mientras DEPURACION_ACTIVA sea false la tarea diaria solo cuenta; el
-// despliegue imprime esas cifras (scripts/simular-depuracion.cjs) para
-// revisarlas antes de activar el borrado real.
+// Activa desde el 26 de octubre de 2026, tras una simulación en producción
+// sin registros vencidos. Con false la tarea solo cuenta; el despliegue
+// siempre imprime las cifras del día (scripts/simular-depuracion.cjs).
 
-const DEPURACION_ACTIVA = false;
+const DEPURACION_ACTIVA = true;
 
 const MES_MS = 30 * 24 * 60 * 60 * 1000;
 const PLAZOS = [

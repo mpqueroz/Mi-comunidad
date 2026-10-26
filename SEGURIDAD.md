@@ -76,9 +76,11 @@ En cada pull request y antes de cada despliegue (`.github/workflows/firebase.yml
 03:30 hora de Chile) aplica los plazos de la política de privacidad: visitas,
 visitas anunciadas, accesos, vehículos y encomiendas entregadas con más de 12
 meses, y auditoría con más de 2 años. Cobros, multas, contabilidad,
-remuneraciones y fichas no se tocan. Está en **simulación**
-(`DEPURACION_ACTIVA = false` en `functions/depuracion.js`): cada despliegue
-imprime cuántos registros borraría; se activa cambiando esa constante.
+remuneraciones y fichas no se tocan. Está **activa** desde el 26 de octubre
+de 2026 (la simulación previa en producción no encontró registros vencidos);
+cada borrado queda en la auditoría de la comunidad y cada despliegue imprime
+cuántos registros vencidos hay ese día. Para volver a simulación:
+`DEPURACION_ACTIVA = false` en `functions/depuracion.js`.
 
 SheetJS (lectura de cartolas) se carga desde `cdn.sheetjs.com` con huella de
 integridad SRI: si la CDN entregara otro archivo, el navegador no lo ejecuta.

@@ -1199,8 +1199,8 @@ exports.actualizarVencimientosMiComunidad = onSchedule(
  * DEPURACIÓN (tarea programada, todos los días 03:30 hora de Chile)
  *
  * Aplica los plazos de conservación de la política de privacidad a las
- * bitácoras y a la auditoría (ver depuracion.js). Mientras DEPURACION_ACTIVA
- * sea false solo cuenta y deja el resumen en el registro de la función.
+ * bitácoras y a la auditoría (ver depuracion.js) y deja el resumen en el
+ * registro de la función y, si borró algo, en la auditoría de la comunidad.
  * ===================================================================== */
 const {depurar} = require("./depuracion");
 
