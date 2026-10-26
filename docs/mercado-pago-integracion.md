@@ -32,7 +32,7 @@ Configurar desde CLI autorizada con `firebase functions:secrets:set NOMBRE`, sel
 Documentación: https://www.mercadopago.cl/developers/es/docs/checkout-pro-orders/resources/notifications/webhooks
 
 ## Conciliación programada (en desarrollo)
-- Función `conciliarPagosMiComunidad`: revisión horaria de hasta 30 órdenes `checkout_ready` por ejecución, con cursor persistente y vuelta al inicio, buscando pagos por `external_reference` y verificando el recurso individual antes de renovar.
+- Función `conciliarPagosMiComunidad`: revisión horaria de hasta 30 órdenes `checkout_ready` o `paid` por ejecución, con cursor persistente y vuelta al inicio, buscando pagos por `external_reference` y verificando el recurso individual antes de renovar.
 - La conciliación comparte la transacción idempotente del Webhook: dos avisos del mismo pago no deben duplicar períodos.
 - **Pendiente antes de publicar:** probar el cursor con más de 30 órdenes, fallos intermedios y ejecución concurrente; definir antigüedad máxima, alertas y reintentos para evitar órdenes abandonadas.
 - Validar en entorno TEST la disponibilidad y formato de `GET /v1/payments/search?external_reference=...` y de `preference_id` en pagos Checkout Pro.
@@ -43,4 +43,4 @@ Documentación: https://www.mercadopago.cl/developers/es/docs/checkout-pro-order
 - Estados `refunded` y `charged_back`: solo si coinciden referencia, preferencia, moneda, monto, modo y pago ya registrado, la orden pasa a `payment_review`.
 - Si la licencia conserva ese pago como `lastPaymentId`, se marca `suspended` con `suspensionReason=payment_reversed`. Requiere revisión del superadministrador.
 - Una orden antigua revertida no suspende automáticamente una licencia renovada después con otro pago.
-- **Antes de producción:** comprobar notificaciones reales de contracargos, que pueden usar otros tópicos/estados; validar reembolsos parciales, conciliación de pagos ya marcados `paid`, y un procedimiento seguro de restitución. Actualmente no hay monitorización periódica de pagos previamente aprobados.
+- **Antes de producción:** comprobar notificaciones reales de contracargos, que pueden usar otros tópicos/estados; validar reembolsos parciales, conciliación de pagos ya marcados `paid`, y un procedimiento seguro de restitución. La conciliación ahora consulta también pagos previamente aprobados para detectar reversos perdidos; falta validarlo contra la API TEST.

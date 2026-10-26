@@ -63,6 +63,7 @@ function verifyPayment(payment, order, paymentId) {
   return typeof order.preferenceId === "string" && order.preferenceId.length > 0 &&
     String(payment.id) === String(paymentId) &&
     payment.status === "approved" &&
+    !(Number(payment.transaction_amount_refunded) > 0) &&
     payment.external_reference === order.id &&
     String(payment.preference_id) === String(order.preferenceId) &&
     payment.currency_id === "CLP" &&
@@ -105,10 +106,18 @@ async function settleVerifiedPayment(db, orderId, payment, paymentId) {
           console.warn("Pago no coincide con orden", orderId);
           return;
         }
+        const community = await tx.get(db.collection("mi_comunidad_comunidades").doc(order.comunidadId));
+        if (!community.exists || community.get("estado") === "Suspendida") {
+          tx.update(orderRef, {status: "payment_review", paymentId, paymentStatus: "approved_while_suspended", reviewedAt: FieldValue.serverTimestamp()});
+          return;
+        }
         const licenseRef = db.collection(LICENSES).doc(order.comunidadId);
         const licenseSnap = await tx.get(licenseRef);
         if (!licenseSnap.exists) throw new Error("Licencia no encontrada: requiere conciliación");
-        if (licenseSnap.get("estado") === "suspended") return;
+        if (licenseSnap.get("estado") === "suspended") {
+          tx.update(orderRef, {status: "payment_review", paymentId, paymentStatus: "approved_while_suspended", reviewedAt: FieldValue.serverTimestamp()});
+          return;
+        }
         const updated = applyVerifiedRenewal(licenseSnap.data(), {months: MONTHS});
         tx.update(licenseRef, {...updated, lastPaymentId: paymentId,
           updatedAt: FieldValue.serverTimestamp()});
@@ -130,7 +139,8 @@ async function flagReversedPayment(db, orderId, payment, paymentId) {
         String(payment.preference_id) !== String(order.preferenceId) ||
         Number(payment.transaction_amount) !== order.amount ||
         payment.currency_id !== "CLP" ||
-        payment.live_mode !== order.liveMode) return;
+        payment.live_mode !== order.liveMode ||
+        (order.collectorId && String(payment.collector_id) !== order.collectorId)) return;
     const licenseRef = db.collection(LICENSES).doc(order.comunidadId);
     const licenseSnap = await tx.get(licenseRef);
     tx.update(orderRef, {status: "payment_review", paymentStatus: payment.status,
@@ -140,6 +150,51 @@ async function flagReversedPayment(db, orderId, payment, paymentId) {
         updatedAt: FieldValue.serverTimestamp()});
     }
   });
+}
+
+async function reconcilePayments(db, token, request = mpRequest) {
+    // Cursor persistente: evita revisar siempre las primeras 30 órdenes.
+    const cursorRef = db.collection("mi_comunidad_config_comercial").doc("conciliacion");
+    const cursorSnap = await cursorRef.get();
+    const lastId = cursorSnap.exists ? String(cursorSnap.get("lastOrderId") || "") : "";
+    // Ordenación por ID de documento para que el cursor recorra todas las órdenes.
+    // Si llega al final, vuelve al comienzo en la próxima ejecución.
+    const base = db.collection(ORDERS).where("status", "in", ["checkout_ready", "paid"])
+      .orderBy("__name__");
+    let pending = await (lastId ? base.startAfter(lastId) : base).limit(30).get();
+    if (pending.empty && lastId) pending = await base.limit(30).get();
+    for (const doc of pending.docs) {
+      const order = doc.data();
+      try {
+        if (order.status === "paid") {
+          const paymentId = String(order.paymentId || "");
+          const payment = await fetchCheckoutPayment(paymentId, token, request);
+          if (["refunded", "charged_back"].includes(payment.status) || Number(payment.transaction_amount_refunded) > 0) {
+            await flagReversedPayment(db, doc.id, payment, paymentId);
+          }
+          continue;
+        }
+        const search = await request("/v1/payments/search?external_reference=" +
+          encodeURIComponent(doc.id) + "&limit=20", token);
+        const results = Array.isArray(search.results) ? search.results : [];
+        for (const candidate of results) {
+          if (candidate.status !== "approved") continue;
+          const paymentId = String(candidate.id);
+          if (!/^[0-9]{1,20}$/.test(paymentId)) continue;
+          // Siempre consultar el recurso individual, no confiar solo en la búsqueda.
+          const payment = await fetchCheckoutPayment(paymentId, token, request);
+          if (!verifyPayment(payment, order, paymentId)) continue;
+          await settleVerifiedPayment(db, doc.id, payment, paymentId);
+          break;
+        }
+      } catch (err) {
+        console.error("Conciliación pendiente", doc.id, err);
+      }
+    }
+    if (!pending.empty) {
+      await cursorRef.set({lastOrderId: pending.docs[pending.docs.length - 1].id,
+        updatedAt: FieldValue.serverTimestamp()}, {merge: true});
+    }
 }
 
 function registerMercadoPago() {
@@ -162,7 +217,7 @@ function registerMercadoPago() {
     const comunidadId = token.comunidadId;
     const comunidad = await db.collection("mi_comunidad_comunidades").doc(comunidadId).get();
     const licencia = await db.collection(LICENSES).doc(comunidadId).get();
-    if (!comunidad.exists || !licencia.exists || licencia.get("estado") === "suspended") {
+    if (!comunidad.exists || comunidad.get("estado") === "Suspendida" || !licencia.exists || licencia.get("estado") === "suspended") {
       throw new HttpsError("failed-precondition", "Comunidad no habilitada para compra.");
     }
     if (environment === "production" && (comunidad.get("mpTestFixture") === true ||
@@ -210,7 +265,7 @@ function registerMercadoPago() {
     try {
       const paymentId = String(req.query["data.id"]);
       const payment = await fetchCheckoutPayment(paymentId, ACCESS_TOKEN.value());
-      if (["refunded", "charged_back"].includes(payment.status)) {
+      if (["refunded", "charged_back"].includes(payment.status) || Number(payment.transaction_amount_refunded) > 0) {
         const orderId = String(payment.external_reference || "");
         if (/^[a-zA-Z0-9]{10,80}$/.test(orderId)) {
           await flagReversedPayment(getFirestore(), orderId, payment, paymentId);
@@ -234,45 +289,10 @@ function registerMercadoPago() {
     secrets: [ACCESS_TOKEN],
     timeZone: "America/Santiago",
   }, async () => {
-    const db = getFirestore();
-    // Cursor persistente: evita revisar siempre las primeras 30 órdenes.
-    const cursorRef = db.collection("mi_comunidad_config_comercial").doc("conciliacion");
-    const cursorSnap = await cursorRef.get();
-    const lastId = cursorSnap.exists ? String(cursorSnap.get("lastOrderId") || "") : "";
-    // Ordenación por ID de documento para que el cursor recorra todas las órdenes.
-    // Si llega al final, vuelve al comienzo en la próxima ejecución.
-    const base = db.collection(ORDERS).where("status", "==", "checkout_ready")
-      .orderBy("__name__");
-    let pending = await (lastId ? base.startAfter(lastId) : base).limit(30).get();
-    if (pending.empty && lastId) pending = await base.limit(30).get();
-    for (const doc of pending.docs) {
-      const order = doc.data();
-      try {
-        const search = await mpRequest("/v1/payments/search?external_reference=" +
-          encodeURIComponent(doc.id) + "&limit=20", ACCESS_TOKEN.value());
-        const results = Array.isArray(search.results) ? search.results : [];
-        for (const candidate of results) {
-          if (candidate.status !== "approved") continue;
-          const paymentId = String(candidate.id);
-          if (!/^[0-9]{1,20}$/.test(paymentId)) continue;
-          // Siempre consultar el recurso individual, no confiar solo en la búsqueda.
-          const payment = await fetchCheckoutPayment(paymentId, ACCESS_TOKEN.value());
-          if (!verifyPayment(payment, order, paymentId)) continue;
-          await settleVerifiedPayment(db, doc.id, payment, paymentId);
-          break;
-        }
-      } catch (err) {
-        console.error("Conciliación pendiente", doc.id, err);
-      }
-    }
-    if (!pending.empty) {
-      await cursorRef.set({lastOrderId: pending.docs[pending.docs.length - 1].id,
-        updatedAt: FieldValue.serverTimestamp()}, {merge: true});
-    }
+    await reconcilePayments(getFirestore(), ACCESS_TOKEN.value());
   });
   return {crearCheckoutMiComunidad: createCheckout,
     webhookMercadoPagoMiComunidad: webhook,
     conciliarPagosMiComunidad: reconcile};
 }
-module.exports = {registerMercadoPago, validateSignature, signatureFailure, checkoutIdentity, verifyPayment, fetchCheckoutPayment};
-
+module.exports = {reconcilePayments, settleVerifiedPayment, flagReversedPayment, registerMercadoPago, validateSignature, signatureFailure, checkoutIdentity, verifyPayment, fetchCheckoutPayment};

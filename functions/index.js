@@ -720,6 +720,10 @@ async function exigirCuentaActiva(request, comunidadId) {
   if (!comunidad.exists || comunidad.get("estado") === "Suspendida") {
     throw new HttpsError("failed-precondition", "Esta comunidad no está activa.");
   }
+  const licencia = await getFirestore().collection(LICENCIAS_COLLECTION).doc(comunidadId).get();
+  if (licencia.exists && !require("./licencias").evaluateLicense(licencia.data()).allowed) {
+    throw new HttpsError("failed-precondition", "Licencia no vigente.");
+  }
   const coleccion = token.role === "residente" ? "residentes" : token.role === "conserje" ? "conserjes" : null;
   if (!coleccion) return;
   const ficha = await comunidadRef.collection(coleccion).doc(request.auth.uid).get();
@@ -953,6 +957,8 @@ exports.actualizarVencimientosMiComunidad = onSchedule(
         if (c.get("estado") === "Suspendida") {
           continue;
         }
+        const licencia = await db.collection(LICENCIAS_COLLECTION).doc(c.id).get();
+        if (licencia.exists && !require("./licencias").evaluateLicense(licencia.data()).allowed) continue;
         gastos += await marcarVencidos(
             c.ref.collection("gastosComunes").where("estado", "==", "Pendiente"),
             "vencimiento", hoy, "Atrasado");

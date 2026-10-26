@@ -82,7 +82,7 @@ function harness() {
       query: {"data.id": "99"}, body: {type: "payment", data: {id: "99"}}}, response);
     return response;
   }
-  return {create, webhook, state, secrets, helpers, docs,
+  return {create, webhook, state, secrets, helpers, docs, db,
     order: () => docs.get("mi_comunidad_ordenes_pago/" + orderId),
     license: () => docs.get("mi_comunidad_licencias/test-edificio")};
 }
@@ -101,7 +101,8 @@ test("Checkout fija el monto en servidor y activa con pago sin preference_id", a
 });
 
 test("avisos duplicados concurrentes no duplican el año contratado", async () => {
-  const h = harness(); await h.create(); await h.webhook();
+  const h = harness(); await h.create();
+  await Promise.all([h.webhook(), h.webhook()]);
   const until = h.license().paidUntil.getTime();
   await Promise.all([h.webhook(), h.webhook()]);
   assert.equal(h.license().paidUntil.getTime(), until);
@@ -202,4 +203,57 @@ test("producción bloquea fixture antes de crear orden o preferencia", async()=>
   await assert.rejects(h.create(), /failed-precondition/);
   assert.equal(h.order(),undefined);
   assert.equal(h.state.calls.length,0);
+});
+
+
+
+test("suspensión administrativa impide iniciar cobro", async () => {
+  const h = harness(); h.docs.get("mi_comunidad_comunidades/test-edificio").estado = "Suspendida";
+  await assert.rejects(h.create()); assert.equal(h.state.calls.length, 0);
+});
+test("pago iniciado antes de suspensión queda en revisión sin habilitar acceso", async () => {
+  const h = harness(); await h.create();
+  h.docs.get("mi_comunidad_comunidades/test-edificio").estado = "Suspendida";
+  await h.webhook(); assert.equal(h.order().status, "payment_review");
+  assert.equal(h.license().estado, "trial");
+});
+test("reembolso parcial aprobado suspende el último pago sin sumar vigencia", async () => {
+  const h = harness(); await h.create(); await h.webhook();
+  const until = h.license().paidUntil.getTime();
+  h.state.payment.transaction_amount_refunded = 100;
+  await h.webhook(); assert.equal(h.order().status, "payment_review");
+  assert.equal(h.license().estado, "suspended");
+  assert.equal(h.license().paidUntil.getTime(), until);
+});
+test("contracargo antiguo queda en revisión sin suspender una renovación posterior", async () => {
+  const h = harness(); await h.create(); await h.webhook();
+  h.license().lastPaymentId = "100"; h.state.payment.status = "charged_back";
+  await h.webhook(); assert.equal(h.order().status, "payment_review");
+  assert.equal(h.license().estado, "active");
+});
+
+
+test("conciliación detecta reembolso perdido de una orden pagada", async () => {
+ const h=harness(); await h.create(); await h.webhook();
+ h.state.payment.status="refunded";
+ const cursor={exists:false};
+ const db={...h.db,collection(name){
+  if(name==="mi_comunidad_config_comercial")return {doc:()=>({get:async()=>cursor,set:async data=>Object.assign(cursor,{exists:true,get:k=>data[k]})})};
+  const base=h.db.collection(name);
+  if(name==="mi_comunidad_ordenes_pago")return {...base,where:()=>({orderBy:()=>({limit:()=>({get:async()=>({empty:false,docs:[{id:h.order().id,data:()=>h.order()}]})})})})};
+  return base;
+ }};
+ await h.helpers.reconcilePayments(db,"ficticio",async path=>path.startsWith("/v1/payments/")?h.state.payment:h.state.merchant);
+ assert.equal(h.order().status,"payment_review"); assert.equal(h.license().estado,"suspended");
+});
+test("cursor recorre 65 órdenes, tolera fallo intermedio y vuelve al inicio",async()=>{
+ const h=harness(),seen=[],cursor={lastOrderId:""};
+ const orders=Array.from({length:65},(_,i)=>({id:String(i).padStart(20,"0"),data:()=>({status:"checkout_ready"})}));
+ const query=(after="",cap=30)=>({orderBy(){return this;},startAfter(id){return query(id,cap);},limit(n){return query(after,n);},async get(){const docs=orders.filter(d=>d.id>after).slice(0,cap);return {docs,empty:!docs.length};}});
+ const db={collection(name){return name==="mi_comunidad_config_comercial"?{doc:()=>({get:async()=>({exists:true,get:k=>cursor[k]}),set:async data=>Object.assign(cursor,data)})}:{where:()=>query()};}};
+ const request=async path=>{const id=new URL("https://example.invalid"+path).searchParams.get("external_reference");seen.push(id);if(id===orders[12].id)throw Error("fallo simulado");return {results:[]};};
+ for(let i=0;i<3;i++)await h.helpers.reconcilePayments(db,"ficticio",request);
+ assert.equal(new Set(seen).size,65);assert.equal(cursor.lastOrderId,orders[64].id);
+ await h.helpers.reconcilePayments(db,"ficticio",request);
+ assert.equal(seen.filter(id=>id===orders[12].id).length,2);
 });
