@@ -15,7 +15,7 @@ test("el panel permite Checkout oficial y bloquea direcciones ajenas", async () 
   ]) {
     let click, assigned;
     const button = {addEventListener: (_, fn) => {click = fn;}}, status = {};
-    const container = {querySelector: id => id === "#mc-pagar-licencia" ? button : status};
+    const container = {querySelector: id => id === "#mc-pagar-licencia" ? button : id === "#mc-actualizar-licencia" ? {addEventListener() {}} : status};
     const context = {Date, Intl, URL, console: {error() {}}, window: {location: {assign: v => {assigned = v;}}}};
     vm.runInNewContext(fs.readFileSync(require.resolve("../../public/suscripcion.js"), "utf8"), context);
     await context.window.MiComunidadSuscripcion.mostrar(container, {
@@ -24,5 +24,16 @@ test("el panel permite Checkout oficial y bloquea direcciones ajenas", async () 
     }, "test-edificio");
     await click();
     assert.equal(assigned === url, valid, url);
+  }
+});
+
+test("sin licencia o suspendida no ofrece iniciar un cobro", () => {
+  const context = {Date, Intl, window: {}};
+  vm.runInNewContext(fs.readFileSync(require.resolve("../../public/suscripcion.js"), "utf8"), context);
+  for (const estado of ["sin_licencia", "suspended"]) {
+    const html = context.window.MiComunidadSuscripcion.htmlLicencia({estado, acceso:false});
+    assert.equal(html.includes('id="mc-pagar-licencia"'), false);
+    assert.equal(html.includes("$800.000"), true);
+    assert.equal(html.includes("Sin fecha"), false);
   }
 });

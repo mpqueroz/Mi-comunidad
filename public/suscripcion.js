@@ -25,21 +25,24 @@
 
   function htmlLicencia(datos, ahora) {
     const d = datos || {};
+    const sinLicencia = !d.estado || d.estado === "sin_licencia" || d.estado === "sin_estado";
+    const suspendida = d.estado === "suspended";
     const prueba = d.estado === "trial";
     const fecha = prueba ? d.trialEndsAt : d.paidUntil;
     const dias = diasRestantes(fecha, ahora);
-    const titulo = prueba ? "Prueba gratuita" : d.acceso ? "Suscripción vigente" : "Suscripción no vigente";
-    const descripcion = prueba ?
+    const titulo = sinLicencia ? "Suscripción pendiente de habilitación" : suspendida ? "Suscripción suspendida" : prueba ? "Prueba gratuita" : d.acceso ? "Suscripción vigente" : "Suscripción no vigente";
+    const descripcion = sinLicencia ? "Esta comunidad necesita habilitación comercial antes de contratar. Contacta a Nodar." : suspendida ? "Contacta a Nodar para revisar el estado de la comunidad." : prueba ?
       "Tu comunidad dispone de 7 días de prueba gratuita." :
       d.acceso ? "Tu comunidad tiene una licencia activa." :
       "La operación está restringida hasta regularizar la suscripción.";
     return '<section class="mc-suscripcion" aria-label="Estado de suscripción">' +
       '<h2>' + titulo + '</h2>' +
       '<p>' + descripcion + '</p>' +
-      '<p><strong>' + dias + '</strong> días restantes</p>' +
-      '<p>Vencimiento: ' + textoSeguro(formatoFecha(fecha)) + '</p>' +
-      '<p class="mc-suscripcion-nota">La contratación en línea estará disponible próximamente. Puedes renovar tu suscripción con Mercado Pago.</p>' +
-      '<button type="button" id="mc-pagar-licencia" class="btn btn-primary" style="margin-top:16px">Pagar suscripción anual</button>' +
+      (fecha ? '<p><strong>' + dias + '</strong> días restantes</p><p>Vencimiento: ' + textoSeguro(formatoFecha(fecha)) + '</p>' : '') +
+      '<p style="margin-top:18px"><strong>$800.000 CLP por comunidad · 12 meses</strong></p>' +
+      '<p class="mc-suscripcion-nota">Pago seguro con Mercado Pago. La vigencia se actualiza cuando el servidor confirma el pago aprobado.</p>' +
+      (sinLicencia || suspendida ? '' : '<button type="button" id="mc-pagar-licencia" class="primary-btn" style="margin-top:16px">Pagar 12 meses · $800.000</button>') +
+      '<button type="button" id="mc-actualizar-licencia" class="outline-btn" style="margin-top:12px">Actualizar estado</button>' +
       '<p id="mc-estado-pago" role="status" aria-live="polite"></p>' +
       '</section>';
   }
@@ -51,6 +54,10 @@
       const resultado = await functions.httpsCallable("consultarLicenciaMiComunidad")({comunidadId: comunidadId});
       contenedor.innerHTML = htmlLicencia(resultado.data);
       const boton = contenedor.querySelector("#mc-pagar-licencia");
+      contenedor.querySelector("#mc-actualizar-licencia").addEventListener("click", function () {
+        mostrar(contenedor, functions, comunidadId).catch(console.error);
+      });
+      if (!boton) return;
       boton.addEventListener("click", async function () {
         boton.disabled = true;
         const estado = contenedor.querySelector("#mc-estado-pago");
