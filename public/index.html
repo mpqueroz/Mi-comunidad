@@ -2633,7 +2633,7 @@ const rolesConfig = {
         label: "Administración",
         avatar: "AD",
         paginaInicial: "admin",
-        paginas: ["admin","conserjeria","avisos","solicitudes","encomiendas","reservas","documentos","perfil"],
+        paginas: ["admin","conserjeria","avisos","solicitudes","encomiendas","reservas","documentos","suscripcion","perfil"],
         menu: [
             { label:"Principal", items:[
                 { page:"admin", icon:"📊", label:"Administración" },
@@ -2647,6 +2647,7 @@ const rolesConfig = {
                 { page:"documentos", icon:"📄", label:"Documentos" }
             ]},
             { label:"Cuenta", items:[
+                { page:"suscripcion", icon:"💳", label:"Mi suscripción" },
                 { page:"perfil", icon:"👤", label:"Mi perfil" }
             ]}
         ],
@@ -2667,10 +2668,11 @@ const rolesConfig = {
         label: "Super administrador",
         avatar: "SA",
         paginaInicial: "comunidades",
-        paginas: ["comunidades"],
+        paginas: ["comunidades","comercial"],
         menu: [
             { label:"Plataforma", items:[
-                { page:"comunidades", icon:"🏙️", label:"Comunidades" }
+                { page:"comunidades", icon:"🏙️", label:"Comunidades" },
+                { page:"comercial", icon:"💳", label:"Licencias y pagos" }
             ]}
         ],
         mobile: [
@@ -5728,6 +5730,18 @@ function renderMobileNav(){
    NAVIGATION
 ================================ */
 
+function renderSuscripcionMiComunidad(){
+    const contenido = document.getElementById("content");
+    contenido.innerHTML = '<div class="page-header"><div><h1>Mi suscripción</h1><p>Consulta el estado de tu servicio.</p></div></div><div id="mc-panel-licencia" class="card" style="padding:24px"></div>';
+    const panel = document.getElementById("mc-panel-licencia");
+    if(currentRole !== "admin" || !community || !community.id ||
+       !window.MiComunidadSuscripcion){
+        panel.textContent = "La suscripción solo está disponible para administración.";
+        return;
+    }
+    window.MiComunidadSuscripcion.mostrar(panel, functions, community.id).catch(console.error);
+}
+
 function navigate(page, fromPopState){
 
     const cfg = rolesConfig[currentRole];
@@ -5772,13 +5786,16 @@ function navigate(page, fromPopState){
 
         perfil: renderPerfil,
 
+        suscripcion: renderSuscripcionMiComunidad,
+
         gastoscomunes: renderGastosComunes,
 
         admin: renderAdmin,
 
         conserjeria: renderConserjeria,
 
-        comunidades: renderComunidades
+        comunidades: renderComunidades,
+        comercial: renderPanelComercial
 
     };
 
@@ -7013,6 +7030,12 @@ function renderPerfil(){
 
         </div>
 
+        ${currentRole === "admin" ? `
+        <div class="card" style="padding:20px;margin-bottom:20px">
+            <h2 style="font-size:18px;margin-bottom:8px">Suscripción de la comunidad</h2>
+            <p style="margin-bottom:14px">Consulta la vigencia y las opciones de renovación.</p>
+            <button type="button" class="primary-btn" onclick="navigate('suscripcion')">Mi suscripción</button>
+        </div>` : ""}
 
         <div class="card">
 
@@ -14115,9 +14138,12 @@ window.addEventListener("popstate", function(event){
 
 </script>
 
+<script src="suscripcion.js"></script>
+<script src="comercial-panel.js"></script>
 <script src="profesional.js"></script>
 <script src="continuidad.js"></script>
 <script src="gestion.js"></script>
 <script src="cierre.js"></script>
 </body>
 </html>
+

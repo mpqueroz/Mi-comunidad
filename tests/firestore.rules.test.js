@@ -275,3 +275,45 @@ test("bitácoras de conserjería aceptan solo los campos de la app", async () =>
   await assertSucceeds(conserje().collection(`${BASE}/vehiculosRegistrados`).add(r));
   await assertFails(conserje().collection(`${BASE}/vehiculosRegistrados`).add({...r, notas: "x".repeat(501)}));
 });
+
+// Regresión comercial: estas pruebas sí crean licencias en el emulador.
+test('trial vencido corta lectura y escritura operativa; licencia vigente las permite', async()=>{
+ const {Timestamp}=require('firebase/firestore');
+ for(const [license,allowed] of [
+  [{estado:'trial',trialEndsAt:Timestamp.fromMillis(1)},false],
+  [{estado:'active',paidUntil:Timestamp.fromMillis(1)},false],
+  [{estado:'suspended',paidUntil:Timestamp.fromMillis(4102444800000)},false],
+  [{estado:'trial',trialEndsAt:Timestamp.fromMillis(4102444800000)},true],
+  [{estado:'active',paidUntil:Timestamp.fromMillis(4102444800000)},true],
+ ]){
+  await env.withSecurityRulesDisabled(ctx=>ctx.firestore().doc(`mi_comunidad_licencias/${C}`).set(license));
+  for(const db of [adminDb(),conserje(),residente()]){
+   const check=allowed?assertSucceeds:assertFails;
+   await check(db.doc(`${BASE}/encomiendas/e1`).get());
+   await check(db.collection(`${BASE}/notificaciones`).add({titulo:'Prueba',depto:'101',paraTodos:false,leidaPor:[],ts:1}));
+  }
+ }
+});
+test('licencia solo es consultable por su admin o superadmin y nadie la modifica desde cliente',async()=>{
+ await env.withSecurityRulesDisabled(ctx=>ctx.firestore().doc(`mi_comunidad_licencias/${C}`).set({estado:'trial'}));
+ const superDb=env.authenticatedContext('super',{app:'mi_comunidad',role:'superadmin'}).firestore();
+ const other=env.authenticatedContext('otro',token('admin',{comunidadId:'otro'})).firestore();
+ for(const db of [adminDb(),superDb])await assertSucceeds(db.doc(`mi_comunidad_licencias/${C}`).get());
+ for(const db of [residente(),conserje(),other])await assertFails(db.doc(`mi_comunidad_licencias/${C}`).get());
+ for(const db of [adminDb(),superDb,residente(),other]){
+  const ref=db.doc(`mi_comunidad_licencias/${C}`);
+  await assertFails(ref.update({estado:'active'}));await assertFails(ref.delete());
+ }
+});
+test('regresión compartida: anuncios públicos y almacén propio mantienen acceso aislado',async()=>{
+ await env.withSecurityRulesDisabled(async ctx=>{
+  await ctx.firestore().doc('anuncios/publico').set({aprobado:true,autorUid:'vendedor'});
+  await ctx.firestore().doc('stores/dueno/products/p1').set({nombre:'Producto',stock:1});
+ });
+ await assertSucceeds(env.unauthenticatedContext().firestore().doc('anuncios/publico').get());
+ const owner=env.authenticatedContext('dueno',{}).firestore();
+ await assertSucceeds(owner.doc('stores/dueno/products/p1').get());
+ await assertSucceeds(owner.doc('stores/dueno/products/p1').update({stock:2}));
+ await assertFails(adminDb().doc('stores/dueno/products/p1').get());
+ await assertFails(owner.doc(`${BASE}/encomiendas/e1`).get());
+});

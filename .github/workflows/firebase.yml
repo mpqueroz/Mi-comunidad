@@ -62,6 +62,7 @@ jobs:
         run: |
           npm ci
           node -e 'require("./index.js")'
+          npm test
           npm audit --omit=dev --audit-level=moderate
       - name: Correr tests en el emulador
         working-directory: tests
@@ -107,6 +108,10 @@ jobs:
       - name: Probar reglas combinadas antes de publicar
         working-directory: tests
         run: npm test
+      # Las funciones de cobro (crearCheckout, webhookMercadoPago, consultarLicencia,
+      # conciliarPagos) NO se despliegan desde aquí: están conectadas a mano a los
+      # secretos de producción y un despliegue normal las volvería a enlazar a los
+      # de prueba. Se publican solo con scripts/habilitar-produccion.sh.
       # El proyecto es compartido con Mercado Ciudadano y Almacén Digital:
       # se nombran las functions de Mi Comunidad una por una para que el
       # deploy nunca borre ni toque las de las otras apps, y el hosting va
@@ -115,7 +120,7 @@ jobs:
       - name: Desplegar funciones de Mi Comunidad
         run: >
           ./tests/node_modules/.bin/firebase deploy --non-interactive
-          --only "functions:generarCobrosMiComunidad,functions:crearCuentaMiComunidad,functions:restablecerClaveMiComunidad,functions:crearComunidadMiComunidad,functions:crearReservaMiComunidad,functions:directorioConserjeriaMiComunidad,functions:cambiarEstadoAdminMiComunidad,functions:crearAdministradorMiComunidad,functions:definirPreguntaSecretaMiComunidad,functions:verificarPreguntaSecretaMiComunidad,functions:migrarRespuestasSecretasMiComunidad,functions:actualizarVencimientosMiComunidad,functions:depurarRegistrosMiComunidad,functions:configurarPagosMiComunidad,functions:guardarPlanMantencionMiComunidad,functions:registrarRevisionMantencionMiComunidad,functions:gestionarAvisoMiComunidad,functions:confirmarAvisoMiComunidad,functions:gestionarVisitaMiComunidad,functions:cancelarReservaMiComunidad,functions:registrarEncomiendaMiComunidad,functions:gestionarTurnoMiComunidad,functions:gestionarEncomiendaMiComunidad,functions:verificarFichaMiComunidad"
+          --only "functions:generarCobrosMiComunidad,functions:crearCuentaMiComunidad,functions:restablecerClaveMiComunidad,functions:crearComunidadMiComunidad,functions:crearReservaMiComunidad,functions:directorioConserjeriaMiComunidad,functions:cambiarEstadoAdminMiComunidad,functions:crearAdministradorMiComunidad,functions:definirPreguntaSecretaMiComunidad,functions:verificarPreguntaSecretaMiComunidad,functions:migrarRespuestasSecretasMiComunidad,functions:actualizarVencimientosMiComunidad,functions:depurarRegistrosMiComunidad,functions:resumenComercialMiComunidad,functions:historialPagosMiComunidad,functions:rehabilitarLicenciaMiComunidad,functions:configurarPagosMiComunidad,functions:guardarPlanMantencionMiComunidad,functions:registrarRevisionMantencionMiComunidad,functions:gestionarAvisoMiComunidad,functions:confirmarAvisoMiComunidad,functions:gestionarVisitaMiComunidad,functions:cancelarReservaMiComunidad,functions:registrarEncomiendaMiComunidad,functions:gestionarTurnoMiComunidad,functions:gestionarEncomiendaMiComunidad,functions:verificarFichaMiComunidad"
       - name: Publicar reglas compartidas
         run: ./tests/node_modules/.bin/firebase deploy --non-interactive --only firestore:rules
       - name: Verificar reglas publicadas

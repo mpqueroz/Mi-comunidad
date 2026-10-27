@@ -1,0 +1,1 @@
+{"name":"nodar-webhook-test","private":true,"version":"1.0.0","main":"index.js","engines":{"node":"22"},"dependencies":{"firebase-functions":"^6.4.0"}}

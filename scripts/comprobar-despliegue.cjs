@@ -20,10 +20,12 @@ async function main() {
     'crearCuentaMiComunidad', 'restablecerClaveMiComunidad',
     'crearReservaMiComunidad', 'configurarPagosMiComunidad',
     'gestionarEncomiendaMiComunidad', 'verificarFichaMiComunidad',
+    'consultarLicenciaMiComunidad', 'crearCheckoutMiComunidad',
   ];
   // Las funciones nuevas solo existen publicadas después del deploy.
   if(process.argv.includes('--release'))functions.push('generarCobrosMiComunidad',
-      'directorioConserjeriaMiComunidad', 'cambiarEstadoAdminMiComunidad', 'crearAdministradorMiComunidad');
+      'directorioConserjeriaMiComunidad', 'cambiarEstadoAdminMiComunidad', 'crearAdministradorMiComunidad',
+      'resumenComercialMiComunidad', 'historialPagosMiComunidad', 'rehabilitarLicenciaMiComunidad');
   for (const name of functions) {
     const response = await fetch(`https://us-central1-mercado-ciudadano.cloudfunctions.net/${name}`, {
       method: 'POST',

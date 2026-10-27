@@ -1,0 +1,28 @@
+name: Validar licencias y pagos
+on:
+  pull_request:
+    paths:
+      - 'functions/**'
+      - '.github/workflows/validar-licencias.yml'
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: functions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run check
+      - name: Auditar dependencias de producción
+        run: npm audit --omit=dev --audit-level=moderate
+      - name: Publicar lockfile actualizado para revisión
+        uses: actions/upload-artifact@v4
+        with:
+          name: mi-comunidad-lockfile-revisado
+          path: functions/package-lock.json
+          retention-days: 7
