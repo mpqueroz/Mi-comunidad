@@ -4,6 +4,8 @@
 serviceAccountKey.json
 functions/serviceAccountKey.json
 *.serviceAccountKey.json
+# Secretos de emuladores de Cloud Functions (functions/.secret.local, .env.local)
+*.local
 
 # Dependencias (se reinstalan con npm install / firebase deploy)
 node_modules/

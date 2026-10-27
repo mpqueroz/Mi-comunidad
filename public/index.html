@@ -5028,7 +5028,7 @@ async function login(){
         } else if(err && err.code === "mi-comunidad/comunidad-suspendida"){
             mensaje = err.message;
         } else if(err && err.code === "permission-denied"){
-            mensaje = "Tu clave es correcta, pero tu cuenta no tiene acceso a este edificio (puede estar desactivada o haber cambiado de departamento). Contacta a administración.";
+            mensaje = "Tu clave es correcta, pero tu cuenta no tiene acceso a este edificio (puede estar desactivada, haber cambiado de departamento o la suscripción de la comunidad puede no estar vigente). Contacta a administración.";
         } else if(err && String(err.code || "").startsWith("auth/api-key")){
             mensaje = "La configuración de Firebase (firebaseConfig) de esta página no es válida.";
         } else if(err && err.code === "auth/network-request-failed"){
@@ -5065,6 +5065,7 @@ async function logout(){
 
     currentRole = null;
     currentUid = null;
+    licenciaRestringida = false;
     residentesDirectorio.length = 0;
     conserjesDirectorio.length = 0;
     comunidadesDirectorio.length = 0;
@@ -5097,6 +5098,31 @@ async function logout(){
 // ("paso: residentes" dice exactamente qué lectura bloquearon las reglas).
 let pasoLogin = "";
 
+// true cuando la licencia de la comunidad no está vigente y quien entra es
+// administración: la app muestra únicamente la página de suscripción.
+let licenciaRestringida = false;
+const configLicenciaVencida = {
+    paginaInicial: "suscripcion",
+    paginas: ["suscripcion"],
+    menu: [{ label:"Cuenta", items:[{ page:"suscripcion", icon:"💳", label:"Mi suscripción" }] }],
+    mobile: [{ page:"suscripcion", icon:"💳", label:"Suscripción" }]
+};
+
+function licenciaSinAcceso(snap){
+    if(!snap.exists) return false;
+    const d = snap.data();
+    const vence = campo => d[campo] && typeof d[campo].toMillis === "function" ? d[campo].toMillis() : 0;
+    if(d.estado === "trial") return vence("trialEndsAt") <= Date.now();
+    if(d.estado === "active" || d.estado === "past_due") return vence("paidUntil") <= Date.now();
+    return true;
+}
+
+// Configuración de menú y páginas del rol actual (reducida si la licencia venció).
+function configRolActual(){
+    const cfg = rolesConfig[currentRole];
+    return licenciaRestringida ? Object.assign({}, cfg, configLicenciaVencida) : cfg;
+}
+
 async function iniciarSesionComunidad(comunidadId){
 
     detenerListenersComunidad();
@@ -5119,6 +5145,20 @@ async function iniciarSesionComunidad(comunidadId){
         );
         errorSuspendida.code = "mi-comunidad/comunidad-suspendida";
         throw errorSuspendida;
+    }
+
+    // Licencia vencida: administración entra solo a "Mi suscripción" para
+    // poder renovar; las reglas siguen negando todo el contenido operativo.
+    // Misma condición que mcEsComunidadActiva() en firestore.rules (sin
+    // documento de licencia = edificio anterior a las licencias, sigue).
+    licenciaRestringida = false;
+    if(currentRole === "admin"){
+        pasoLogin = "licencia";
+        const licenciaSnap = await db.collection("mi_comunidad_licencias").doc(comunidadId).get();
+        if(licenciaSinAcceso(licenciaSnap)){
+            licenciaRestringida = true;
+            return;
+        }
     }
 
     // "Ping" de actividad para la columna Actividad del panel de
@@ -5643,7 +5683,7 @@ async function guardarDatosPropiedad(uid){
 
 function aplicarRolUI(){
 
-    const cfg = rolesConfig[currentRole];
+    const cfg = configRolActual();
 
     document.getElementById("topSubtitle").textContent =
         "Vista: " + cfg.label;
@@ -5668,7 +5708,7 @@ function aplicarRolUI(){
 
 function renderSidebar(){
 
-    const cfg = rolesConfig[currentRole];
+    const cfg = configRolActual();
 
     let html = "";
 
@@ -5705,7 +5745,7 @@ function renderSidebar(){
 
 function renderMobileNav(){
 
-    const cfg = rolesConfig[currentRole];
+    const cfg = configRolActual();
 
     let html = "";
 
@@ -5739,12 +5779,19 @@ function renderSuscripcionMiComunidad(){
         panel.textContent = "La suscripción solo está disponible para administración.";
         return;
     }
+    if(licenciaRestringida){
+        const aviso = document.createElement("p");
+        aviso.className = "card";
+        aviso.style.cssText = "padding:16px;margin-bottom:16px";
+        aviso.textContent = "La suscripción de la comunidad no está vigente, por eso el resto de la aplicación está bloqueado. Cuando el pago quede confirmado, vuelve a ingresar para recuperar el acceso completo.";
+        panel.before(aviso);
+    }
     window.MiComunidadSuscripcion.mostrar(panel, functions, community.id).catch(console.error);
 }
 
 function navigate(page, fromPopState){
 
-    const cfg = rolesConfig[currentRole];
+    const cfg = configRolActual();
 
     if(!cfg.paginas.includes(page)){
         page = cfg.paginaInicial;
@@ -14086,7 +14133,7 @@ function showToast(message){
 
 function paginaInicioActual(){
     return (currentRole && rolesConfig[currentRole])
-        ? rolesConfig[currentRole].paginaInicial
+        ? configRolActual().paginaInicial
         : null;
 }
 
