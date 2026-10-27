@@ -8,5 +8,12 @@
   "dependencies": {
     "firebase-admin": "14.5.0",
     "firebase-functions": "7.4.0"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "check": "node --check index.js && node --check rehabilitacion.js && node --check comercial.js && node --check mercadopago.js && node --check licencias.js && node --check ../public/comercial-panel.js && npm test"
+  },
+  "overrides": {
+    "body-parser": "2.4.0"
   }
 }

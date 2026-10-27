@@ -1,0 +1,18 @@
+{
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "mi-comunidad",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "*.local",
+        "tests",
+        "serviceAccountKey.json",
+        "*.serviceAccountKey.json",
+        "crear-superadmin.js",
+        "restablecer-clave.js"
+      ]
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 'use strict';
 const crypto = require('node:crypto');
+const {evaluateLicense} = require('./licencias');
 module.exports = function profesional(admin, onCall, HttpsError) {
   const db = admin.firestore();
   const stamp = () => admin.firestore.FieldValue.serverTimestamp();
@@ -13,6 +14,8 @@ module.exports = function profesional(admin, onCall, HttpsError) {
     const base = db.collection('mi_comunidad_comunidades').doc(comunidadId);
     const community = await base.get();
     if(!community.exists || community.data().estado === 'Suspendida')throw new HttpsError('failed-precondition', 'La comunidad no está activa.');
+    const license = await db.collection('mi_comunidad_licencias').doc(comunidadId).get();
+    if(license.exists && !evaluateLicense(license.data()).allowed)throw new HttpsError('failed-precondition', 'Licencia no vigente.');
     const person = token.role === 'conserje' ? await base.collection('conserjes').doc(req.auth.uid).get() : token.role === 'residente' ? await base.collection('residentes').doc(req.auth.uid).get() : null;
     if(person && (!person.exists || person.data().estado === 'Inactivo' || (token.role === 'residente' && person.data().depto !== token.depto)))throw new HttpsError('permission-denied', 'La cuenta no está habilitada.');
     // Administración: sin documento sigue habilitada; "Inactivo" la corta.
@@ -301,6 +304,8 @@ module.exports = function profesional(admin, onCall, HttpsError) {
         if(!comunidad.exists||comunidad.data().estado==='Suspendida'){
           throw new HttpsError('failed-precondition','La comunidad no está activa.');
         }
+        const licencia=await tx.get(db.collection('mi_comunidad_licencias').doc(s.base.id));
+        if(licencia.exists&&!evaluateLicense(licencia.data()).allowed)throw new HttpsError('failed-precondition','Licencia no vigente.');
         // También se respetan los cobros antiguos con identificadores aleatorios.
         const anteriores=await tx.get(s.base.collection('gastosComunes').where('periodo','==',periodo));
         const yaCobrados=new Set(anteriores.docs.map(d=>d.data().depto));

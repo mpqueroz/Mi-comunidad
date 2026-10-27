@@ -33,6 +33,38 @@ initializeApp();
 const APP_ID = "mi_comunidad";
 const EMAIL_DOMAIN = "mi-comunidad.app";
 const COMUNIDADES_COLLECTION = "mi_comunidad_comunidades";
+const LICENCIAS_COLLECTION = "mi_comunidad_licencias";
+const {createTrial} = require("./licencias");
+
+// Consulta segura para la pantalla comercial. No habilita escrituras ni pagos.
+exports.consultarLicenciaMiComunidad = onCall(async (request) => {
+  const token = request.auth && request.auth.token;
+  if (!token || token.app !== APP_ID ||
+      !["admin", "superadmin"].includes(token.role)) {
+    throw new HttpsError("permission-denied", "No autorizado para consultar licencias.");
+  }
+  const comunidadId = token.role === "superadmin" ?
+    String((request.data || {}).comunidadId || "").trim() :
+    String(token.comunidadId || "");
+  const {canReadLicense, evaluateLicense} = require("./licencias");
+  if (!canReadLicense(token, comunidadId)) {
+    throw new HttpsError("permission-denied", "No autorizado para consultar esta licencia.");
+  }
+  const licenciaSnap = await getFirestore().collection(LICENCIAS_COLLECTION).doc(comunidadId).get();
+  if (!licenciaSnap.exists) return {comunidadId, estado: "sin_licencia", acceso: false};
+  const licencia = licenciaSnap.data();
+  const resultado = evaluateLicense(licencia, new Date());
+  return {
+    comunidadId,
+    estado: licencia.estado || "sin_estado",
+    acceso: resultado.allowed,
+    motivo: resultado.reason,
+    trialEndsAt: licencia.trialEndsAt && licencia.trialEndsAt.toDate ?
+      licencia.trialEndsAt.toDate().toISOString() : null,
+    paidUntil: licencia.paidUntil && licencia.paidUntil.toDate ?
+      licencia.paidUntil.toDate().toISOString() : null,
+  };
+});
 
 // Debe coincidir EXACTO con limpiarRut() del index.html del front-end,
 // para que el mismo RUT siempre produzca el mismo email sintético.
@@ -147,6 +179,14 @@ exports.crearCuentaMiComunidad = onCall(async (request) => {
     );
   }
   await exigirCuentaActiva(request, comunidadId);
+
+  const licencia = await db.collection(LICENCIAS_COLLECTION).doc(comunidadId).get();
+  if (licencia.exists) {
+    const {evaluateLicense} = require("./licencias");
+    if (!evaluateLicense(licencia.data()).allowed) {
+      throw new HttpsError("failed-precondition", "Licencia no vigente.");
+    }
+  }
 
   const email = rutToEmail(rut);
   let userRecord;
@@ -416,6 +456,8 @@ exports.crearComunidadMiComunidad = onCall(async (request) => {
     throw new HttpsError("internal", "No se pudo crear la cuenta del administrador: " + (err && err.message ? err.message : err));
   }
 
+  // Si falla la asignación de permisos o el guardado de Firestore,
+  // revertimos la cuenta recién creada para permitir un nuevo intento.
   try {
     await getAuth().setCustomUserClaims(userRecord.uid, {
       app: APP_ID,
@@ -423,6 +465,7 @@ exports.crearComunidadMiComunidad = onCall(async (request) => {
       comunidadId: comunidadId,
     });
 
+    const licenciaRef = db.collection(LICENCIAS_COLLECTION).doc(comunidadId);
     const batch = db.batch();
     batch.create(comunidadRef, {
       name,
@@ -446,11 +489,16 @@ exports.crearComunidadMiComunidad = onCall(async (request) => {
       estado: "Activo",
       creadoEn: FieldValue.serverTimestamp(),
     });
+    // La prueba se inicia una sola vez, con fecha calculada en el servidor.
+    batch.create(licenciaRef, createTrial(new Date()));
     await batch.commit();
   } catch (err) {
     // Sin esto quedaba una cuenta de administración sin edificio.
     await getAuth().deleteUser(userRecord.uid).catch((e) =>
       console.error("No se pudo borrar la cuenta a medio crear:", userRecord.uid, e));
+    if (err && err.code === 6) {
+      throw new HttpsError("already-exists", "La comunidad ya fue creada por otra solicitud.");
+    }
     console.error("crearComunidadMiComunidad falló, cuenta revertida:", err);
     throw new HttpsError("internal", "No se pudo crear la comunidad. Intenta de nuevo.");
   }
@@ -542,6 +590,14 @@ exports.crearReservaMiComunidad = onCall(async (request) => {
   const comunidadSnap = await comunidadRef.get();
   if (!comunidadSnap.exists || comunidadSnap.get("estado") === "Suspendida") {
     throw new HttpsError("failed-precondition", "Esta comunidad no está activa.");
+  }
+
+  const licenciaReserva = await db.collection(LICENCIAS_COLLECTION).doc(comunidadId).get();
+  if (licenciaReserva.exists) {
+    const {evaluateLicense} = require("./licencias");
+    if (!evaluateLicense(licenciaReserva.data()).allowed) {
+      throw new HttpsError("failed-precondition", "Licencia no vigente.");
+    }
   }
 
   await exigirCuentaActiva(request, comunidadId);
@@ -684,6 +740,10 @@ async function exigirCuentaActiva(request, comunidadId) {
   const comunidad = await comunidadRef.get();
   if (!comunidad.exists || comunidad.get("estado") === "Suspendida") {
     throw new HttpsError("failed-precondition", "Esta comunidad no está activa.");
+  }
+  const licencia = await getFirestore().collection(LICENCIAS_COLLECTION).doc(comunidadId).get();
+  if (licencia.exists && !require("./licencias").evaluateLicense(licencia.data()).allowed) {
+    throw new HttpsError("failed-precondition", "Licencia no vigente.");
   }
   if (token.role === "admin") {
     // Lista de bajas: una cuenta de administración sin documento sigue
@@ -1183,6 +1243,8 @@ exports.actualizarVencimientosMiComunidad = onSchedule(
         if (c.get("estado") === "Suspendida") {
           continue;
         }
+        const licencia = await db.collection(LICENCIAS_COLLECTION).doc(c.id).get();
+        if (licencia.exists && !require("./licencias").evaluateLicense(licencia.data()).allowed) continue;
         gastos += await marcarVencidos(
             c.ref.collection("gastosComunes").where("estado", "==", "Pendiente"),
             "vencimiento", hoy, "Atrasado");
@@ -1212,6 +1274,11 @@ exports.depurarRegistrosMiComunidad = onSchedule(
       console.log(`Depuración: ${total} registros vencidos`, JSON.stringify(resumen));
     });
 
+// Cobro comercial aislado de las demás aplicaciones del proyecto compartido.
+Object.assign(exports, require("./mercadopago").registerMercadoPago());
+Object.assign(exports, require("./comercial"));
+Object.assign(exports, require("./rehabilitacion"));
+Object.assign(exports, require("./webhook-test"));
 
 // Operación profesional añadida; se conservan las funciones existentes de identidad.
 const profesional = require('./profesional')({firestore: Object.assign(() => getFirestore(), {FieldValue, Timestamp})}, onCall, HttpsError);

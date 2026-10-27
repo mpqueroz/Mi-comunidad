@@ -1,0 +1,8 @@
+{
+  "hosting": {
+    "site": "mi-comunidad-md",
+    "public": "payment-preview",
+    "ignore": ["**/.*", "**/node_modules/**"],
+    "headers": [{"source": "**", "headers": [{"key": "Cache-Control", "value": "no-store"}]}]
+  }
+}

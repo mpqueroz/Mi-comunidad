@@ -36,6 +36,8 @@ function section(source){
     at=skip(source,at);
     const fn=source.slice(at).match(/^function\s+mc\w+\s*\([^)]*\)\s*\{/);
     if(fn){at=endBlock(source,at+fn[0].length-1);continue;}
+    const license=source.slice(at).match(/^match\s+\/mi_comunidad_licencias\/\{comunidadId\}\s*\{/);
+    if(license){at=endBlock(source,at+license[0].length-1);continue;}
     const match=source.slice(at).match(/^match\s+\/mi_comunidad_comunidades\/\{comunidadId\}\s*\{/);
     if(!match)throw Error('La sección contiene reglas ajenas o una estructura inesperada; no se reemplazará.');
     return {start,end:endBlock(source,at+match[0].length-1)};

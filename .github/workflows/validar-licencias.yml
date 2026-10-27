@@ -1,0 +1,26 @@
+name: Validar licencias y pagos
+on:
+  pull_request:
+    paths:
+      - 'functions/**'
+      - '.github/workflows/validar-licencias.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: functions
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run check
+      - name: Auditar dependencias de producción
+        run: npm audit --omit=dev --audit-level=moderate

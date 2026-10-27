@@ -14,6 +14,7 @@ mcReset=function(){mcGestionReset();mc.planes=[];mc.lecturas=new Set();mc.planes
 const mcGestionSesion=iniciarSesionComunidad;
 iniciarSesionComunidad=async function(id){
   await mcGestionSesion(id);
+  if(licenciaRestringida)return;
   const base=refComunidadActual();
   const fail=err=>{console.error(err);mc.errorCarga='Hay datos de gestión sin sincronizar. Revisa tu conexión y los permisos.';rerenderSiAppVisible();};
   mc.unsubs.push(base.collection('lecturasAvisos').where('uid','==',currentUid).onSnapshot(s=>{

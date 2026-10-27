@@ -51,3 +51,20 @@ test('dos revisiones simultáneas del mismo plan no avanzan dos veces el calenda
 test('solo administración edita planes y se rechazan versiones desactualizadas',async()=>{const h=harness();await assert.rejects(h.call('guardarPlanMantencionMiComunidad',planData()),{code:'permission-denied'});const p=await h.call('guardarPlanMantencionMiComunidad',planData(),'admin','admin');await assert.rejects(h.call('guardarPlanMantencionMiComunidad',planData({id:p.id,version:0}),'admin','admin'),{code:'failed-precondition'});});
 test('publicación reintentada crea un solo aviso y una notificación',async()=>{const h=harness();const data={accion:'publicar',solicitud:'a'.repeat(32),titulo:'Corte de agua',texto:'Mañana entre 10 y 12.',categoria:'Importante',fijado:true,confirmacion:true,vence:'2099-12-31'};const r=await h.call('gestionarAvisoMiComunidad',data,'admin','admin');await h.call('gestionarAvisoMiComunidad',data,'admin','admin');assert.equal([...h.rows.keys()].filter(k=>k.includes('/avisos/')).length,1);assert.equal([...h.rows.keys()].filter(k=>k.includes('/notificaciones/')).length,1);await h.call('confirmarAvisoMiComunidad',{id:r.id},'residente','residente');await h.call('confirmarAvisoMiComunidad',{id:r.id},'residente','residente');assert.equal([...h.rows.keys()].filter(k=>k.includes('/lecturasAvisos/')).length,1);assert.equal(h.rows.get(h.base+'/lecturasAvisos/'+r.id+'_residente').depto,'101');});
 test('un aviso archivado o vencido no admite nuevas confirmaciones',async()=>{const h=harness();h.rows.set(h.base+'/avisos/a',{title:'Antiguo',confirmacion:true,vence:'2000-01-01'});await assert.rejects(h.call('confirmarAvisoMiComunidad',{id:'a'},'residente','residente'),{code:'failed-precondition'});h.rows.set(h.base+'/avisos/b',{title:'Archivado',confirmacion:true,estado:'Archivado'});await assert.rejects(h.call('confirmarAvisoMiComunidad',{id:'b'},'residente','residente'),{code:'failed-precondition'});});
+
+
+test('licencia vencida o suspendida bloquea todas las funciones operativas antes de escribir',async()=>{
+ for(const license of [{estado:'trial',trialEndsAt:Timestamp.fromMillis(1)},{estado:'active',paidUntil:Timestamp.fromMillis(1)},{estado:'suspended',paidUntil:Timestamp.fromMillis(4102444800000)}]){
+  const h=harness();h.rows.set('mi_comunidad_licencias/edificio',license);
+  for(const name of Object.keys(h.api)){
+   const before=JSON.stringify([...h.rows]);
+   await assert.rejects(h.call(name,{},'admin','admin'),{code:'failed-precondition'},name);
+   assert.equal(JSON.stringify([...h.rows]),before,name);
+  }
+ }
+});
+test('licencia pagada vigente permite operación y no reinicia prueba',async()=>{
+ const h=harness();h.rows.set('mi_comunidad_licencias/edificio',{estado:'active',paidUntil:Timestamp.fromMillis(4102444800000)});
+ await h.call('gestionarTurnoMiComunidad',{accion:'iniciar'});
+ assert.equal(h.rows.get('mi_comunidad_licencias/edificio').estado,'active');
+});

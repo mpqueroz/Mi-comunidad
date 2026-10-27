@@ -13,7 +13,7 @@ async function mcEntrarUsuario(user){
   closeModal();detenerListenersComunidad();detenerListenerComunidades();
   residentesDirectorio.length=0;conserjesDirectorio.length=0;comunidadesDirectorio.length=0;
   profile.nombre=user.displayName||'';profile.depto='';profile.telefono='';
-  currentUid=user.uid;currentRole=c.role;
+  currentUid=user.uid;currentRole=c.role;licenciaRestringida=false;
   try{
     if(c.role==='superadmin')await iniciarSesionSuperAdmin();
     else await iniciarSesionComunidad(c.comunidadId);
@@ -21,10 +21,10 @@ async function mcEntrarUsuario(user){
     document.getElementById('loginScreen').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
     document.getElementById('loginPassword').value='';
-    aplicarRolUI();navigate(rolesConfig[currentRole].paginaInicial);
+    aplicarRolUI();navigate(configRolActual().paginaInicial);
     actualizarContadorNotificaciones();
   }catch(err){
-    detenerListenersComunidad();detenerListenerComunidades();currentRole=null;currentUid=null;
+    detenerListenersComunidad();detenerListenerComunidades();currentRole=null;currentUid=null;licenciaRestringida=false;
     throw err;
   }
 }
