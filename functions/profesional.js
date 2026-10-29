@@ -26,6 +26,34 @@ module.exports = function profesional(admin, onCall, HttpsError) {
   }
   function docId(id) {if(typeof id!=='string'||!id||id.includes('/')||id.length>200)throw new HttpsError('invalid-argument','Identificador inválido.');return id;}
   function log(tx, s, title, meta, turnoId = '') {tx.set(s.base.collection('novedades').doc(), {icon:'clipboard-list',title:text(title),meta:text(meta,500),badgeClass:'',badgeText:'Registro',autorUid:s.uid,autorNombre:s.nombre,turnoId,ts:stamp()});}
+  // Todos los datos se leen dentro de la misma transacción de entrega.
+  // Se conserva una selección acotada y se informa cuando no está completa.
+  async function resumenOperacion(tx, s) {
+    const hoy=hoyChile();
+    const horizonte=new Date(Date.parse(hoy+'T12:00:00Z')+7*86400000).toISOString().slice(0,10);
+    const specs=[
+      ['visitasDentro','visitas','estado','Dentro',v=>true,v=>[v.nombre,`Depto ${text(v.depto,40)}`]],
+      ['visitasEsperadas','visitasProgramadas','fecha',hoy,v=>v.estado==='Pendiente'&&(!v.qrFin||v.qrFin>=ahoraChile()),v=>[v.nombre,`Depto ${text(v.depto,40)} · ${text(v.hora,20)||'Sin hora'}`]],
+      ['solicitudes','incidencias','estado','Pendiente',v=>true,v=>[v.categoria,`Depto ${text(v.depto,40)} · ${text(v.responsable,100)||'Sin responsable'} · ${text(v.compromiso,10)||'Sin compromiso'}`]],
+      ['solicitudes','incidencias','estado','En proceso',v=>true,v=>[v.categoria,`Depto ${text(v.depto,40)} · ${text(v.responsable,100)||'Sin responsable'} · ${text(v.compromiso,10)||'Sin compromiso'}`]],
+      ['encomiendas','encomiendas','estado','Recibido',v=>true,v=>[v.codigo||v.title,`Depto ${text(v.depto,40)} · ${text(v.ubicacion,100)||'Sin ubicación'}`]],
+      ['encomiendas','encomiendas','estado','En proceso de entrega',v=>true,v=>[v.codigo||v.title,`Depto ${text(v.depto,40)} · En proceso de entrega`]],
+      ['mantenciones','planesMantencion','activo',true,v=>v.proximaFecha&&v.proximaFecha<=horizonte,v=>[v.titulo,`${text(v.proximaFecha,10)} · ${text(v.responsable,100)||'Sin responsable'}`]]
+    ];
+    const result={generadoEn:Date.now()};
+    for(const [key,collection,field,value,filter,format] of specs){
+      const snap=await tx.get(s.base.collection(collection).where(field,'==',value).limit(51));
+      const group=result[key]||(result[key]={items:[],limitado:false});
+      group.limitado=group.limitado||snap.size>50;
+      for(const doc of snap.docs){
+        const v=doc.data();if(!filter(v))continue;
+        if(group.items.length>=50){group.limitado=true;continue;}
+        const [titulo,detalle]=format(v);
+        group.items.push({id:doc.id,titulo:text(titulo,150),detalle:text(detalle,250)});
+      }
+    }
+    return result;
+  }
   const gestionarTurnoMiComunidad = onCall(async req => {
     const s = await scope(req, ['admin','conserje']);
     const accion = req.data.accion;
@@ -48,7 +76,8 @@ module.exports = function profesional(admin, onCall, HttpsError) {
         if(!resumen)throw new HttpsError('invalid-argument','Escribe el resumen de entrega.');
         const tareas=await tx.get(s.base.collection('tareasTurno').where('estado','==','Pendiente').limit(101));
         if(tareas.size>100)throw new HttpsError('failed-precondition','Hay más de 100 pendientes. Administración debe revisar y resolver los antiguos antes de entregar.');
-        const data={estado:'Entregado',resumen,entregadoEn:stamp(),entregadoPor:s.uid,pendientesSnapshot:tareas.docs.map(d=>({id:d.id,titulo:d.data().titulo,prioridad:d.data().prioridad,responsable:d.data().responsable||'',compromiso:d.data().compromiso||''}))};
+        const operacionSnapshot=await resumenOperacion(tx,s);
+        const data={estado:'Entregado',resumen,entregadoEn:stamp(),entregadoPor:s.uid,operacionSnapshot,pendientesSnapshot:tareas.docs.map(d=>({id:d.id,titulo:d.data().titulo,prioridad:d.data().prioridad,responsable:d.data().responsable||'',compromiso:d.data().compromiso||''}))};
         tx.update(ref,data);tx.update(actual,data);log(tx,s,'Turno entregado',resumen,old.id);return {id:old.id};
       }
       if(accion === 'recibir') {
@@ -116,6 +145,17 @@ module.exports = function profesional(admin, onCall, HttpsError) {
     });
   });
   function hoyChile(){return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
+  function ahoraChile(){
+    const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
+    const p=Object.fromEntries(parts.map(x=>[x.type,x.value]));return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
+  }
+  const hashPase=token=>crypto.createHash('sha256').update(token).digest('hex');
+  function validarPase(v,token){
+    if(!/^[a-f0-9]{64}$/.test(token||'')||!/^[a-f0-9]{64}$/.test(v.qrHash||'')||!crypto.timingSafeEqual(Buffer.from(hashPase(token),'hex'),Buffer.from(v.qrHash,'hex')))throw new HttpsError('permission-denied','El pase no es válido o fue reemplazado.');
+    if(v.estado!=='Pendiente')throw new HttpsError('failed-precondition','El pase ya fue utilizado o cancelado.');
+    const now=ahoraChile();
+    if(!v.qrInicio||!v.qrFin||now<v.qrInicio||now>v.qrFin)throw new HttpsError('failed-precondition','El pase está fuera de su horario de validez.');
+  }
   function rutValido(value){
     if(!/^[0-9]{7,8}[0-9K]$/.test(value))return false;
     const body=value.slice(0,-1);let total=0,m=2;
@@ -123,8 +163,34 @@ module.exports = function profesional(admin, onCall, HttpsError) {
     const n=11-total%11;return value.slice(-1)===(n===11?'0':n===10?'K':String(n));
   }
   const gestionarVisitaMiComunidad=onCall(async req=>{
-    const s=await scope(req,['admin','conserje']);
     const d=req.data;
+    const s=await scope(req,['emitirPase','revocarPase'].includes(d?.accion)?['residente']:['admin','conserje']);
+    if(d.accion==='emitirPase'||d.accion==='revocarPase'){
+      const ref=s.base.collection('visitasProgramadas').doc(docId(d.id));
+      const token=crypto.randomBytes(32).toString('hex');
+      return db.runTransaction(async tx=>{
+        const snap=await tx.get(ref);
+        if(!snap.exists)throw new HttpsError('not-found','La visita anunciada ya no existe.');
+        const v=snap.data();
+        if(v.depto!==req.auth.token.depto)throw new HttpsError('permission-denied','Solo puedes autorizar visitas de tu departamento.');
+        if(v.estado!=='Pendiente')throw new HttpsError('failed-precondition','Esta visita ya fue atendida o cancelada.');
+        if(d.accion==='revocarPase'){
+          tx.update(ref,{estado:'Cancelada',qrHash:admin.firestore.FieldValue.delete(),canceladaPor:s.uid,canceladaEn:stamp()});
+          log(tx,s,'Invitación cancelada',`${text(v.nombre,150)} · Depto ${text(v.depto,40)}`);return {ok:true};
+        }
+        const hora=v.hora||'00:00',hasta=d.hasta||'23:59';
+        if(!fechaReal(v.fecha)||v.fecha<hoyChile()||!/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(hasta)||hasta<hora||`${v.fecha}T${hasta}`<ahoraChile())throw new HttpsError('invalid-argument','Revisa la fecha y el horario. El término debe ser posterior al inicio y no estar vencido.');
+        tx.update(ref,{qrHash:hashPase(token),qrInicio:`${v.fecha}T${hora}`,qrFin:`${v.fecha}T${hasta}`,autorizadaPor:s.uid,autorizadaEn:stamp()});
+        log(tx,s,'Pase de visita emitido',`${text(v.nombre,150)} · Depto ${text(v.depto,40)} · ${v.fecha} ${hora}–${hasta}`);
+        return {id:snap.id,token,nombre:text(v.nombre,150),depto:text(v.depto,40),inicio:`${v.fecha}T${hora}`,fin:`${v.fecha}T${hasta}`};
+      });
+    }
+    if(d.accion==='revisarPase'){
+      const snap=await s.base.collection('visitasProgramadas').doc(docId(d.id)).get();
+      if(!snap.exists)throw new HttpsError('not-found','No se encontró la invitación en esta comunidad.');
+      const v=snap.data();validarPase(v,d.token);
+      return {id:snap.id,nombre:text(v.nombre,150),depto:text(v.depto,40),inicio:v.qrInicio,fin:v.qrFin};
+    }
     if(d.accion==='salir'){
       const ref=s.base.collection('visitas').doc(docId(d.id));
       return db.runTransaction(async tx=>{
@@ -146,6 +212,13 @@ module.exports = function profesional(admin, onCall, HttpsError) {
         const p=await tx.get(programada);
         if(!p.exists)throw new HttpsError('not-found','La visita anunciada ya no existe.');
         datos=p.data();
+        // Un pase QR no puede eludir su horario usando el ingreso por ID.
+        if(datos.qrHash){
+          validarPase(datos,d.token);
+          if(d.identidadConfirmada!==true)throw new HttpsError('failed-precondition','Confirma que comprobaste la identidad de la visita.');
+          const autor=await tx.get(s.base.collection('residentes').doc(docId(datos.autorizadaPor)));
+          if(!autor.exists||autor.data().estado==='Inactivo'||autor.data().depto!==datos.depto)throw new HttpsError('failed-precondition','La cuenta que autorizó la visita ya no está habilitada para ese departamento.');
+        }
         if(datos.estado!=='Pendiente')throw new HttpsError('failed-precondition','Esta visita ya fue atendida.');
         if(datos.fecha!==hoyChile())throw new HttpsError('failed-precondition','Esta invitación no corresponde a hoy.');
       }
@@ -159,7 +232,8 @@ module.exports = function profesional(admin, onCall, HttpsError) {
         const prut=String(p.rut||'').replace(/[^0-9kK]/g,'').toUpperCase();
         return rut&&prut?rut===prut:normalize(p.nombre)===normalize(nombre);
       }));
-      tx.create(nueva,{nombre,rut,depto,motivo,estado:restriccion?'Denegado':'Dentro',restringido:restriccion,programadaId:programada?.id||'',ingresoPor:s.uid,ingresoPorNombre:s.nombre,ts:Date.now()});
+      const conPaseQr=!!programada&&!!datos.qrHash;
+      tx.create(nueva,{nombre,rut,depto,motivo,estado:restriccion?'Denegado':'Dentro',restringido:restriccion,programadaId:programada?.id||'',conPaseQr,identidadConfirmada:conPaseQr&&d.identidadConfirmada===true,ingresoPor:s.uid,ingresoPorNombre:s.nombre,ts:Date.now()});
       if(programada)tx.update(programada,{estado:restriccion?'Rechazada':'Ingresó',visitaId:nueva.id,atendidaPor:s.uid,atendidaEn:stamp()});
       log(tx,s,restriccion?'Intento de ingreso denegado':'Ingreso de visita',`${nombre} · Depto ${depto}`);
       if(restriccion)tx.create(s.base.collection('notificaciones').doc(),{icon:'ban',titulo:'Se registró un intento de ingreso restringido',meta:`${nombre} · Depto ${depto}`,depto,paraTodos:false,leidaPor:[],ts:Date.now()});

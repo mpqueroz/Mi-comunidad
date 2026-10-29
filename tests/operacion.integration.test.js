@@ -11,6 +11,27 @@ before(()=>{
 });
 let seq=0;
 async function fixture(){const id='prueba-'+Date.now()+'-'+(++seq);const base=db.collection('mi_comunidad_comunidades').doc(id);await base.set({estado:'Activa',adminNombre:'Administración'});await Promise.all([base.collection('residentes').doc('r1').set({nombre:'Ana',depto:'101',estado:'Activo',restringidos:[]}),base.collection('conserjes').doc('c1').set({nombre:'Conserje Uno',estado:'Activo'}),base.collection('conserjes').doc('c2').set({nombre:'Conserje Dos',estado:'Activo'})]);const call=(name,data,uid='c1',role='conserje')=>api[name].run({auth:{uid,token:{app:'mi_comunidad',role,comunidadId:id,depto:'101'}},data:{comunidadId:id,...data}});return {id,base,call};}
+test('Firestore real: pase QR concurrente, cancelación y resumen conservado en acta',{skip:!enabled},async()=>{
+ const h=await fixture(),fecha=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ const ref=h.base.collection('visitasProgramadas').doc('pase');await ref.set({depto:'101',nombre:'Invitado',fecha,hora:'00:00',estado:'Pendiente'});
+ const p=await h.call('gestionarVisitaMiComunidad',{accion:'emitirPase',id:ref.id,hasta:'23:59'},'r1','residente');
+ const input={accion:'ingresar',programadaId:p.id,token:p.token,identidadConfirmada:true};
+ const result=await Promise.allSettled([h.call('gestionarVisitaMiComunidad',input),h.call('gestionarVisitaMiComunidad',input,'c2')]);
+ assert.equal(result.filter(r=>r.status==='fulfilled').length,1);
+ assert.equal((await h.base.collection('visitas').get()).size,1);
+ const turno=await h.call('gestionarTurnoMiComunidad',{accion:'iniciar'});
+ await h.call('gestionarTurnoMiComunidad',{accion:'entregar',turnoId:turno.id,resumen:'Una visita dentro.'});
+ const acta=h.base.collection('turnos').doc(turno.id),snapshot=(await acta.get()).data().operacionSnapshot;
+ assert.equal(snapshot.visitasDentro.items.length,1);
+ const visita=result.find(r=>r.status==='fulfilled').value;
+ await h.call('gestionarVisitaMiComunidad',{accion:'salir',id:visita.id});
+ await h.call('gestionarTurnoMiComunidad',{accion:'recibir',turnoId:turno.id},'c2');
+ assert.deepEqual((await acta.get()).data().operacionSnapshot,snapshot);
+ await ref.set({depto:'101',nombre:'Invitado',fecha,estado:'Pendiente'});
+ const otro=await h.call('gestionarVisitaMiComunidad',{accion:'emitirPase',id:ref.id},'r1','residente');
+ await h.call('gestionarVisitaMiComunidad',{accion:'revocarPase',id:ref.id},'r1','residente');
+ await assert.rejects(h.call('gestionarVisitaMiComunidad',{accion:'ingresar',programadaId:ref.id,token:otro.token,identidadConfirmada:true}));
+});
 test('Firestore real: dos operadores no toman la misma encomienda',{skip:!enabled},async()=>{const h=await fixture();const p=await h.call('registrarEncomiendaMiComunidad',{titulo:'Caja',depto:'101',ubicacion:'B2'});const r=await Promise.allSettled([h.call('gestionarEncomiendaMiComunidad',{accion:'iniciar',id:p.id}),h.call('gestionarEncomiendaMiComunidad',{accion:'iniciar',id:p.id},'c2')]);assert.equal(r.filter(x=>x.status==='fulfilled').length,1);const ganador=r[0].status==='fulfilled'?'c1':'c2';const token=r.find(x=>x.status==='fulfilled').value.token;await h.call('gestionarEncomiendaMiComunidad',{accion:'confirmar',id:p.id,token,retiradoPor:{nombre:'Ana',relacion:'Titular'}},ganador);assert.equal((await h.base.collection('encomiendas').doc(p.id).get()).data().estado,'Entregado');});
 test('Firestore real: recepción cierra turno anterior y abre otro',{skip:!enabled},async()=>{const h=await fixture();const t=await h.call('gestionarTurnoMiComunidad',{accion:'iniciar'});await h.call('gestionarTurnoMiComunidad',{accion:'entregar',turnoId:t.id,resumen:'Se entrega edificio sin pendientes.'});const n=await h.call('gestionarTurnoMiComunidad',{accion:'recibir',turnoId:t.id},'c2');assert.equal((await h.base.collection('turnos').doc(t.id).get()).data().estado,'Cerrado');assert.equal((await h.base.collection('operacion').doc('turnoActual').get()).data().id,n.id);});
 test('Firestore real: cancelar conserva reserva y elimina su marcador',{skip:!enabled},async()=>{const h=await fixture();await h.base.collection('reservas').doc('r').set({depto:'101',fecha:'2099-01-01',lugar:'Quincho',bloqueId:'b',estado:'Confirmada'});await h.base.collection('bloquesOcupados').doc('2099-01-01_b').set({reservaId:'r'});await h.call('cancelarReservaMiComunidad',{id:'r',motivo:'Cambio de planes'},'r1','residente');assert.equal((await h.base.collection('reservas').doc('r').get()).data().estado,'Cancelada');assert.equal((await h.base.collection('bloquesOcupados').doc('2099-01-01_b').get()).exists,false);});
