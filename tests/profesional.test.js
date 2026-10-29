@@ -26,6 +26,84 @@ function harness(){
  const call=(name,data={},uid='uno',role='conserje')=>api[name](req(uid,data,role));
  return {rows,api,req,call,base,Timestamp};
 }
+function invitacion(h,id='inv',overrides={}){
+ const fecha=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ h.rows.set(h.base+'/visitasProgramadas/'+id,{nombre:'Visita de prueba',depto:'101',fecha,hora:'00:00',estado:'Pendiente',...overrides});
+ return h.call('gestionarVisitaMiComunidad',{accion:'emitirPase',id,hasta:'23:59'},'residente','residente');
+}
+test('pase QR: token aleatorio solo en respuesta; lectura no consume; ingreso requiere identidad',async()=>{
+ const h=harness(),p=await invitacion(h),stored=h.rows.get(h.base+'/visitasProgramadas/inv');
+ assert.match(p.token,/^[a-f0-9]{64}$/);assert.notEqual(stored.qrHash,p.token);assert.equal(JSON.stringify([...h.rows.values()]).includes(p.token),false);
+ const data={id:p.id,token:p.token};await h.call('gestionarVisitaMiComunidad',{accion:'revisarPase',...data});
+ assert.equal(stored.estado,'Pendiente');
+ await assert.rejects(h.call('gestionarVisitaMiComunidad',{accion:'ingresar',programadaId:p.id,token:p.token}),{code:'failed-precondition'});
+ const v=await h.call('gestionarVisitaMiComunidad',{accion:'ingresar',programadaId:p.id,token:p.token,identidadConfirmada:true});
+ assert.equal(h.rows.get(h.base+'/visitas/'+v.id).identidadConfirmada,true);
+ await assert.rejects(h.call('gestionarVisitaMiComunidad',{accion:'revisarPase',...data}),{code:'failed-precondition'});
+});
+test('pase QR: renovar invalida anterior y cancelar preserva registro',async()=>{
+ const h=harness(),p=await invitacion(h),n=await h.call('gestionarVisitaMiComunidad',{accion:'emitirPase',id:p.id},'residente','residente');
+ await assert.rejects(h.call('gestionarVisitaMiComunidad',{accion:'revisarPase',id:p.id,token:p.token}),{code:'permission-denied'});
+ await h.call('gestionarVisitaMiComunidad',{accion:'revocarPase',id:p.id},'residente','residente');
+ assert.equal(h.rows.get(h.base+'/visitasProgramadas/inv').estado,'Cancelada');
+ await assert.rejects(h.call('gestionarVisitaMiComunidad',{accion:'revisarPase',id:p.id,token:n.token}),{code:'permission-denied'});
+});
+test('pase QR: solo residente del departamento puede emitir o revocar; no se acepta otra comunidad',async()=>{
+ const h=harness(),p=await invitacion(h);
+ for(const accion of ['emitirPase','revocarPase']){
+  await assert.rejects(h.call('gestionarVisitaMiComunidad',{accion,id:p.id}),{code:'permission-denied'});
+  h.rows.get(h.base+'/visitasProgramadas/inv').depto='999';
+  await assert.rejects(h.call('gestionarVisitaMiComunidad',{accion,id:p.id},'residente','residente'),{code:'permission-denied'});
+ }
+ await assert.rejects(h.api.gestionarVisitaMiComunidad(h.req('uno',{comunidadId:'otra',accion:'revisarPase',id:p.id,token:p.token})),{code:'permission-denied'});
+});
+test('pase QR: verifica horario en servidor y no se elude mediante ingreso por ID',async()=>{
+ const h=harness(),p=await invitacion(h),v=h.rows.get(h.base+'/visitasProgramadas/inv');
+ v.qrFin='2000-01-01T23:59';
+ await assert.rejects(h.call('gestionarVisitaMiComunidad',{accion:'revisarPase',id:p.id,token:p.token}),{code:'failed-precondition'});
+ await assert.rejects(h.call('gestionarVisitaMiComunidad',{accion:'ingresar',programadaId:p.id,identidadConfirmada:true}),{code:'permission-denied'});
+ v.qrInicio='2099-01-01T00:00';v.qrFin='2099-01-01T23:59';
+ await assert.rejects(h.call('gestionarVisitaMiComunidad',{accion:'ingresar',programadaId:p.id,token:p.token,identidadConfirmada:true}),{code:'failed-precondition'});
+ assert.equal([...h.rows.keys()].filter(k=>k.includes('/visitas/')).length,0);
+});
+test('pase QR: dos conserjes no duplican ingreso y se revalidan restricciones',async()=>{
+ const h=harness(),p=await invitacion(h),data={accion:'ingresar',programadaId:p.id,token:p.token,identidadConfirmada:true};
+ const result=await Promise.allSettled([h.call('gestionarVisitaMiComunidad',data),h.call('gestionarVisitaMiComunidad',data,'dos')]);
+ assert.equal(result.filter(r=>r.status==='fulfilled').length,1);
+ assert.equal([...h.rows.keys()].filter(k=>k.includes('/visitas/')).length,1);
+ const p2=await invitacion(h,'otra');
+ h.rows.get(h.base+'/residentes/residente').restringidos=[{nombre:'Visita de prueba'}];
+ const v=await h.call('gestionarVisitaMiComunidad',{...data,programadaId:p2.id,token:p2.token});assert.equal(v.denegado,true);
+});
+test('pase QR: autor desactivado impide ingreso; fechas y horas inválidas no emiten',async()=>{
+ const h=harness(),p=await invitacion(h);
+ h.rows.get(h.base+'/residentes/residente').estado='Inactivo';
+ await assert.rejects(h.call('gestionarVisitaMiComunidad',{accion:'ingresar',programadaId:p.id,token:p.token,identidadConfirmada:true}),{code:'failed-precondition'});
+ h.rows.get(h.base+'/residentes/residente').estado='Activo';
+ await assert.rejects(invitacion(h,'invalida',{fecha:'2099-02-30'}),{code:'invalid-argument'});
+ await assert.rejects(invitacion(h,'horainvalida',{hora:'25:00'}),{code:'invalid-argument'});
+ await assert.rejects(invitacion(h,'pasada',{fecha:'2000-01-01'}),{code:'invalid-argument'});
+});
+test('turno: resumen reúne operación y permanece inmutable tras cambios',async()=>{
+ const h=harness();
+ h.rows.set(h.base+'/visitas/v',{nombre:'Ana',depto:'101',estado:'Dentro',rut:'dato que no debe copiarse'});
+ h.rows.set(h.base+'/incidencias/i',{categoria:'Filtración',depto:'101',estado:'En proceso',responsable:'Mantención'});
+ h.rows.set(h.base+'/encomiendas/e',{codigo:'PAQ-1',depto:'101',estado:'Recibido'});
+ h.rows.set(h.base+'/planesMantencion/m',{titulo:'Portón',activo:true,proximaFecha:'2000-01-01'});
+ const t=await h.call('gestionarTurnoMiComunidad',{accion:'iniciar'});
+ await h.call('gestionarTurnoMiComunidad',{accion:'entregar',turnoId:t.id,resumen:'Revisar pendientes.'});
+ const snapshot=h.rows.get(h.base+'/turnos/'+t.id).operacionSnapshot;
+ for(const k of ['visitasDentro','solicitudes','encomiendas','mantenciones'])assert.equal(snapshot[k].items.length,1);
+ assert.equal(JSON.stringify(snapshot).includes('dato que no debe copiarse'),false);
+ h.rows.get(h.base+'/visitas/v').estado='Salió';assert.equal(snapshot.visitasDentro.items.length,1);
+ await h.call('gestionarTurnoMiComunidad',{accion:'recibir',turnoId:t.id},'dos');
+ assert.deepEqual(h.rows.get(h.base+'/turnos/'+t.id).operacionSnapshot,snapshot);
+});
+test('turno: selección de operación se limita y declara registros adicionales',async()=>{
+ const h=harness();for(let i=0;i<55;i++)h.rows.set(h.base+'/visitas/'+i,{estado:'Dentro',nombre:'Visita '+i,depto:'101'});
+ const t=await h.call('gestionarTurnoMiComunidad',{accion:'iniciar'});await h.call('gestionarTurnoMiComunidad',{accion:'entregar',turnoId:t.id,resumen:'Continuar.'});
+ const g=h.rows.get(h.base+'/turnos/'+t.id).operacionSnapshot.visitasDentro;assert.equal(g.items.length,50);assert.equal(g.limitado,true);
+});
 test('rechaza cuentas sin autorización y comunidades ajenas',async()=>{const h=harness();await assert.rejects(h.api.gestionarTurnoMiComunidad({data:{}}),{code:'permission-denied'});await assert.rejects(h.api.gestionarTurnoMiComunidad(h.req('uno',{comunidadId:'otra',accion:'iniciar'})),{code:'permission-denied'});await assert.rejects(h.call('gestionarTurnoMiComunidad',{accion:'iniciar'},'residente','residente'),{code:'permission-denied'});});
 test('la suspensión se comprueba también en Cloud Functions',async()=>{const h=harness();h.rows.get(h.base).estado='Suspendida';await assert.rejects(h.call('gestionarTurnoMiComunidad',{accion:'iniciar'}),{code:'failed-precondition'});});
 test('recibir paquete crea código, aviso y bitácora de forma conjunta',async()=>{const h=harness();const r=await h.call('registrarEncomiendaMiComunidad',{titulo:'Tienda',depto:'101',ubicacion:'B2'});const p=h.rows.get(h.base+'/encomiendas/'+r.id);assert.match(p.codigo,/^PAQ-\d{4}-000001$/);assert.match(p.qrToken,/^[a-f0-9]{32}$/);assert.equal(p.ubicacion,'B2');assert.equal(p.recibidoPorUid,'uno');assert.ok(Number(p.ts)>0);assert.equal([...h.rows.keys()].filter(p=>p.includes('/notificaciones/')).length,1);assert.equal([...h.rows.keys()].filter(p=>p.includes('/novedades/')).length,1);});
