@@ -21,7 +21,7 @@ test("el panel permite Checkout oficial y bloquea direcciones ajenas", async () 
     const context = {Date, Intl, URL, console: {error() {}}, window: {location: {assign: v => {assigned = v;}}}};
     vm.runInNewContext(fs.readFileSync(require.resolve("../../public/suscripcion.js"), "utf8"), context);
     await context.window.MiComunidadSuscripcion.mostrar(container, {
-      httpsCallable: name => async data => {if (name === "crearCheckoutMiComunidad") received = data; return ({data: name === "crearCheckoutMiComunidad" ?
+      httpsCallable: name => async data => {if (name === "crearCheckoutMiComunidad") received = data; return ({data: name === "cotizarPlanMiComunidad" ? {amount:800000,currency:"CLP",months:12} : name === "crearCheckoutMiComunidad" ?
         {checkoutUrl: url} : {estado: "trial", trialEndsAt: "2026-11-01T00:00:00Z"}});},
     }, "test-edificio");
     await click({preventDefault() {}});
@@ -35,7 +35,7 @@ test("sin licencia o suspendida no ofrece iniciar un cobro", () => {
   const context = {Date, Intl, window: {}};
   vm.runInNewContext(fs.readFileSync(require.resolve("../../public/suscripcion.js"), "utf8"), context);
   for (const estado of ["sin_licencia", "suspended"]) {
-    const html = context.window.MiComunidadSuscripcion.htmlLicencia({estado, acceso:false});
+    const html = context.window.MiComunidadSuscripcion.htmlLicencia({estado, acceso:false, cotizacion:{amount:800000,currency:"CLP",months:12}});
     assert.equal(html.includes('id="mc-pagar-licencia"'), false);
     assert.equal(html.includes("$800.000"), true);
     assert.equal(html.includes("Sin fecha"), false);
@@ -53,7 +53,7 @@ test("factura exige sus campos y boleta los omite al enviar", async () => {
   const container = {querySelector:id=>({"#mc-datos-tributarios":form,"#mc-pagar-licencia":button,"#mc-datos-factura":factura,"#mc-estado-pago":status,"#mc-actualizar-licencia":{addEventListener(){}}})[id]};
   await ctx.window.MiComunidadSuscripcion.mostrar(container,{httpsCallable:name=>async data=>{
     if(name==="crearCheckoutMiComunidad"){payload=data;throw {code:"functions/invalid-argument"};}
-    return {data:{estado:"trial"}};
+    return {data:name === "cotizarPlanMiComunidad" ? {amount:800000,currency:"CLP",months:12} : {estado:"trial"}};
   }},"test");
   change(); assert.equal(factura.hidden,false); assert.equal(fields.rut.required,true);
   await submit({preventDefault(){}}); assert.equal(payload,undefined);
@@ -63,4 +63,14 @@ test("factura exige sus campos y boleta los omite al enviar", async () => {
   fields.tipo.value="boleta"; change();
   assert.equal(factura.hidden,true);assert.equal(fields.rut.disabled,true);assert.equal(fields.rut.required,false);
   await submit({preventDefault(){}});assert.equal(payload.documentoTributario.rut,undefined);
+});
+
+test("precio visible viene de cotización servidor y sin ella no ofrece cobro",()=>{
+ const context={Date,Intl,window:{}};
+ vm.runInNewContext(fs.readFileSync(require.resolve("../../public/suscripcion.js"),"utf8"),context);
+ const html=context.window.MiComunidadSuscripcion.htmlLicencia;
+ assert.equal(html({estado:"trial"}).includes('id="mc-pagar-licencia"'),false);
+ const quote=html({estado:"trial",cotizacion:{amount:123456,currency:"CLP",months:12}});
+ assert.match(quote,/123[.]456/);assert.equal(quote.includes('id="mc-pagar-licencia"'),true);
+ assert.equal(html({estado:"trial",cotizacion:{amount:1,currency:"USD",months:12}}).includes('id="mc-pagar-licencia"'),false);
 });

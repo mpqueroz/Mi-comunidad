@@ -22,9 +22,12 @@ async function main() {
     'gestionarEncomiendaMiComunidad', 'verificarFichaMiComunidad',
     'consultarLicenciaMiComunidad', 'crearCheckoutMiComunidad',
   ];
+  // El grupo comercial se valida solo tras su publicación explícita separada.
+  if(process.argv.includes('--commercial'))functions.push('cotizarPlanMiComunidad',
+      'resolverRevisionPagoMiComunidad', 'reiniciarCheckoutFallidoMiComunidad');
   // Las funciones nuevas solo existen publicadas después del deploy.
-  if(process.argv.includes('--release'))functions.push('generarCobrosMiComunidad',
-      'directorioConserjeriaMiComunidad', 'cambiarEstadoAdminMiComunidad', 'crearAdministradorMiComunidad',
+  if(process.argv.includes('--release'))functions.push('registrarPagoOperativoMiComunidad', 'gestionarIntegrantesFichaMiComunidad', 'confirmarIngresoComunidad', 'conciliarMovimientoComunidad', 'desvincularConciliacionComunidad', 'generarCobrosMiComunidad',
+      'directorioConserjeriaMiComunidad', 'cambiarEstadoAdminMiComunidad', 'cambiarEstadoCuentaMiComunidad', 'crearAdministradorMiComunidad',
       'resumenComercialMiComunidad', 'historialPagosMiComunidad', 'rehabilitarLicenciaMiComunidad');
   for (const name of functions) {
     const response = await fetch(`https://us-central1-mercado-ciudadano.cloudfunctions.net/${name}`, {

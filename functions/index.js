@@ -23,6 +23,12 @@
 
 const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const {onSchedule} = require("firebase-functions/v2/scheduler");
+const {setGlobalOptions} = require("firebase-functions/v2");
+
+// Tope de costo: un abuso de llamadas no debe escalar sin límite la factura,
+// que además cubre las otras aplicaciones del proyecto. Debe ir antes de
+// declarar las funciones.
+setGlobalOptions({maxInstances: 10});
 const {initializeApp} = require("firebase-admin/app");
 const {getAuth} = require("firebase-admin/auth");
 const {getFirestore, FieldValue, Timestamp} = require("firebase-admin/firestore");
@@ -100,13 +106,36 @@ function rutToEmail(rut) {
 }
 
 // Mínimo 8 caracteres en todas las vías de alta o cambio de clave.
+const MAX_DIAS_RESERVA = 90;
+const MAX_RESERVAS_VIGENTES = 8;
+const MAX_VERIFICACIONES_MANUALES_DIA = 10;
 const MIN_CLAVE = 8;
+const CLAVES_COMUNES = new Set([
+  "password", "contrasena", "contraseña", "qwertyui", "qwerty123", "asdfghjk",
+  "mi-comunidad", "micomunidad", "comunidad", "administrador", "conserje1", "residente",
+]);
+
+// Un mismo carácter repetido, una secuencia (12345678, 87654321, abcdefgh) o
+// una clave de la lista. No reemplaza una clave larga: solo descarta lo peor.
+function claveEsTrivial(clave) {
+  const c = clave.toLowerCase();
+  if (CLAVES_COMUNES.has(c) || new Set(c).size <= 2) return true;
+  const paso = c.charCodeAt(1) - c.charCodeAt(0);
+  if (Math.abs(paso) !== 1) return false;
+  for (let i = 2; i < c.length; i++) {
+    if (c.charCodeAt(i) - c.charCodeAt(i - 1) !== paso) return false;
+  }
+  return true;
+}
 function exigirClaveValida(clave, mensaje = "La contraseña") {
   if (typeof clave !== "string" || clave.length < MIN_CLAVE || clave.length > 128) {
     throw new HttpsError(
         "invalid-argument",
         `${mensaje} debe tener entre ${MIN_CLAVE} y 128 caracteres.`,
     );
+  }
+  if (claveEsTrivial(clave)) {
+    throw new HttpsError("invalid-argument", `${mensaje} es demasiado fácil de adivinar.`);
   }
 }
 
@@ -362,6 +391,37 @@ exports.restablecerClaveMiComunidad = onCall(async (request) => {
   // Cierra las sesiones abiertas con la clave anterior.
   await getAuth().revokeRefreshTokens(uid);
 
+  // Queda rastro y se avisa al titular: quien fija una clave ajena podría
+  // entrar como esa persona. Si falla, la clave ya cambió: no se revierte.
+  try {
+    const comunidadObjetivoRef = getFirestore().collection(COMUNIDADES_COLLECTION).doc(claimsObjetivo.comunidadId);
+    const batch = getFirestore().batch();
+    batch.create(comunidadObjetivoRef.collection("auditoria").doc(), {
+      tipo: "Restablecimiento de contraseña",
+      cuentaUid: uid,
+      cuentaRol: claimsObjetivo.role,
+      depto: claimsObjetivo.depto || "",
+      actorUid: request.auth.uid,
+      actorNombre: await nombreActor(request, comunidadObjetivoRef),
+      actorRol: request.auth.token.role,
+      ts: FieldValue.serverTimestamp(),
+    });
+    if (claimsObjetivo.role === "residente" && claimsObjetivo.depto) {
+      batch.create(comunidadObjetivoRef.collection("notificaciones").doc(), {
+        icon: "key",
+        titulo: "Se restableció la contraseña de tu cuenta",
+        meta: "Si no lo pediste, avisa a administración.",
+        depto: claimsObjetivo.depto,
+        paraTodos: false,
+        leidaPor: [],
+        ts: Date.now(),
+      });
+    }
+    await batch.commit();
+  } catch (err) {
+    console.error("No se pudo registrar el restablecimiento:", err.code || err.message);
+  }
+
   return {ok: true};
 });
 
@@ -477,7 +537,6 @@ exports.crearComunidadMiComunidad = onCall(async (request) => {
       estado: "Activa",
       plan: plan,
       fechaContratacion: new Date().toISOString().slice(0, 10),
-      notasSoporte: "",
       numResidentes: 0,
       numConserjes: 0,
       adminNombre: adminNombre,
@@ -602,6 +661,12 @@ exports.crearReservaMiComunidad = onCall(async (request) => {
 
   await exigirCuentaActiva(request, comunidadId);
 
+  const fechaMaxima = new Date(Date.parse(`${hoyChile()}T00:00:00Z`) + MAX_DIAS_RESERVA * 86400000)
+      .toISOString().slice(0, 10);
+  if (fecha > fechaMaxima) {
+    throw new HttpsError("invalid-argument", `Solo puedes reservar hasta ${MAX_DIAS_RESERVA} días hacia adelante.`);
+  }
+
   // Cuenta como deuda: "Atrasado", o cualquier gasto no pagado ya vencido
   // (incluye "Por confirmar": informar un pago no desbloquea las reservas
   // hasta que administración lo confirme).
@@ -639,6 +704,19 @@ exports.crearReservaMiComunidad = onCall(async (request) => {
   }
 
   const reservasRef = comunidadRef.collection("reservas");
+
+  // Sin este tope, un solo departamento al día podía ocupar todo el calendario.
+  const reservasDepto = await reservasRef.where("depto", "==", depto).get();
+  const vigentes = reservasDepto.docs.filter((d) => {
+    const r = d.data();
+    return String(r.fecha || "") >= hoy && !/cancel/i.test(String(r.estado || ""));
+  }).length;
+  if (vigentes >= MAX_RESERVAS_VIGENTES) {
+    throw new HttpsError(
+        "failed-precondition",
+        `Tu departamento ya tiene ${MAX_RESERVAS_VIGENTES} reservas vigentes.`,
+    );
+  }
 
   // El id del marcador es determinístico (fecha + bloque) a propósito: así
   // "¿está ocupado?" es un get() de un solo documento por su id dentro de
@@ -852,11 +930,16 @@ exports.definirPreguntaSecretaMiComunidad = onCall(async (request) => {
 // Datos de la ficha que conserjería solo recibe tras verificar la
 // identidad (RUT, familiares con su RUT, personas sin acceso con su motivo
 // y datos de propiedad). El resto viaja en directorioConserjeriaMiComunidad.
-function fichaProtegida(residente) {
+// Conserjería necesita saber quién no puede entrar, no por qué: el motivo
+// puede ser delicado ("orden de alejamiento") y queda solo para el residente
+// y administración.
+function fichaProtegida(residente, rol) {
+  const restringidos = (Array.isArray(residente.restringidos) ? residente.restringidos : []).filter(Boolean);
   return {
     rut: residente.rut || "",
-    familiares: Array.isArray(residente.familiares) ? residente.familiares : [],
-    restringidos: Array.isArray(residente.restringidos) ? residente.restringidos : [],
+    familiares: (Array.isArray(residente.familiares) ? residente.familiares : []).filter(Boolean),
+    restringidos: rol === "conserje" ?
+      restringidos.map(({motivo, ...persona}) => persona) : restringidos,
     nombreDueno: residente.nombreDueno || "",
     nombreArrendatario: residente.nombreArrendatario || "",
   };
@@ -923,7 +1006,7 @@ exports.verificarPreguntaSecretaMiComunidad = onCall(async (request) => {
 
     if (esCorrecta) {
       t.update(snap.ref, {intentosFallidos: 0, bloqueadoHasta: 0});
-      return {ok: true, ficha: residenteSnap.exists ? fichaProtegida(residenteSnap.data()) : null};
+      return {ok: true, ficha: residenteSnap.exists ? fichaProtegida(residenteSnap.data(), token.role) : null};
     }
 
     const ventanaVigente = (secreto.ventanaInicio || 0) + DIA_MS > ahora;
@@ -1050,6 +1133,23 @@ exports.verificarFichaMiComunidad = onCall(async (request) => {
     throw new HttpsError("failed-precondition", "Esta ficha tiene pregunta de seguridad: verifica con la respuesta.");
   }
 
+  // La auditoría avisa después de la consulta; este tope evita que además se
+  // pueda recorrer el directorio completo en un turno.
+  if (token.role === "conserje") {
+    const cuotaRef = comunidadRef.collection("verificaciones").doc(`manual_${request.auth.uid}_${hoyChile()}`);
+    await db.runTransaction(async (tx) => {
+      const cuota = await tx.get(cuotaRef);
+      const usadas = cuota.exists ? Number(cuota.get("usadas") || 0) : 0;
+      if (usadas >= MAX_VERIFICACIONES_MANUALES_DIA) {
+        throw new HttpsError(
+            "resource-exhausted",
+            "Alcanzaste el máximo de verificaciones manuales del día. Pide apoyo a administración.",
+        );
+      }
+      tx.set(cuotaRef, {usadas: usadas + 1, ts: Date.now()}, {merge: true});
+    });
+  }
+
   const actor = await nombreActor(request, comunidadRef);
   const depto = String(residenteSnap.get("depto") || "");
   const batch = db.batch();
@@ -1074,7 +1174,61 @@ exports.verificarFichaMiComunidad = onCall(async (request) => {
   });
   await batch.commit();
 
-  return {ok: true, ficha: fichaProtegida(residenteSnap.data())};
+  return {ok: true, ficha: fichaProtegida(residenteSnap.data(), token.role)};
+});
+
+/**
+ * cambiarEstadoCuentaMiComunidad (administración de la comunidad):
+ *   Da de baja o reactiva a un residente o conserje. Marca la ficha, que es lo
+ *   que revisan reglas y funciones, deshabilita Auth y cierra sus sesiones.
+ *   Los registros se conservan: esto corta el acceso, no suprime datos.
+ */
+exports.cambiarEstadoCuentaMiComunidad = onCall(async (request) => {
+  const data = request.data || {};
+  const comunidadId = String(data.comunidadId || "").trim();
+  const uid = String(data.uid || "").trim();
+  const estado = data.estado;
+  await exigirRol(request, comunidadId, ["admin"]);
+  if (!comunidadId || !uid || uid.includes("/") || !["Activo", "Inactivo"].includes(estado)) {
+    throw new HttpsError("invalid-argument", "Datos inválidos.");
+  }
+
+  let cuenta;
+  try {
+    cuenta = await getAuth().getUser(uid);
+  } catch (err) {
+    throw new HttpsError("not-found", "No se encontró esa cuenta.");
+  }
+  const claims = cuenta.customClaims || {};
+  if (claims.app !== APP_ID || claims.comunidadId !== comunidadId ||
+      !["residente", "conserje"].includes(claims.role)) {
+    throw new HttpsError("permission-denied", "No puedes gestionar esa cuenta.");
+  }
+
+  const comunidadRef = getFirestore().collection(COMUNIDADES_COLLECTION).doc(comunidadId);
+  const fichaRef = comunidadRef.collection(claims.role === "conserje" ? "conserjes" : "residentes").doc(uid);
+  const fichaSnap = await fichaRef.get();
+  if (!fichaSnap.exists) {
+    throw new HttpsError("not-found", "No se encontró la ficha.");
+  }
+  const estadoFicha = estado === "Inactivo" ? "Inactivo" : claims.role === "conserje" ? "Fuera de turno" : "Activo";
+
+  // El orden corta primero el acceso: si algo falla después, reintentar es seguro.
+  await fichaRef.update({estado: estadoFicha});
+  await getAuth().updateUser(uid, {disabled: estado === "Inactivo"});
+  if (estado === "Inactivo") await getAuth().revokeRefreshTokens(uid);
+
+  await comunidadRef.collection("auditoria").add({
+    tipo: estado === "Inactivo" ? "Baja de cuenta" : "Reactivación de cuenta",
+    cuentaUid: uid,
+    cuentaRol: claims.role,
+    depto: claims.depto || "",
+    actorUid: request.auth.uid,
+    actorNombre: await nombreActor(request, comunidadRef),
+    actorRol: request.auth.token.role,
+    ts: FieldValue.serverTimestamp(),
+  });
+  return {ok: true, estado};
 });
 
 /**
@@ -1218,43 +1372,9 @@ function hoyChile() {
   return new Intl.DateTimeFormat("en-CA", {timeZone: "America/Santiago"}).format(new Date());
 }
 
-async function marcarVencidos(query, campoFecha, hoy, nuevoEstado) {
-  const snap = await query.get();
-  const vencidos = snap.docs.filter((d) => String(d.get(campoFecha) || "") < hoy);
-  for (let i = 0; i < vencidos.length; i += 400) {
-    const batch = getFirestore().batch();
-    vencidos.slice(i, i + 400).forEach((d) => batch.update(d.ref, {estado: nuevoEstado}));
-    await batch.commit();
-  }
-  return vencidos.length;
-}
-
 exports.actualizarVencimientosMiComunidad = onSchedule(
-    {schedule: "15 0 * * *", timeZone: "America/Santiago"},
-    async () => {
-      const db = getFirestore();
-      const hoy = hoyChile();
-      const comunidades = await db.collection(COMUNIDADES_COLLECTION).get();
-
-      let gastos = 0;
-      let mantenciones = 0;
-
-      for (const c of comunidades.docs) {
-        if (c.get("estado") === "Suspendida") {
-          continue;
-        }
-        const licencia = await db.collection(LICENCIAS_COLLECTION).doc(c.id).get();
-        if (licencia.exists && !require("./licencias").evaluateLicense(licencia.data()).allowed) continue;
-        gastos += await marcarVencidos(
-            c.ref.collection("gastosComunes").where("estado", "==", "Pendiente"),
-            "vencimiento", hoy, "Atrasado");
-        mantenciones += await marcarVencidos(
-            c.ref.collection("mantenciones").where("estado", "==", "Programada"),
-            "fecha", hoy, "Atrasada");
-      }
-
-      console.log(`Vencimientos ${hoy}: ${gastos} gastos atrasados, ${mantenciones} mantenciones atrasadas`);
-    });
+    {schedule: "15 0 * * *", timeZone: "America/Santiago", timeoutSeconds: 540},
+    async () => require("./vencimientos").actualizarVencimientos(getFirestore(), hoyChile()));
 
 
 /* =====================================================================
@@ -1278,7 +1398,6 @@ exports.depurarRegistrosMiComunidad = onSchedule(
 Object.assign(exports, require("./mercadopago").registerMercadoPago());
 Object.assign(exports, require("./comercial"));
 Object.assign(exports, require("./rehabilitacion"));
-Object.assign(exports, require("./webhook-test"));
 
 // Operación profesional añadida; se conservan las funciones existentes de identidad.
 const profesional = require('./profesional')({firestore: Object.assign(() => getFirestore(), {FieldValue, Timestamp})}, onCall, HttpsError);
@@ -1287,3 +1406,7 @@ const profesional = require('./profesional')({firestore: Object.assign(() => get
 Object.keys(profesional).forEach((nombre) => {
   if (!exports[nombre]) exports[nombre] = profesional[nombre];
 });
+
+Object.assign(exports, require("./integridad")({
+  firestore: Object.assign(() => getFirestore(), {FieldValue, Timestamp}),
+}, onCall, HttpsError));

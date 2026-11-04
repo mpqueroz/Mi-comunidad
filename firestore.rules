@@ -392,6 +392,12 @@ service cloud.firestore {
       // cliente - solo Firebase Console o Admin SDK.
       allow delete: if false;
 
+      // Notas internas de Nodar Logic. Van en un documento aparte porque el de
+      // la comunidad lo lee cualquier cuenta del edificio.
+      match /soporte/{docId} {
+        allow read, write: if mcEsSuperAdmin();
+      }
+
       // Excepción puntual: CUALQUIER rol de una comunidad activa (no solo
       // admin) puede actualizar el campo ultimoAcceso - es el "ping" que
       // alimenta la columna Actividad del panel de superadmin. Se acota
@@ -443,21 +449,11 @@ service cloud.firestore {
         // modificar fichas, solo consultarlas.
         // La respuesta secreta ya no vive en la ficha (ver /secretos): ningún
         // cliente puede crear ni cambiar el campo respuestaSecreta.
-        allow update: if mcEsDeEstaComunidadActiva(comunidadId) &&
-                         request.resource.data.get('respuestaSecreta', null) == resource.data.get('respuestaSecreta', null) &&
-                         (mcEsAdmin() ||
-                          // Lista BLANCA, no negra: el residente solo puede tocar
-                          // familiares y restringidos (lo único que la app le deja
-                          // editar). Antes se enumeraban los campos prohibidos, y
-                          // cualquier campo no listado - o uno nuevo inventado -
-                          // quedaba abierto. Las listas tienen un tope para que no
-                          // se pueda inflar el documento hasta el límite de 1 MB.
-                          (mcEsResidente() && request.auth.uid == uid &&
-                           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['familiares', 'restringidos']) &&
-                           request.resource.data.get('familiares', []) is list &&
-                           request.resource.data.get('familiares', []).size() <= 50 &&
-                           request.resource.data.get('restringidos', []) is list &&
-                           request.resource.data.get('restringidos', []).size() <= 50));
+        // Solo gestionarIntegrantesFichaMiComunidad modifica listas: valida
+        // cada persona y lee la versión actual dentro de una transacción.
+        allow update: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin() &&
+                         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['familiares','restringidos']) &&
+                         request.resource.data.get('respuestaSecreta', null) == resource.data.get('respuestaSecreta', null);
       }
 
       // ---- Respuestas secretas (hash scrypt, doc id = uid del residente) ----
@@ -643,7 +639,8 @@ service cloud.firestore {
         // Bloquear altas directas evita duplicados desde clientes antiguos.
         allow create: if false;
         allow update: if mcEsDeEstaComunidadActiva(comunidadId) &&
-                         ((mcEsAdmin() &&
+                         ((mcEsAdmin() && resource.data.estado != 'Pagado' && request.resource.data.estado != 'Pagado' &&
+                           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['movimientoId','confirmadoPor','confirmadoEn','fechaPago','metodoPago']) &&
                            request.resource.data.depto == resource.data.depto &&
                            request.resource.data.get('periodo', null) == resource.data.get('periodo', null)) ||
                           // El residente ya NO puede marcar su gasto como pagado: solo
@@ -672,9 +669,12 @@ service cloud.firestore {
       match /multas/{id} {
         allow read: if mcEsDeEstaComunidadActiva(comunidadId) &&
                        (mcEsAdmin() || mcEsConserje() || (mcEsResidente() && resource.data.depto == mcMiDepto()));
-        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin() &&
+                         request.resource.data.estado == 'Pendiente' &&
+                         !request.resource.data.keys().hasAny(['movimientoId','confirmadoPor','confirmadoEn','fechaPago','metodoPago']);
         allow update: if mcEsDeEstaComunidadActiva(comunidadId) &&
-                         (mcEsAdmin() ||
+                         ((mcEsAdmin() && resource.data.estado != 'Pagada' && request.resource.data.estado != 'Pagada' &&
+                           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['movimientoId','confirmadoPor','confirmadoEn','fechaPago','metodoPago'])) ||
                           (mcEsResidente() &&
                            resource.data.depto == mcMiDepto() &&
                            resource.data.estado == "Pendiente" &&
@@ -760,9 +760,17 @@ service cloud.firestore {
       // atribuido a su propio departamento.
       match /movimientosContables/{id} {
         allow read: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
-        // Solo administración: los ingresos por gasto común o multa se
-        // registran al CONFIRMAR el pago, ya no cuando el residente lo informa.
-        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        // Operaciones vinculadas a entidad solo vía servidor. El libro manual
+        // y otros asientos de conciliación mantienen su flujo legítimo.
+        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin() &&
+          !id.matches('(egreso_(remuneracion|mantencion)|ingreso_(gasto|multa)|conciliacion_nuevo|diferencia_conciliacion)_.*') &&
+          request.resource.data.tipo in ['Ingreso','Egreso'] &&
+          request.resource.data.monto is int && request.resource.data.monto > 0 &&
+          request.resource.data.fecha is string &&
+          (request.resource.data.origen in ['Manual','Conciliación'] ||
+           (request.resource.data.origen == 'Automático' &&
+            !(request.resource.data.categoria in ['Remuneraciones','Proveedores','Gasto común','Multa']))) &&
+          !request.resource.data.keys().hasAny(['entidadId','entidadTipo','bancoMovimientoId','bancoOrigenId']);
         allow update, delete: if false;
       }
 
@@ -774,10 +782,13 @@ service cloud.firestore {
       match /movimientosBancarios/{id} {
         allow read: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
         allow create: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin() &&
+                         request.resource.data.keys().hasOnly(['fecha','descripcion','monto','saldo','periodo','orden','estado','importacionId','ts']) &&
                          request.resource.data.estado == "Pendiente" &&
                          request.resource.data.monto is int &&
                          request.resource.data.fecha is string;
         allow update: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin() &&
+                         resource.data.estado == 'Pendiente' && request.resource.data.estado == 'Pendiente' &&
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['saldo','periodo','orden','importacionId','ts']) &&
                          request.resource.data.fecha == resource.data.fecha &&
                          request.resource.data.monto == resource.data.monto &&
                          request.resource.data.descripcion == resource.data.descripcion;
@@ -801,14 +812,26 @@ service cloud.firestore {
 
       // Saldos a favor que nacen de un pago mayor que la deuda.
       match /saldosAFavor/{id} {
-        allow read, create, update: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        // El saldo nace junto al banco y al asiento, nunca desde una escritura
+        // aislada del navegador. Se conserva el registro al aplicarlo.
+        allow create: if false;
+        allow update: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado','consumidoEn','consumidoPor']) &&
+          request.resource.data.estado in ['Disponible','Aplicado'];
         allow delete: if false;
       }
 
       // Remuneraciones del personal (sueldos de conserjes) - dato de
       // administración interna, solo administración lo ve y gestiona.
       match /remuneraciones/{id} {
-        allow read, create, update: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin() &&
+          request.resource.data.estado == 'Pendiente' && request.resource.data.get('fechaPago',null) == null &&
+          !request.resource.data.keys().hasAny(['movimientoId','registradoPor']);
+        allow update: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin() &&
+          resource.data.estado == 'Pendiente' && request.resource.data.estado == 'Pendiente' &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['movimientoId','registradoPor','fechaPago']);
         allow delete: if false;
       }
 
@@ -820,7 +843,13 @@ service cloud.firestore {
 
       // Mantenciones programadas a proveedores - las gestiona administración.
       match /mantenciones/{id} {
-        allow read, create, update: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin() &&
+          request.resource.data.estado == 'Programada' && request.resource.data.get('fechaRealizada',null) == null &&
+          !request.resource.data.keys().hasAny(['movimientoId','registradoPor']);
+        allow update: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin() &&
+          resource.data.estado in ['Programada','Atrasada'] && request.resource.data.estado in ['Programada','Atrasada'] &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['movimientoId','registradoPor','fechaRealizada']);
         allow delete: if false;
       }
 

@@ -90,7 +90,7 @@ integridad SRI: si la CDN entregara otro archivo, el navegador no lo ejecuta.
 - La licencia de cada comunidad (`mi_comunidad_licencias`) solo la escribe el servidor: alta con 7 días de prueba al crear la comunidad, y vigencia de 12 meses cuando el webhook de Mercado Pago (firmado) confirma un pago aprobado. El navegador nunca escribe licencias.
 - Las reglas de Firestore cortan todo el contenido operativo cuando la prueba o la vigencia pagada terminan. Las comunidades sin documento de licencia (anteriores al sistema) siguen operando.
 - Con la licencia vencida, administración entra solo a "Mi suscripción" para renovar; conserjería y residentes no entran hasta que se renueve.
-- Las funciones de cobro (`crearCheckoutMiComunidad`, `webhookMercadoPagoMiComunidad`, `consultarLicenciaMiComunidad`) usan secretos de producción conectados a mano y **no** se publican desde GitHub Actions: un despliegue normal las volvería a enlazar a los secretos de prueba. Para actualizarlas se usa `bash scripts/habilitar-produccion.sh` en Cloud Shell, que reutiliza los secretos existentes sin pedirlos de nuevo.
+- Las funciones comerciales se publican solo mediante `scripts/habilitar-produccion.sh`: copia privada con seis declaraciones `*_PRODUCTION` antes del análisis, selección explícita de checkout, webhook, consulta, cotización, resolución, reinicio verificado de checkout y conciliación. El verificador posterior solo lee bindings y scheduler. No se parchean secretos después de publicar. CI no publica este grupo. Preflight exige TTL ACTIVE de recibos webhook. Ver `docs/pagos-produccion.md`.
 
 ## Las otras aplicaciones del proyecto compartido
 

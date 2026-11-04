@@ -12,12 +12,26 @@ exports.resumenComercialMiComunidad = onCall(async (request) => {
     throw new HttpsError("permission-denied", "Acceso reservado al superadministrador.");
   }
   const db = getFirestore();
-  const [communities, licenses, reviews] = await Promise.all([
+  const [communities, licenses, reviews, additional, failed] = await Promise.all([
     db.collection("mi_comunidad_comunidades").limit(200).get(),
     db.collection("mi_comunidad_licencias").limit(200).get(),
     db.collection("mi_comunidad_ordenes_pago").where("status", "==", "payment_review").limit(100).get(),
+    db.collection("mi_comunidad_ordenes_pago").where("additionalPaymentReview", "==", true).limit(100).get(),
+    db.collection("mi_comunidad_ordenes_pago").where("status", "in", ["pending", "checkout_error"]).limit(100).get(),
   ]);
   const licenseMap = new Map(licenses.docs.map((d) => [d.id, d.data()]));
+  const additionalReviews = [];
+  let incidentsLimited = false;
+  for (const orderDoc of additional.docs) {
+    const order = orderDoc.data();
+    const incidents = await orderDoc.ref.collection("incidencias").where("estado", "==", "pendiente").limit(101).get();
+    if (incidents.docs.length > 100) incidentsLimited = true;
+    for (const incident of incidents.docs.slice(0, 100)) {
+      if (incident.get("estado") === "resuelta") continue;
+      additionalReviews.push({id:orderDoc.id,comunidadId:String(order.comunidadId || ""),
+        paymentId:incident.id,amount:Number(order.amount) || 0,paymentStatus:"cobro_adicional",additional:true});
+    }
+  }
   return {
     comunidades: communities.docs.map((doc) => {
       const c = doc.data(), l = licenseMap.get(doc.id);
@@ -30,9 +44,9 @@ exports.resumenComercialMiComunidad = onCall(async (request) => {
     revisiones: reviews.docs.map((doc) => {
       const o = doc.data();
       return {id: doc.id, comunidadId: String(o.comunidadId || ""),
-        amount: Number(o.amount) || 0, paymentStatus: String(o.paymentStatus || "")};
-    }),
-    limitado: communities.size === 200 || licenses.size === 200 || reviews.size === 100,
+        paymentId: String(o.paymentId || ""), amount: Number(o.amount) || 0, paymentStatus: String(o.paymentStatus || "")};
+    }).concat(additionalReviews, failed.docs.map(doc => { const o=doc.data(); return {id:doc.id,comunidadId:String(o.comunidadId || ""),amount:Number(o.amount)||0,paymentStatus:String(o.status)+" / "+String(o.creationOutcome || "sin_antecedentes"),restart:true}; })),
+    limitado: incidentsLimited || failed.size === 100 || additional.size === 100 || communities.size === 200 || licenses.size === 200 || reviews.size === 100,
   };
 });
 
@@ -61,6 +75,7 @@ exports.historialPagosMiComunidad = onCall(async (request) => {
       meses: Number(p.months) || 0,
       creado: dateString(p.createdAt), pagado: dateString(p.paidAt),
       paymentStatus: String(p.paymentStatus || ""),
+      additionalPaymentReview: p.additionalPaymentReview === true,
       documentoTributario: p.documentoTributario || null};
   }).sort((a, b) => String(b.creado || "").localeCompare(String(a.creado || "")));
   return {comunidadId, pagos, limitado: snapshot.size === 100};
