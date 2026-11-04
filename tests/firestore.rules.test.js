@@ -317,3 +317,14 @@ test('regresión compartida: anuncios públicos y almacén propio mantienen acce
  await assertFails(adminDb().doc('stores/dueno/products/p1').get());
  await assertFails(owner.doc(`${BASE}/encomiendas/e1`).get());
 });
+
+test("las notas de soporte quedan fuera del alcance del edificio", async () => {
+  const notas = (db) => db.doc(`${BASE}/soporte/notas`);
+  const superadmin = env.authenticatedContext("sup1", {app: "mi_comunidad", role: "superadmin"}).firestore();
+  await assertSucceeds(notas(superadmin).set({notas: "Interna"}));
+  await assertSucceeds(notas(superadmin).get());
+  await assertFails(notas(residente()).get());
+  await assertFails(notas(conserje()).get());
+  await assertFails(notas(adminDb()).get());
+  await assertFails(notas(adminDb()).set({notas: "Otra"}));
+});

@@ -93,6 +93,11 @@ jobs:
         run: |
           npm ci
           npm audit --audit-level=moderate
+      # Antes de autenticar y sin scripts de instalación: ningún paquete corre
+      # con la credencial de despliegue disponible.
+      - name: Instalar dependencias de functions
+        working-directory: functions
+        run: npm ci --ignore-scripts
       - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
@@ -100,9 +105,6 @@ jobs:
       # saber con qué cuenta se autentica el deploy si falla un permiso.
       - name: Cuenta de servicio en uso
         run: 'echo "Deploy como: $(jq -r .client_email "$GOOGLE_APPLICATION_CREDENTIALS")"'
-      - name: Instalar dependencias de functions
-        working-directory: functions
-        run: npm ci
       - name: Conservar reglas vigentes de las otras aplicaciones
         run: node scripts/preparar-reglas-compartidas.cjs
       - name: Probar reglas combinadas antes de publicar
@@ -120,7 +122,7 @@ jobs:
       - name: Desplegar funciones de Mi Comunidad
         run: >
           ./tests/node_modules/.bin/firebase deploy --non-interactive
-          --only "functions:generarCobrosMiComunidad,functions:crearCuentaMiComunidad,functions:restablecerClaveMiComunidad,functions:crearComunidadMiComunidad,functions:crearReservaMiComunidad,functions:directorioConserjeriaMiComunidad,functions:cambiarEstadoAdminMiComunidad,functions:crearAdministradorMiComunidad,functions:definirPreguntaSecretaMiComunidad,functions:verificarPreguntaSecretaMiComunidad,functions:migrarRespuestasSecretasMiComunidad,functions:actualizarVencimientosMiComunidad,functions:depurarRegistrosMiComunidad,functions:resumenComercialMiComunidad,functions:historialPagosMiComunidad,functions:rehabilitarLicenciaMiComunidad,functions:configurarPagosMiComunidad,functions:guardarPlanMantencionMiComunidad,functions:registrarRevisionMantencionMiComunidad,functions:gestionarAvisoMiComunidad,functions:confirmarAvisoMiComunidad,functions:gestionarVisitaMiComunidad,functions:cancelarReservaMiComunidad,functions:registrarEncomiendaMiComunidad,functions:gestionarTurnoMiComunidad,functions:gestionarEncomiendaMiComunidad,functions:verificarFichaMiComunidad"
+          --only "functions:generarCobrosMiComunidad,functions:crearCuentaMiComunidad,functions:cambiarEstadoCuentaMiComunidad,functions:restablecerClaveMiComunidad,functions:crearComunidadMiComunidad,functions:crearReservaMiComunidad,functions:directorioConserjeriaMiComunidad,functions:cambiarEstadoAdminMiComunidad,functions:crearAdministradorMiComunidad,functions:definirPreguntaSecretaMiComunidad,functions:verificarPreguntaSecretaMiComunidad,functions:migrarRespuestasSecretasMiComunidad,functions:actualizarVencimientosMiComunidad,functions:depurarRegistrosMiComunidad,functions:resumenComercialMiComunidad,functions:historialPagosMiComunidad,functions:rehabilitarLicenciaMiComunidad,functions:configurarPagosMiComunidad,functions:guardarPlanMantencionMiComunidad,functions:registrarRevisionMantencionMiComunidad,functions:gestionarAvisoMiComunidad,functions:confirmarAvisoMiComunidad,functions:gestionarVisitaMiComunidad,functions:cancelarReservaMiComunidad,functions:registrarEncomiendaMiComunidad,functions:gestionarTurnoMiComunidad,functions:gestionarEncomiendaMiComunidad,functions:verificarFichaMiComunidad"
       - name: Publicar reglas compartidas
         run: ./tests/node_modules/.bin/firebase deploy --non-interactive --only firestore:rules
       - name: Verificar reglas publicadas

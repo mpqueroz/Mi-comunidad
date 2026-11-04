@@ -9,7 +9,7 @@ const {applyVerifiedRenewal} = require("../licencias");
 function harness() {
   const orderId = "order000000000000001";
   const docs = new Map([
-    ["mi_comunidad_comunidades/test-edificio", {estado: "Activa"}],
+    ["mi_comunidad_comunidades/test-edificio", {estado: "Activa", mpTestFixture: true}],
     ["mi_comunidad_licencias/test-edificio", {estado: "trial", paidUntil: null}],
   ]);
   const secrets = {MC_MP_ACCESS_TOKEN: "ficticio", MC_MP_WEBHOOK_SECRET: "firma-ficticia",
@@ -182,6 +182,7 @@ test("un vendedor ajeno no genera una orden habilitada", async()=>{
 test("producción cobra 800000 CLP y aplica exactamente 12 meses", async()=>{
   const h=harness();
   h.secrets.MC_MP_ENVIRONMENT="production";
+  delete h.docs.get("mi_comunidad_comunidades/test-edificio").mpTestFixture;
   h.secrets.MC_PLAN_ANUAL_CLP="800000";
   h.state.payment.transaction_amount=800000;
   h.state.payment.live_mode=true;
@@ -206,6 +207,14 @@ test("producción bloquea fixture antes de crear orden o preferencia", async()=>
 });
 
 
+
+test("configuración de prueba no cobra a una comunidad real", async()=>{
+  const h=harness();
+  delete h.docs.get("mi_comunidad_comunidades/test-edificio").mpTestFixture;
+  await assert.rejects(h.create(), /failed-precondition/);
+  assert.equal(h.order(),undefined);
+  assert.equal(h.state.calls.length,0);
+});
 
 test("suspensión administrativa impide iniciar cobro", async () => {
   const h = harness(); h.docs.get("mi_comunidad_comunidades/test-edificio").estado = "Suspendida";

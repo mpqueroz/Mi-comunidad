@@ -132,3 +132,51 @@ test('crear cuenta exige clave de 8+, estado válido y administración habilitad
   await h.base.collection('administradores').doc('adm').set({estado: 'Inactivo'});
   await assert.rejects(h.call('crearCuentaMiComunidad', datos, 'adm', 'admin'), {code: 'permission-denied'});
 });
+
+test('conserjería no recibe el motivo de una restricción y tiene un tope diario', {skip: !enabled}, async () => {
+  const h = await fixture();
+  const motivo = 'Consulta por citofonía con el residente';
+  const {ficha} = await h.call('verificarFichaMiComunidad', {uid: 'r1', motivo});
+  assert.deepEqual(ficha.restringidos, [{nombre: 'Pedro', rut: '333333333'}]);
+  const admin = await h.call('verificarFichaMiComunidad', {uid: 'r1', motivo}, 'adm', 'admin');
+  assert.ok(admin.ficha.restringidos[0].motivo);
+  for (let i = 0; i < 9; i++) await h.call('verificarFichaMiComunidad', {uid: 'r1', motivo});
+  await assert.rejects(h.call('verificarFichaMiComunidad', {uid: 'r1', motivo}), {code: 'resource-exhausted'});
+});
+
+test('restablecer una clave deja auditoría y avisa al residente, y rechaza claves triviales', {skip: !enabled}, async () => {
+  const h = await fixture();
+  const uid = 'res-' + h.id;
+  await auth.createUser({uid, password: 'ClaveInicial-1'});
+  await auth.setCustomUserClaims(uid, {app: 'mi_comunidad', role: 'residente', comunidadId: h.id, depto: '101'});
+  await assert.rejects(h.call('restablecerClaveMiComunidad', {uid, nuevaClave: '12345678'}, 'adm', 'admin'), {code: 'invalid-argument'});
+  await h.call('restablecerClaveMiComunidad', {uid, nuevaClave: 'Nueva-clave-9'}, 'adm', 'admin');
+  const auditoria = await h.base.collection('auditoria').where('tipo', '==', 'Restablecimiento de contraseña').get();
+  assert.equal(auditoria.size, 1);
+  const avisos = await h.base.collection('notificaciones').where('depto', '==', '101').get();
+  assert.equal(avisos.size, 1);
+});
+
+test('administración da de baja y reactiva solo cuentas de su comunidad', {skip: !enabled}, async () => {
+  const h = await fixture();
+  const uid = 'con-' + h.id;
+  await auth.createUser({uid, password: 'ClaveInicial-1'});
+  await auth.setCustomUserClaims(uid, {app: 'mi_comunidad', role: 'conserje', comunidadId: h.id});
+  await h.base.collection('conserjes').doc(uid).set({nombre: 'Baja', estado: 'En turno'});
+  await assert.rejects(h.call('cambiarEstadoCuentaMiComunidad', {uid, estado: 'Inactivo'}), {code: 'permission-denied'});
+  await h.call('cambiarEstadoCuentaMiComunidad', {uid, estado: 'Inactivo'}, 'adm', 'admin');
+  assert.equal((await auth.getUser(uid)).disabled, true);
+  assert.equal((await h.base.collection('conserjes').doc(uid).get()).get('estado'), 'Inactivo');
+  await h.call('cambiarEstadoCuentaMiComunidad', {uid, estado: 'Activo'}, 'adm', 'admin');
+  assert.equal((await auth.getUser(uid)).disabled, false);
+  const otra = await fixture();
+  await assert.rejects(otra.call('cambiarEstadoCuentaMiComunidad', {uid, estado: 'Inactivo'}, 'adm', 'admin'), {code: 'permission-denied'});
+});
+
+test('la ficha tolera elementos nulos en sus listas', {skip: !enabled}, async () => {
+  const h = await fixture();
+  await h.base.collection('residentes').doc('r2').update({restringidos: [null], familiares: [null]});
+  const {ficha} = await h.call('verificarFichaMiComunidad', {uid: 'r2', motivo: 'Consulta por citofonía con el residente'});
+  assert.deepEqual(ficha.restringidos, []);
+  assert.deepEqual(ficha.familiares, []);
+});

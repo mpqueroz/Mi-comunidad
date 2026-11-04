@@ -5,7 +5,7 @@ module.exports = function profesional(admin, onCall, HttpsError) {
   const db = admin.firestore();
   const stamp = () => admin.firestore.FieldValue.serverTimestamp();
   const text = (v, max = 2000) => String(v || '').trim().slice(0, max);
-  const normalize = v => text(v, 200).toLocaleLowerCase('es-CL');
+  const normalize = v => text(v, 200).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es-CL');
   async function scope(req, roles) {
     const token = req.auth?.token;
     if(!token || token.app !== 'mi_comunidad' || !roles.includes(token.role))throw new HttpsError('permission-denied', 'Tu cuenta no puede realizar esta operación.');
@@ -155,7 +155,7 @@ module.exports = function profesional(admin, onCall, HttpsError) {
       if(datos.rut&&!rutValido(rut))throw new HttpsError('invalid-argument','El RUT no es válido.');
       const residentes=await tx.get(s.base.collection('residentes').where('depto','==',depto));
       if(residentes.empty)throw new HttpsError('not-found','No existe un departamento registrado con ese número.');
-      const restriccion=residentes.docs.some(r=>(r.data().restringidos||[]).some(p=>{
+      const restriccion=residentes.docs.some(r=>(r.data().restringidos||[]).filter(Boolean).some(p=>{
         const prut=String(p.rut||'').replace(/[^0-9kK]/g,'').toUpperCase();
         return rut&&prut?rut===prut:normalize(p.nombre)===normalize(nombre);
       }));

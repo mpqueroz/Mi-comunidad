@@ -253,6 +253,11 @@ function registerMercadoPago() {
         comunidadId === "nodar-pagos-prueba-20261025" || request.auth.uid === "nodar-mp-prueba-20261025")) {
       throw new HttpsError("failed-precondition", "La comunidad de prueba no admite cobros reales.");
     }
+    // Falla cerrado: con configuración de prueba activa, una comunidad real no
+    // puede activar su licencia pagando con precio y tarjeta de prueba.
+    if (environment === "test" && comunidad.get("mpTestFixture") !== true) {
+      throw new HttpsError("failed-precondition", "El cobro no está disponible en este momento.");
+    }
     const orderRef = db.collection(ORDERS).doc();
     const order = {id: orderRef.id, comunidadId, adminUid: request.auth.uid,
       amount, currency: "CLP", months: MONTHS, status: "pending",

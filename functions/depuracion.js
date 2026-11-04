@@ -17,6 +17,12 @@ const PLAZOS = [
   {coleccion: "vehiculos", meses: 12},
   // Solo las encomiendas ya entregadas; las pendientes se conservan.
   {coleccion: "encomiendas", meses: 12, conservar: (d) => d.estado !== "Entregado"},
+  // novedades y notificaciones copian nombres de visitas y retiros: sin esto,
+  // el dato seguía en la bitácora después de borrar la visita.
+  {coleccion: "novedades", meses: 12},
+  {coleccion: "notificaciones", meses: 12},
+  // Las reservas guardan invitados con RUT; las de fecha futura se conservan.
+  {coleccion: "reservas", meses: 12, conservar: (d) => String(d.fecha || "") >= new Date().toISOString().slice(0, 10)},
   {coleccion: "auditoria", meses: 24},
 ];
 

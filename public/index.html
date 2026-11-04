@@ -2493,6 +2493,7 @@ let notificacionesDeptoUnsub = null;
 // Solo se llena para el rol superadmin: listado de TODAS las comunidades
 // (edificios) de la plataforma, en vivo desde Firestore.
 let comunidadesDirectorio = [];
+let notasSoporteComunidades = {};
 
 
 /* ================================
@@ -5462,7 +5463,43 @@ function aplicarSnapshotComunidades(snap){
         comunidadesDirectorio.push(Object.assign({id: doc.id}, doc.data()));
     });
 
-    rerenderSiAppVisible();
+    cargarNotasSoporte().finally(rerenderSiAppVisible);
+
+}
+
+// Las notas internas viven en su propia colección, solo para superadmin. Las
+// que aún queden en el documento de una comunidad (que lee todo el edificio)
+// se trasladan aquí la primera vez que entra el superadmin.
+async function cargarNotasSoporte(){
+
+    try {
+        for(const c of comunidadesDirectorio){
+            const snap = await refNotasSoporte(c.id).get();
+            notasSoporteComunidades[c.id] = snap.exists ? (snap.data().notas || "") : "";
+
+            if(c.notasSoporte !== undefined){
+                const notas = notasSoporteComunidades[c.id] || c.notasSoporte || "";
+                await guardarNotasSoporte(c.id, notas);
+                notasSoporteComunidades[c.id] = notas;
+                delete c.notasSoporte;
+            }
+        }
+    } catch(err){
+        console.error("No se pudieron cargar las notas de soporte:", err);
+    }
+
+}
+
+function refNotasSoporte(id){
+    return db.collection(COMUNIDADES_COLLECTION).doc(id).collection("soporte").doc("notas");
+}
+
+async function guardarNotasSoporte(id, notas){
+
+    const batch = db.batch();
+    batch.set(refNotasSoporte(id), {notas: notas});
+    batch.update(db.collection(COMUNIDADES_COLLECTION).doc(id), {notasSoporte: firebase.firestore.FieldValue.delete()});
+    await batch.commit();
 
 }
 
@@ -5483,7 +5520,6 @@ function aplicarDatosComunidad(snap){
     community.estado = data.estado || "Activa";
     community.plan = data.plan || "";
     community.fechaContratacion = data.fechaContratacion || "";
-    community.notasSoporte = data.notasSoporte || "";
     community.numResidentes = data.numResidentes || 0;
     community.numConserjes = data.numConserjes || 0;
     community.adminNombre = data.adminNombre || "";
@@ -5619,6 +5655,30 @@ function residenteDocRef(residente){
 // residente o conserje olvida su clave, administración se la restablece
 // acá mismo (vía Cloud Function, con el Admin SDK).
 // comunidadId solo lo pasa el superadmin (no tiene comunidad propia).
+// Baja de un residente o conserje: el servidor deshabilita la cuenta y cierra
+// sus sesiones, y deja el cambio en auditoría.
+async function cambiarEstadoCuenta(uid, nombre, estado){
+
+    const baja = estado === "Inactivo";
+    const pregunta = baja
+        ? `¿Dar de baja a ${nombre}? Perderá el acceso de inmediato. Sus registros se conservan.`
+        : `¿Reactivar la cuenta de ${nombre}?`;
+
+    if(!window.confirm(pregunta)){
+        return;
+    }
+
+    try {
+        await functions.httpsCallable("cambiarEstadoCuentaMiComunidad")({comunidadId: community.id, uid: uid, estado: estado});
+        showToast(baja ? `${nombre} fue dado de baja` : `Cuenta de ${nombre} reactivada`);
+    } catch(err){
+        console.error(err);
+        showToast("No se pudo cambiar el estado: " + (err && err.message ? err.message : "error desconocido"));
+    }
+
+}
+
+
 async function restablecerClave(uid, nombre, comunidadId){
 
     const nuevaClave = window.prompt(
@@ -7570,7 +7630,7 @@ function renderGastosComunes(){
                 </span>
             </td>
             <td>
-                ${g.estado === "Pagado" ? formatFecha(g.fechaPago)
+                ${g.estado === "Pagado" ? esc(formatFecha(g.fechaPago))
                   : g.estado === "Por confirmar" ? "En revisión"
                   : `<button class="outline-btn" onclick="abrirInformarPago('gasto', '${escJs(g.id)}')">Informar pago</button>`}
             </td>
@@ -7870,8 +7930,8 @@ async function guardarNotasSoporteComunidad(id){
     }
 
     try {
-        await db.collection(COMUNIDADES_COLLECTION).doc(id).update({notasSoporte: notas});
-        comunidad.notasSoporte = notas;
+        await guardarNotasSoporte(id, notas);
+        notasSoporteComunidades[id] = notas;
         showToast("Notas de soporte guardadas");
     } catch(err){
         console.error(err);
@@ -8496,7 +8556,8 @@ function renderAdminConserjes(){
                 </span>
             </td>
             <td>
-                ${c.uid ? `<button class="outline-btn" onclick="restablecerClave('${escJs(c.uid)}', '${escJs(c.nombre)}')">${icon('key')} Restablecer clave</button>` : ""}
+                ${c.uid ? `<button class="outline-btn" onclick="restablecerClave('${escJs(c.uid)}', '${escJs(c.nombre)}')">${icon('key')} Restablecer clave</button>
+                <button class="outline-btn" onclick="cambiarEstadoCuenta('${escJs(c.uid)}', '${escJs(c.nombre)}', '${c.estado === 'Inactivo' ? 'Activo' : 'Inactivo'}')">${c.estado === 'Inactivo' ? 'Reactivar' : 'Dar de baja'}</button>` : ""}
             </td>
         </tr>
     `).join("");
@@ -9558,8 +9619,8 @@ function fichaDeptoHtml(r){
     const badgeSolicitud = {Pendiente:"badge-yellow", "En proceso":"badge-blue", Resuelto:"badge-green"};
     const badgePago = {Pagado:"badge-green", Pagada:"badge-green", Pendiente:"badge-yellow", Atrasado:"badge-red", "Por confirmar":"badge-blue"};
 
-    const familiares = r.familiares || [];
-    const restringidos = r.restringidos || [];
+    const familiares = (r.familiares || []).filter(Boolean);
+    const restringidos = (r.restringidos || []).filter(Boolean);
     const solicitudes = incidencias.filter(i => i.depto === r.depto).sort((a, b) => mcTs(b.ts) - mcTs(a.ts));
     const gastosDepto = gastosComunes.filter(g => g.depto === r.depto).sort((a, b) => String(b.periodo).localeCompare(String(a.periodo)));
     const multasDepto = multas.filter(m => m.depto === r.depto).sort((a, b) => mcTs(b.ts) - mcTs(a.ts));
@@ -9604,6 +9665,7 @@ function fichaDeptoHtml(r){
                 ` : ""}
                 ${esAdmin && r.uid ? `
                     <button class="fx-act" onclick="restablecerClave('${escJs(r.uid)}', '${escJs(r.nombre)}')">${icon('key')} Restablecer clave</button>
+                    <button class="fx-act" onclick="cambiarEstadoCuenta('${escJs(r.uid)}', '${escJs(r.nombre)}', '${r.estado === 'Inactivo' ? 'Activo' : 'Inactivo'}')">${r.estado === 'Inactivo' ? 'Reactivar' : 'Dar de baja'}</button>
                 ` : ""}
             </div>
 
@@ -9862,7 +9924,7 @@ function resultadosBusquedaConserjeHtml(q){
         .forEach(r => {
             const porDepto = String(r.depto).startsWith(n);
             const porNombre = normalizarTexto(r.nombre).includes(n);
-            const familiar = (r.familiares || []).find(f => normalizarTexto(f.nombre).includes(n));
+            const familiar = (r.familiares || []).filter(Boolean).find(f => normalizarTexto(f.nombre).includes(n));
             if(!porDepto && !porNombre && !familiar){ return; }
             const detalle = [
                 familiar && !porNombre && !porDepto ? "Familiar: " + familiar.nombre : "",
@@ -11603,7 +11665,7 @@ const modalFormBuilders = {
                 <textarea id="mComunidadDetalleNotas"
                           class="form-control"
                           rows="3"
-                          placeholder="Ej: pidió más plazo de pago, contacto alternativo, incidentes recurrentes...">${esc(c.notasSoporte || "")}</textarea>
+                          placeholder="Ej: pidió más plazo de pago, contacto alternativo, incidentes recurrentes...">${esc(notasSoporteComunidades[c.id] ?? c.notasSoporte ?? "")}</textarea>
                 <button class="outline-btn" style="width:auto;margin-top:8px" onclick="guardarNotasSoporteComunidad('${escJs(c.id)}')">
                     Guardar nota
                 </button>
@@ -12109,7 +12171,7 @@ function buscarRestriccionEnDepto(depto, nombre, rut){
     const rutLimpio = limpiarRut(rut || "");
     const nombreLimpio = (nombre || "").trim().toLowerCase();
 
-    return residente.restringidos.find(p => {
+    return residente.restringidos.filter(Boolean).find(p => {
         const pRutLimpio = limpiarRut(p.rut || "");
         const pNombreLimpio = (p.nombre || "").trim().toLowerCase();
         const matchRut = pRutLimpio && rutLimpio && pRutLimpio === rutLimpio;
@@ -13056,8 +13118,11 @@ async function saveModal(){
             crearNotificacion({
                 icon:"🚨",
                 titulo:`Vehículo sospechoso ingresó: ${patente}`,
-                meta:vehiculoRegistrado.notas || `Registrado en depto ${depto}`,
-                paraTodos:true
+                // Sin depto ni paraTodos: solo la leen conserjería y
+                // administración. Una sospecha sin verificar, asociada a una
+                // patente, no debe difundirse a todo el edificio.
+                meta:`Registrado en depto ${depto}`,
+                paraTodos:false
             });
 
             closeModal();

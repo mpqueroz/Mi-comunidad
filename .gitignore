@@ -4,6 +4,12 @@
 serviceAccountKey.json
 functions/serviceAccountKey.json
 *.serviceAccountKey.json
+*-firebase-adminsdk-*.json
+.env
+.env.*
+*.pem
+*.zip
+.runtimeconfig.json
 # Secretos de emuladores de Cloud Functions (functions/.secret.local, .env.local)
 *.local
 

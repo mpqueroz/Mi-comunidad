@@ -392,6 +392,12 @@ service cloud.firestore {
       // cliente - solo Firebase Console o Admin SDK.
       allow delete: if false;
 
+      // Notas internas de Nodar Logic. Van en un documento aparte porque el de
+      // la comunidad lo lee cualquier cuenta del edificio.
+      match /soporte/{docId} {
+        allow read, write: if mcEsSuperAdmin();
+      }
+
       // Excepción puntual: CUALQUIER rol de una comunidad activa (no solo
       // admin) puede actualizar el campo ultimoAcceso - es el "ping" que
       // alimenta la columna Actividad del panel de superadmin. Se acota

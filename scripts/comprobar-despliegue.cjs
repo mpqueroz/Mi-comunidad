@@ -24,7 +24,7 @@ async function main() {
   ];
   // Las funciones nuevas solo existen publicadas después del deploy.
   if(process.argv.includes('--release'))functions.push('generarCobrosMiComunidad',
-      'directorioConserjeriaMiComunidad', 'cambiarEstadoAdminMiComunidad', 'crearAdministradorMiComunidad',
+      'directorioConserjeriaMiComunidad', 'cambiarEstadoAdminMiComunidad', 'cambiarEstadoCuentaMiComunidad', 'crearAdministradorMiComunidad',
       'resumenComercialMiComunidad', 'historialPagosMiComunidad', 'rehabilitarLicenciaMiComunidad');
   for (const name of functions) {
     const response = await fetch(`https://us-central1-mercado-ciudadano.cloudfunctions.net/${name}`, {
