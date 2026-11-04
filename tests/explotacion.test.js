@@ -13,7 +13,7 @@ const adm=()=>ctx('adm1',t('admin'));
 const admB=()=>ctx('admB',t('admin',{comunidadId:B}));
 const sup=()=>ctx('sup',{app:'mi_comunidad',role:'superadmin'});
 const anon=()=>env.unauthenticatedContext().firestore();
-before(async()=>{env=await initializeTestEnvironment({projectId:'demo-mi-comunidad',firestore:{rules:fs.readFileSync(path.join(__dirname,'..','firestore.rules'),'utf8')}});});
+before(async()=>{env=await initializeTestEnvironment({projectId:'demo-explotacion-auditoria',firestore:{rules:fs.readFileSync(path.join(__dirname,'..','firestore.rules'),'utf8')}});});
 after(async()=>env&&env.cleanup());
 beforeEach(async()=>{await env.clearFirestore();await env.withSecurityRulesDisabled(async c=>{const d=c.firestore();
  for(const b of [ba,bb]){await d.doc(b).set({name:'E',estado:'Activa',plan:'Pro',adminNombre:'X',notasSoporte:'pidió más plazo de pago',apartments:10});
