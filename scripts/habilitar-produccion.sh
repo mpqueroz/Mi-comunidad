@@ -15,7 +15,7 @@ npm --prefix "$staging_parent/release/functions" ci --ignore-scripts --no-audit 
 gcloud auth print-access-token >/dev/null
 python3 "$root_dir/scripts/conectar-produccion.py" --preflight
 cd "$staging_parent/release"
-"$root_dir/tests/node_modules/.bin/firebase" deploy --project mercado-ciudadano --config firebase.json \
+node "$root_dir/scripts/firebase-cli.cjs" deploy --project mercado-ciudadano --config firebase.json \
   --only functions:mi-comunidad:webhookMercadoPagoMiComunidad,functions:mi-comunidad:conciliarPagosMiComunidad,functions:mi-comunidad:consultarLicenciaMiComunidad,functions:mi-comunidad:cotizarPlanMiComunidad,functions:mi-comunidad:resolverRevisionPagoMiComunidad,functions:mi-comunidad:reiniciarCheckoutFallidoMiComunidad,functions:mi-comunidad:crearCheckoutMiComunidad \
   --non-interactive
 python3 "$root_dir/scripts/conectar-produccion.py"

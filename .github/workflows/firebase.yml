@@ -121,17 +121,17 @@ jobs:
       # cambiaron se saltan solas.
       - name: Desplegar funciones de Mi Comunidad
         run: >
-          ./tests/node_modules/.bin/firebase deploy --non-interactive
+          node scripts/firebase-cli.cjs deploy --non-interactive
           --only "functions:generarCobrosMiComunidad,functions:crearCuentaMiComunidad,functions:cambiarEstadoCuentaMiComunidad,functions:registrarPagoOperativoMiComunidad,functions:gestionarIntegrantesFichaMiComunidad,functions:confirmarIngresoComunidad,functions:conciliarMovimientoComunidad,functions:desvincularConciliacionComunidad,functions:restablecerClaveMiComunidad,functions:crearComunidadMiComunidad,functions:crearReservaMiComunidad,functions:directorioConserjeriaMiComunidad,functions:cambiarEstadoAdminMiComunidad,functions:crearAdministradorMiComunidad,functions:definirPreguntaSecretaMiComunidad,functions:verificarPreguntaSecretaMiComunidad,functions:migrarRespuestasSecretasMiComunidad,functions:actualizarVencimientosMiComunidad,functions:depurarRegistrosMiComunidad,functions:resumenComercialMiComunidad,functions:historialPagosMiComunidad,functions:rehabilitarLicenciaMiComunidad,functions:configurarPagosMiComunidad,functions:guardarPlanMantencionMiComunidad,functions:registrarRevisionMantencionMiComunidad,functions:gestionarAvisoMiComunidad,functions:confirmarAvisoMiComunidad,functions:gestionarVisitaMiComunidad,functions:cancelarReservaMiComunidad,functions:registrarEncomiendaMiComunidad,functions:gestionarTurnoMiComunidad,functions:gestionarEncomiendaMiComunidad,functions:verificarFichaMiComunidad"
       # Firebase no ofrece CAS: coordinar ventana exclusiva entre repositorios.
       - name: Detectar cambios concurrentes de reglas
         run: node scripts/preparar-reglas-compartidas.cjs --assert-unchanged
       - name: Publicar reglas compartidas
-        run: ./tests/node_modules/.bin/firebase deploy --non-interactive --only firestore:rules
+        run: node scripts/firebase-cli.cjs deploy --non-interactive --only firestore:rules
       - name: Verificar reglas publicadas
         run: node scripts/preparar-reglas-compartidas.cjs --verify
       - name: Publicar página
-        run: ./tests/node_modules/.bin/firebase deploy --non-interactive --only hosting
+        run: node scripts/firebase-cli.cjs deploy --non-interactive --only hosting
       - name: Comprobar servicio y rechazos sin sesión
         run: node scripts/comprobar-despliegue.cjs --release
       # Solo lectura: cuántos registros vencidos borraría la depuración programada.
