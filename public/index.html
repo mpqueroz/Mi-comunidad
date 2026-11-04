@@ -4349,96 +4349,32 @@ async function procesarCartola(){
 
 /* ---- Conciliar ---- */
 
-// Deja registro del movimiento conciliado y del historial en un mismo lote.
-async function guardarConciliacion(mov, asociado, extra, automatico){
-    const ref = refComunidadActual();
-    const ahora = Date.now();
-    const lote = db.batch();
-    lote.update(ref.collection("movimientosBancarios").doc(mov.id), Object.assign({
-        estado: "Conciliado",
-        asociado: asociado,
-        conciliadoPor: nombreQuienConcilia(),
-        conciliadoPorUid: currentUid,
-        conciliadoEn: ahora,
-        automatico: !!automatico
-    }, extra || {}));
-    lote.set(ref.collection("historialConciliacion").doc(), {
-        accion: "conciliar",
-        movimientoId: mov.id,
-        fecha: mov.fecha,
-        monto: mov.monto,
-        descripcion: mov.descripcion,
-        asociado: asociado.etiqueta + (asociado.depto ? " · Depto " + asociado.depto : ""),
-        depto: asociado.depto || null,
-        periodo: mov.periodo,
-        nota: (extra && extra.notaDiferencia) || "",
-        automatico: !!automatico,
-        por: nombreQuienConcilia(),
-        porUid: currentUid,
-        ts: ahora
-    });
-    await lote.commit();
-}
-
 // candidato: uno de buscarCoincidencias(). destino: qué hacer con la
 // diferencia si el abono es mayor que la deuda ("proximo" | "saldo" | "revisar").
+const conciliacionesEnCurso = new Map();
 async function conciliarConCandidato(mov, candidato, destino, automatico){
-    const contableIds = [];
-    let extra = {};
-
-    if(candidato.tipo === "gasto" || candidato.tipo === "multa"){
-        const opciones = {fechaPago: mov.fecha, metodoPago: "Transferencia (cartola bancaria)", silencioso: true};
-        const contableId = candidato.tipo === "gasto"
-            ? await marcarGastoPagado(candidato.id, opciones)
-            : await marcarMultaPagada(candidato.id, opciones);
-        if(!contableId){
-            throw new Error("No se pudo registrar el pago de la deuda.");
-        }
-        contableIds.push(contableId);
-    } else if(candidato.tipo === "contable"){
-        contableIds.push(candidato.id);
+    if(!mov?.id || !candidato || !['gasto','multa','contable','nuevo'].includes(candidato.tipo)){
+        throw Error('Selecciona un movimiento y un destino válidos.');
     }
-
-    const diferencia = Math.abs(mov.monto) - candidato.monto;
-    if(diferencia > 0){
-        if(destino === "proximo" || destino === "saldo"){
-            const destinoTexto = destino === "proximo" ? "Abono al próximo período" : "Saldo a favor";
-            const idContable = await registrarMovimientoContable({
-                tipo: "Ingreso",
-                categoria: "Saldo a favor",
-                descripcion: `${destinoTexto} depto ${candidato.depto} (pago del ${formatFecha(mov.fecha)})`,
-                monto: diferencia,
-                fecha: mov.fecha,
-                origen: "Conciliación",
-                depto: candidato.depto
-            });
-            if(idContable){
-                contableIds.push(idContable);
-            }
-            await refComunidadActual().collection("saldosAFavor").add({
-                depto: candidato.depto,
-                monto: diferencia,
-                destino: destinoTexto,
-                estado: "Disponible",
-                movimientoId: mov.id,
-                fechaOrigen: mov.fecha,
-                por: nombreQuienConcilia(),
-                ts: Date.now()
-            });
-            extra = {diferencia, destinoDiferencia: destino, notaDiferencia: `${formatCLP(diferencia)} como ${destinoTexto.toLowerCase()}`};
-        } else {
-            extra = {diferencia, destinoDiferencia: "revisar", notaDiferencia: `Diferencia de ${formatCLP(diferencia)} por revisar`};
+    const datos = {comunidadId:community.id, movimientoId:mov.id, tipo:candidato.tipo,
+        destino:destino || 'revisar', automatico:!!automatico};
+    if(candidato.tipo === 'nuevo'){
+        datos.descripcion = candidato.descripcion;
+        datos.categoria = candidato.categoria;
+    } else datos.id = candidato.id;
+    const clave = JSON.stringify(datos);
+    if(conciliacionesEnCurso.has(clave)) return conciliacionesEnCurso.get(clave);
+    const pendiente = (async () => {
+        const resultado = await functions.httpsCallable('conciliarMovimientoComunidad')(datos);
+        if(!resultado.data?.ok || !Array.isArray(resultado.data.contableIds)
+            || !resultado.data.contableIds.length || resultado.data.contableIds.some(id => typeof id !== 'string' || !id)){
+            throw Error('No se pudo confirmar la conciliación. Vuelve a consultar el movimiento.');
         }
-    }
-
-    await guardarConciliacion(mov, {
-        tipo: candidato.tipo,
-        id: candidato.id,
-        depto: candidato.depto || null,
-        etiqueta: candidato.etiqueta,
-        contableIds: contableIds
-    }, extra, automatico);
-    return contableIds;
+        return resultado.data.contableIds;
+    })();
+    conciliacionesEnCurso.set(clave, pendiente);
+    try { return await pendiente; }
+    finally { conciliacionesEnCurso.delete(clave); }
 }
 
 async function conciliarSugerido(id){
@@ -4456,7 +4392,7 @@ async function conciliarSugerido(id){
         showToast("Movimiento conciliado");
     } catch(err){
         console.error(err);
-        showToast("No se pudo conciliar. Revisa tu conexión.");
+        showToast(err.message || "No se pudo conciliar. Intenta nuevamente.");
     }
 }
 
@@ -4481,7 +4417,7 @@ async function conciliarExactas(){
             hechas++;
         } catch(err){
             console.error(err);
-            showToast("Se detuvo la conciliación automática. Revisa tu conexión.");
+            showToast(err.message || "Se detuvo la conciliación automática. Revisa el movimiento.");
             break;
         }
     }
@@ -4493,48 +4429,22 @@ async function conciliarExactas(){
 
 async function revertirConciliacion(id){
     const mov = movimientosBancarios.find(m => m.id === id);
-    if(!mov || mov.estado !== "Conciliado"){
+    if(!mov || mov.estado !== 'Conciliado') return;
+    const motivo = window.prompt('Describe el motivo para desvincular este movimiento (mínimo 15 caracteres). Los pagos y asientos contables se conservan. Los movimientos con diferencias o saldos requieren revisión administrativa.');
+    if(motivo === null) return;
+    if(motivo.trim().length < 15){
+        showToast('Describe el motivo con al menos 15 caracteres para conservarlo en el historial.');
         return;
     }
-    if(!window.confirm("¿Revertir esta conciliación? El movimiento vuelve a quedar pendiente. Los pagos ya registrados en Gastos comunes y Contabilidad no se deshacen.")){
-        return;
-    }
-    const ref = refComunidadActual();
-    const lote = db.batch();
-    lote.update(ref.collection("movimientosBancarios").doc(mov.id), {
-        estado: "Pendiente",
-        asociado: null,
-        diferencia: null,
-        destinoDiferencia: null,
-        conciliadoPor: null,
-        conciliadoPorUid: null,
-        conciliadoEn: null,
-        automatico: false
-    });
-    lote.set(ref.collection("historialConciliacion").doc(), {
-        accion: "revertir",
-        movimientoId: mov.id,
-        fecha: mov.fecha,
-        monto: mov.monto,
-        descripcion: mov.descripcion,
-        asociado: mov.asociado ? mov.asociado.etiqueta : "",
-        depto: mov.asociado ? mov.asociado.depto || null : null,
-        periodo: mov.periodo,
-        nota: "",
-        automatico: false,
-        por: nombreQuienConcilia(),
-        porUid: currentUid,
-        ts: Date.now()
-    });
     try {
-        await lote.commit();
+        const resultado = await functions.httpsCallable('desvincularConciliacionComunidad')({comunidadId:community.id, movimientoId:id, motivo:motivo.trim()});
+        if(!resultado.data?.ok) throw Error('No se pudo confirmar la desvinculación. Vuelve a consultar el movimiento.');
+        closeModal();
+        showToast('Movimiento desvinculado. Los pagos y asientos contables se conservan.');
     } catch(err){
         console.error(err);
-        showToast("No se pudo revertir. Revisa tu conexión.");
-        return;
+        showToast(err.message || 'No se pudo desvincular el movimiento. Intenta nuevamente.');
     }
-    closeModal();
-    showToast("Conciliación revertida");
 }
 
 
@@ -4723,24 +4633,7 @@ async function guardarAsociarMovimiento(){
                 showToast("Escribe una descripción");
                 return;
             }
-            const idContable = await registrarMovimientoContable({
-                tipo: mov.monto > 0 ? "Ingreso" : "Egreso",
-                categoria: categoria,
-                descripcion: descripcion,
-                monto: Math.abs(mov.monto),
-                fecha: mov.fecha,
-                origen: "Conciliación"
-            });
-            if(!idContable){
-                return;
-            }
-            await guardarConciliacion(mov, {
-                tipo: "contable",
-                id: idContable,
-                depto: null,
-                etiqueta: categoria + ": " + descripcion,
-                contableIds: [idContable]
-            }, {}, false);
+            await conciliarConCandidato(mov, {tipo:'nuevo', descripcion, categoria}, 'revisar', false);
         } else {
             const cand = modalContext.lista[parseInt(elegido.value, 10)];
             const destino = document.querySelector('input[name="mConcDestino"]:checked');
@@ -4748,7 +4641,7 @@ async function guardarAsociarMovimiento(){
         }
     } catch(err){
         console.error(err);
-        showToast("No se pudo conciliar. Revisa tu conexión.");
+        showToast(err.message || "No se pudo conciliar. Intenta nuevamente.");
         return;
     }
 

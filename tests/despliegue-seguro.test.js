@@ -80,3 +80,11 @@ test('smoke comercial exige rechazar sin sesión las nuevas acciones de recupera
  assert.match(smoke,/\[401, 403\]\.includes\(response\.status\)/);
  assert.ok(fs.readFileSync(path.join(root,'scripts/habilitar-produccion.sh'),'utf8').includes('comprobar-despliegue.cjs" --commercial'));
 });
+
+test('despliegue operativo incluye conciliación transaccional y smoke sin sesión',()=>{
+ const workflow=fs.readFileSync(path.join(root,'.github/workflows/firebase.yml'),'utf8');
+ const smoke=fs.readFileSync(path.join(root,'scripts/comprobar-despliegue.cjs'),'utf8');
+ for(const name of ['registrarPagoOperativoMiComunidad','gestionarIntegrantesFichaMiComunidad','confirmarIngresoComunidad','conciliarMovimientoComunidad','desvincularConciliacionComunidad']){
+  assert.ok(workflow.includes('functions:'+name));assert.ok(smoke.includes("'"+name+"'"));
+ }
+});

@@ -76,7 +76,7 @@ exports.resolverRevisionPagoMiComunidad = onCall({secrets:[ACCESS_TOKEN]}, async
     }
     const total = ["refunded","charged_back"].includes(payment.status) || Number(payment.transaction_amount_refunded) >= order.amount;
     if (accion === "cerrar_pago_adicional_reembolsado") {
-      if (order.status !== "paid" || String(order.paymentId) === String(paymentId) || !order.additionalPaymentReview || !total) {
+      if (!["paid", "payment_review", "reversed_resolved"].includes(order.status) || String(order.paymentId) === String(paymentId) || !order.additionalPaymentReview || !total) {
         throw new HttpsError("failed-precondition", "El segundo cobro debe estar íntegramente devuelto y pendiente de revisión.");
       }
       const incidentRef = orderRef.collection("incidencias").doc(String(paymentId));

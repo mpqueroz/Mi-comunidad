@@ -763,14 +763,14 @@ service cloud.firestore {
         // Operaciones vinculadas a entidad solo vía servidor. El libro manual
         // y otros asientos de conciliación mantienen su flujo legítimo.
         allow create: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin() &&
-          !id.matches('(egreso_(remuneracion|mantencion)|ingreso_(gasto|multa))_.*') &&
+          !id.matches('(egreso_(remuneracion|mantencion)|ingreso_(gasto|multa)|conciliacion_nuevo|diferencia_conciliacion)_.*') &&
           request.resource.data.tipo in ['Ingreso','Egreso'] &&
           request.resource.data.monto is int && request.resource.data.monto > 0 &&
           request.resource.data.fecha is string &&
           (request.resource.data.origen in ['Manual','Conciliación'] ||
            (request.resource.data.origen == 'Automático' &&
             !(request.resource.data.categoria in ['Remuneraciones','Proveedores','Gasto común','Multa']))) &&
-          !request.resource.data.keys().hasAny(['entidadId','entidadTipo']);
+          !request.resource.data.keys().hasAny(['entidadId','entidadTipo','bancoMovimientoId','bancoOrigenId']);
         allow update, delete: if false;
       }
 
@@ -782,10 +782,13 @@ service cloud.firestore {
       match /movimientosBancarios/{id} {
         allow read: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
         allow create: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin() &&
+                         request.resource.data.keys().hasOnly(['fecha','descripcion','monto','saldo','periodo','orden','estado','importacionId','ts']) &&
                          request.resource.data.estado == "Pendiente" &&
                          request.resource.data.monto is int &&
                          request.resource.data.fecha is string;
         allow update: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin() &&
+                         resource.data.estado == 'Pendiente' && request.resource.data.estado == 'Pendiente' &&
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['saldo','periodo','orden','importacionId','ts']) &&
                          request.resource.data.fecha == resource.data.fecha &&
                          request.resource.data.monto == resource.data.monto &&
                          request.resource.data.descripcion == resource.data.descripcion;
@@ -809,7 +812,13 @@ service cloud.firestore {
 
       // Saldos a favor que nacen de un pago mayor que la deuda.
       match /saldosAFavor/{id} {
-        allow read, create, update: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        allow read: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        // El saldo nace junto al banco y al asiento, nunca desde una escritura
+        // aislada del navegador. Se conserva el registro al aplicarlo.
+        allow create: if false;
+        allow update: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado','consumidoEn','consumidoPor']) &&
+          request.resource.data.estado in ['Disponible','Aplicado'];
         allow delete: if false;
       }
 

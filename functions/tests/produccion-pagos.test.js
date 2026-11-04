@@ -128,3 +128,27 @@ test('presupuesto de conciliación conserva offset dentro de una página incompl
   assert.equal(h.docs.get('mi_comunidad_config_comercial/conciliacion').leaseUntil,0);
  }finally{Date.now=realNow;}
 });
+
+test('solicitud pausada antes de seleccionar usa ciclo vigente y no restaura intención antigua',async()=>{
+ const h=harness(),original=h.db.runTransaction;let release,entered,calls=0;
+ const paused=new Promise(r=>entered=r),wait=new Promise(r=>release=r);
+ h.db.runTransaction=async callback=>{if(++calls===1){entered();await wait;}return original(callback);};
+ const old=h.create();await paused;h.license().checkoutRevision=1;
+ const fresh=await h.create();release();const resumed=await old;
+ assert.equal(resumed.orderId,fresh.orderId);assert.equal(h.state.postCount,1);
+ assert.equal([...h.docs.keys()].filter(p=>p.startsWith('mi_comunidad_ordenes_pago/')&&!p.includes('/incidencias/')).length,1);
+});
+test('cambio de ciclo entre selección y POST invalida la solicitud vieja sin cobrar',async()=>{
+ const h=harness(),original=h.db.runTransaction;let release,entered,calls=0;
+ const paused=new Promise(r=>entered=r),wait=new Promise(r=>release=r);
+ h.db.runTransaction=async callback=>{if(++calls===2){entered();await wait;}return original(callback);};
+ const old=h.create();await paused;h.license().checkoutRevision=1;
+ const fresh=await h.create();release();await assert.rejects(old);
+ assert.equal(h.state.postCount,1);assert.notEqual(fresh.orderId,h.order().id);
+ assert.equal(h.order().status,'checkout_error');assert.equal(h.order().creationOutcome,'not_started');
+});
+test('baja entre contexto y transacción impide crear una preferencia',async()=>{
+ const h=harness(),original=h.db.runTransaction;let first=true;
+ h.db.runTransaction=async callback=>{if(first){first=false;h.docs.set('mi_comunidad_comunidades/test-edificio/administradores/admin-test',{estado:'Inactivo'});}return original(callback);};
+ await assert.rejects(h.create(),{code:'permission-denied'});assert.equal(h.state.postCount,0);
+});

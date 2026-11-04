@@ -63,3 +63,30 @@ test('listas históricas inválidas no rompen perfil, ficha ni búsqueda y no se
   a.run(`currentRole='admin';fichaDeptoHtml(residentesDirectorio[0]);resultadosBusquedaConserjeHtml('familiar');currentRole='residente';`);
  }
 });
+
+test('conciliación confirma banco, deuda y saldo en servidor y comparte reintentos en curso',async()=>{
+ const a=app();setup(a);a.run(`movimientosBancarios=[{id:'b1',estado:'Pendiente',monto:25000,fecha:'2026-11-01'}];`);
+ let release;const pending=new Promise(r=>release=r);const calls=[];
+ a.run('functions').httpsCallable=name=>async data=>{calls.push({name,data});await pending;return {data:{ok:true,contableIds:['ingreso','saldo']}};};
+ const one=a.run("conciliarConCandidato(movimientosBancarios[0],{tipo:'gasto',id:'g1',monto:20000,depto:'101'},'saldo',false)");
+ const two=a.run("conciliarConCandidato(movimientosBancarios[0],{tipo:'gasto',id:'g1'},'saldo',false)");
+ assert.equal(calls.length,1);assert.equal(calls[0].name,'conciliarMovimientoComunidad');assert.equal(calls[0].data.movimientoId,'b1');assert.equal(calls[0].data.destino,'saldo');assert.equal(calls[0].data.id,'g1');assert.ok(!('monto' in calls[0].data));assert.equal(a.run('movimientosBancarios[0].estado'),'Pendiente');assert.equal(a.run('gastosComunes[0].estado'),'Pendiente');
+ release();assert.deepEqual(Array.from(await one),['ingreso','saldo']);assert.deepEqual(Array.from(await two),['ingreso','saldo']);
+ a.run('functions').httpsCallable=()=>async()=>{throw Error('El abono es menor que la deuda; requiere revisión administrativa.');};
+ await assert.rejects(a.run("conciliarConCandidato(movimientosBancarios[0],{tipo:'gasto',id:'g1'},'revisar',false)"),/requiere revisión/);
+ assert.equal(a.run('movimientosBancarios[0].estado'),'Pendiente');assert.equal(a.run('gastosComunes[0].estado'),'Pendiente');
+});
+test('nuevo asiento desde cartola se concilia con una sola llamada sin crear ledger previo',async()=>{
+ const a=app();setup(a);a.run(`movimientosBancarios=[{id:'b1',estado:'Pendiente',monto:-10000,fecha:'2026-11-01'}];modalMode='asociarMovimiento';modalContext={id:'b1'};`);
+ a.ctx.document.querySelector=selector=>selector.includes('mConcCandidato')?{value:'nuevo'}:null;
+ a.el('mConcDescripcion').value='Servicio mensual';a.el('mConcCategoria').value='Servicios';
+ const calls=[];a.run('functions').httpsCallable=name=>async data=>{calls.push({name,data});return {data:{ok:true,contableIds:['nuevo-asiento']}};};
+ await a.run('guardarAsociarMovimiento()');assert.equal(calls.length,1);assert.equal(calls[0].name,'conciliarMovimientoComunidad');assert.equal(calls[0].data.tipo,'nuevo');assert.equal(calls[0].data.descripcion,'Servicio mensual');assert.equal(calls[0].data.categoria,'Servicios');assert.ok(!('id' in calls[0].data));assert.ok(!('monto' in calls[0].data));assert.ok(state(a).some(e=>e[1]==='Movimiento conciliado'));
+});
+test('desvincular exige motivo y conserva pagos/asientos ante rechazo o confirmación',async()=>{
+ const a=app();setup(a);a.run(`movimientosBancarios=[{id:'b1',estado:'Conciliado',asociado:{contableIds:['asiento']}}];modalMode='asociarMovimiento';`);let calls=0;
+ a.ctx.prompt=()=> 'Corto';a.run('functions').httpsCallable=()=>async()=>{calls++;return {data:{ok:true}};};await a.run("revertirConciliacion('b1')");assert.equal(calls,0);
+ a.ctx.prompt=()=> 'Revisión de asociación equivocada';a.run('functions').httpsCallable=name=>async data=>{calls++;assert.equal(name,'desvincularConciliacionComunidad');assert.equal(data.movimientoId,'b1');assert.ok(data.motivo.length>=15);throw Error('El saldo debe revisarse antes de desvincular.');};
+ await a.run("revertirConciliacion('b1')");assert.equal(a.run('modalMode'),'asociarMovimiento');assert.equal(a.run('movimientosBancarios[0].estado'),'Conciliado');assert.ok(state(a).some(e=>/saldo debe revisarse/.test(e[1]||'')));
+ a.run('functions').httpsCallable=()=>async()=>({data:{ok:true}});await a.run("revertirConciliacion('b1')");assert.equal(a.run('modalMode'),null);assert.equal(a.run('gastosComunes[0].estado'),'Pendiente');assert.ok(state(a).some(e=>/pagos y asientos contables se conservan/.test(e[1]||'')));
+});

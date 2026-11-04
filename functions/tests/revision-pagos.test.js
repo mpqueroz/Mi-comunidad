@@ -46,3 +46,14 @@ test("reinicio administrativo exige verificación y cierra orden con nuevo ciclo
 test("reinicio no cierra resultado incierto ni preferencia ya creada",async()=>{
  for(const outcome of ["uncertain","post_started","rejected"]){const h=harness();h.state.restartVerified=true;h.state.order.status="checkout_error";h.state.order.creationOutcome=outcome;if(outcome!=="rejected")delete h.state.order.preferenceId;await assert.rejects(h.restart(),{code:"failed-precondition"});assert.equal(h.state.audits.length,0);assert.equal(h.state.license.checkoutRevision,4);}
 });
+
+test("segundo cobro devuelto se cierra también con original en revisión o reverso resuelto",async()=>{
+ for(const status of ["payment_review","reversed_resolved"]){
+  const h=harness();h.state.order.status=status;h.state.order.additionalPaymentReview=true;
+  h.state.payment.id=100;h.request.data.paymentId="100";h.request.data.accion="cerrar_pago_adicional_reembolsado";
+  const originalLicense=JSON.stringify(h.state.license);
+  await h.run();assert.equal(h.state.order.status,status);assert.equal(h.state.order.paymentId,"99");
+  assert.equal(JSON.stringify(h.state.license),originalLicense);assert.equal(h.state.incidents["100"].estado,"resuelta");
+  assert.equal(h.state.order.additionalPaymentReview,false);assert.equal(h.state.audits.length,1);
+ }
+});

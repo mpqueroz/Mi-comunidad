@@ -324,14 +324,15 @@ async function reconcilePayments(db, token, request = mpRequest) {
     });
   }
 }
-async function checkoutContext(request) {
+async function checkoutContext(request, tx = null) {
   const token=request.auth?.token;
   if(!request.auth?.uid || token?.app!=="mi_comunidad" || token.role!=="admin" || !/^[a-z0-9-]{1,100}$/.test(String(token.comunidadId||""))) {
     throw new HttpsError("permission-denied","Solo administración puede contratar.");
   }
   const db=getFirestore(), comunidadId=token.comunidadId;
   const ref=db.collection("mi_comunidad_comunidades").doc(comunidadId);
-  const [comunidad,licencia,admin]=await Promise.all([ref.get(),db.collection(LICENSES).doc(comunidadId).get(),ref.collection("administradores").doc(request.auth.uid).get()]);
+  const read = ref => tx ? tx.get(ref) : ref.get();
+  const [comunidad,licencia,admin]=await Promise.all([read(ref),read(db.collection(LICENSES).doc(comunidadId)),read(ref.collection("administradores").doc(request.auth.uid))]);
   if(admin.exists && admin.get("estado")!=="Activo")throw new HttpsError("permission-denied","Administración desactivada.");
   if(!comunidad.exists || comunidad.get("estado")==="Suspendida" || !licencia.exists || licencia.get("estado")==="suspended")throw new HttpsError("failed-precondition","Comunidad no habilitada para compra.");
   const environment=String(MP_ENVIRONMENT.value()||""),amount=Number(PLAN_PRICE.value());
@@ -342,34 +343,44 @@ async function checkoutContext(request) {
 
 function registerMercadoPago() {
   const createCheckout = onCall({secrets: [ACCESS_TOKEN, PLAN_PRICE, WEBHOOK_URL, MP_ENVIRONMENT, TEST_ACCOUNT]}, async (request) => {
-    const {db,comunidadId,licencia,environment,amount}=await checkoutContext(request);
+    const {db,comunidadId,environment,amount}=await checkoutContext(request);
     const documentoTributario=validarDocumentoTributario(request.data?.documentoTributario);
     const url=WEBHOOK_URL.value();
     if(!/^https:\/\//.test(url))throw new HttpsError("failed-precondition","Webhook no configurado.");
     const testAccount=environment==="test"?JSON.parse(TEST_ACCOUNT.value()):null;
     const cycleDate=value=>value?.toMillis?value.toMillis():value?.getTime?value.getTime():String(value||"");
-    const cycle=crypto.createHash("sha256").update(JSON.stringify([comunidadId,environment,cycleDate(licencia.get("paidUntil")),cycleDate(licencia.get("trialEndsAt")),licencia.get("checkoutRevision")||0])).digest("hex");
+    const cycleFor = licencia => crypto.createHash("sha256").update(JSON.stringify([comunidadId,environment,cycleDate(licencia.get("paidUntil")),cycleDate(licencia.get("trialEndsAt")),licencia.get("checkoutRevision")||0])).digest("hex");
     const intentRef=db.collection("mi_comunidad_config_comercial").doc("checkout-"+comunidadId);
     const proposedRef=db.collection(ORDERS).doc();
     const selected=await db.runTransaction(async tx=>{
+      // Community, account and license must participate in the same transaction
+      // as the intent. A paused request cannot restore an obsolete cycle.
+      const current=await checkoutContext(request,tx);
+      const cycle=cycleFor(current.licencia);
       const intent=await tx.get(intentRef);
-      if(intent.exists&&intent.get("cycle")===cycle)return {id:intent.get("orderId"),fresh:false};
+      if(intent.exists&&intent.get("cycle")===cycle)return {id:intent.get("orderId"),cycle,fresh:false};
       tx.create(proposedRef,{id:proposedRef.id,comunidadId,adminUid:request.auth.uid,amount,currency:"CLP",months:MONTHS,environment,testAccount,
         status:"pending",creationOutcome:"not_started",documentoTributario,createdAt:FieldValue.serverTimestamp()});
       tx.set(intentRef,{cycle,orderId:proposedRef.id});
-      return {id:proposedRef.id,fresh:true};
+      return {id:proposedRef.id,cycle,fresh:true};
     });
     const orderRef=db.collection(ORDERS).doc(selected.id);
     if(!selected.fresh){
       const order=await recoverCheckout(db,selected.id,ACCESS_TOKEN.value());
-      if(order.status==="checkout_ready"&&validCheckoutUrl(order.checkoutUrl))return {checkoutUrl:order.checkoutUrl,orderId:selected.id};
+      if(order.status==="checkout_ready"&&validCheckoutUrl(order.checkoutUrl)) {
+        if(order.amount!==amount)throw new HttpsError("failed-precondition","El precio de la compra anterior cambió; requiere revisión antes de pagar.");
+        return {checkoutUrl:order.checkoutUrl,orderId:selected.id};
+      }
       throw new HttpsError("failed-precondition","La compra anterior está siendo verificada. No inicies otro pago.");
     }
     try {
       // Persist the send boundary first: a crash after this write remains uncertain.
       await db.runTransaction(async tx=>{
+        const context=await checkoutContext(request,tx);
+        const intent=await tx.get(intentRef);
         const current=await tx.get(orderRef);
-        if(!current.exists || current.get("status")!=="pending" || current.get("creationOutcome")!=="not_started") {
+        if(!current.exists || current.get("status")!=="pending" || current.get("creationOutcome")!=="not_started" ||
+            cycleFor(context.licencia)!==selected.cycle || intent.get("cycle")!==selected.cycle || intent.get("orderId")!==selected.id) {
           throw new HttpsError("failed-precondition","La compra cambió; actualiza su estado antes de pagar.");
         }
         tx.update(orderRef,{creationOutcome:"post_started"});
@@ -394,7 +405,7 @@ function registerMercadoPago() {
       await db.runTransaction(async tx=>{
         const current=await tx.get(orderRef);
         if(current.exists && ["pending","checkout_error"].includes(current.get("status"))) {
-          tx.update(orderRef,{status:"checkout_error",creationOutcome:[400,401,403,404,422].includes(err.mpStatus)?"rejected":"uncertain"});
+          tx.update(orderRef,{status:"checkout_error",creationOutcome:current.get("creationOutcome")==="not_started"?"not_started":[400,401,403,404,422].includes(err.mpStatus)?"rejected":"uncertain"});
         }
       });
       throw new HttpsError("unavailable", "No fue posible iniciar el pago.");

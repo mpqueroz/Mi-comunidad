@@ -16,7 +16,7 @@ function harness(){
   const db={collection,runTransaction:async callback=>{
     const prior=lock;let release;lock=new Promise(r=>{release=r;});await prior;
     try{
-      const writes=[];const tx={get:async r=>snap(r),create:(r,data)=>writes.push(['create',r,data]),update:(r,data)=>writes.push(['update',r,data])};
+      const writes=[];const tx={get:async r=>{assert.equal(writes.length,0,'todas las lecturas preceden las escrituras');return snap(r);},create:(r,data)=>writes.push(['create',r,data]),update:(r,data)=>writes.push(['update',r,data])};
       const result=await callback(tx);
       if(failCommit)throw Error('Fallo de commit');
       for(const [mode,r]of writes)if(mode==='create'&&docs.has(r.path)||mode==='update'&&!docs.has(r.path))throw Error('Precondición');
@@ -86,4 +86,47 @@ test('ingreso rechaza fecha inexistente y monto no entero',async()=>{
  const h=harness();h.docs.set('mi_comunidad_comunidades/a/gastosComunes/uno',{estado:'Pendiente',monto:1.5});
  await assert.rejects(h.call('confirmarIngresoComunidad',{tipo:'gasto',id:'uno',fechaPago:'2026-02-30'}),{code:'invalid-argument'});
  await assert.rejects(h.call('confirmarIngresoComunidad',{tipo:'gasto',id:'uno'}),{code:'failed-precondition'});
+});
+
+function bankFixture(monto=60000){
+ const h=harness(),prefix='mi_comunidad_comunidades/a/';
+ h.docs.set(prefix+'movimientosBancarios/b1',{estado:'Pendiente',fecha:'2026-11-04',monto,descripcion:'Abono ficticio'});
+ h.docs.set(prefix+'gastosComunes/g1',{estado:'Pendiente',monto:45000,depto:'101'});
+ return h;
+}
+test('conciliar simultáneamente crea un ingreso, un saldo y un historial por banco',async()=>{
+ const h=bankFixture(),args={movimientoId:'b1',tipo:'gasto',id:'g1',destino:'saldo'};
+ const results=await Promise.all(Array.from({length:10},()=>h.call('conciliarMovimientoComunidad',args)));
+ assert.equal(results.filter(r=>!r.repetido).length,1);assert.equal(h.rows('saldosAFavor').length,1);
+ assert.equal(h.rows('saldosAFavor')[0][1].monto,15000);assert.equal(h.rows('historialConciliacion').length,1);
+ assert.equal(h.rows('movimientosContables').reduce((n,[,r])=>n+r.monto,0),60000);
+ assert.equal(h.rows('notificaciones').length,1);
+ await assert.rejects(h.call('desvincularConciliacionComunidad',{movimientoId:'b1',motivo:'Revisar esta asociación ficticia'}),{code:'failed-precondition'});
+});
+test('conciliación rechaza banco insuficiente y permisos sin registrar pagos',async()=>{
+ const h=bankFixture(40000),args={movimientoId:'b1',tipo:'gasto',id:'g1'};
+ await assert.rejects(h.call('conciliarMovimientoComunidad',args,'residente'),{code:'permission-denied'});
+ await assert.rejects(h.call('conciliarMovimientoComunidad',args),{code:'failed-precondition'});
+ assert.equal(h.rows('movimientosContables').length,0);assert.equal(h.docs.get('mi_comunidad_comunidades/a/gastosComunes/g1').estado,'Pendiente');
+});
+test('conciliación con fallo de commit no deja ingreso ni saldo; reintento conserva unicidad',async()=>{
+ const h=bankFixture(),args={movimientoId:'b1',tipo:'gasto',id:'g1',destino:'proximo'};h.setFail(true);
+ await assert.rejects(h.call('conciliarMovimientoComunidad',args),/Fallo de commit/);
+ assert.equal(h.rows('saldosAFavor').length,0);assert.equal(h.rows('movimientosContables').length,0);
+ h.setFail(false);await h.call('conciliarMovimientoComunidad',args);assert.equal(h.rows('saldosAFavor').length,1);
+});
+test('un asiento no se asigna a dos bancos; desvincular conserva el pago y permite reasociar',async()=>{
+ const h=bankFixture(45000),prefix='mi_comunidad_comunidades/a/',args={movimientoId:'b1',tipo:'gasto',id:'g1'};
+ const first=await h.call('conciliarMovimientoComunidad',args);
+ h.docs.set(prefix+'movimientosBancarios/b2',{estado:'Pendiente',fecha:'2026-11-04',monto:45000});
+ await assert.rejects(h.call('conciliarMovimientoComunidad',{...args,movimientoId:'b2'}),{code:'already-exists'});
+ await h.call('desvincularConciliacionComunidad',{movimientoId:'b1',motivo:'Corregir asociación ficticia equivocada'});
+ assert.equal(h.docs.get(prefix+'gastosComunes/g1').estado,'Pagado');assert.equal(h.rows('movimientosContables').length,1);
+ const second=await h.call('conciliarMovimientoComunidad',{...args,movimientoId:'b2'});assert.equal(second.contableIds[0],first.contableIds[0]);
+});
+test('asiento nuevo de cartola es determinista y valida signo/categoría en servidor',async()=>{
+ const h=bankFixture(-3000),args={movimientoId:'b1',tipo:'nuevo',descripcion:'Comisión ficticia',categoria:'Comisiones bancarias'};
+ await assert.rejects(h.call('conciliarMovimientoComunidad',{...args,categoria:'Intereses'}),{code:'invalid-argument'});
+ const a=await h.call('conciliarMovimientoComunidad',args),b=await h.call('conciliarMovimientoComunidad',args);
+ assert.deepEqual(a.contableIds,b.contableIds);assert.equal(h.rows('movimientosContables').length,1);assert.equal(h.rows('movimientosContables')[0][1].tipo,'Egreso');
 });

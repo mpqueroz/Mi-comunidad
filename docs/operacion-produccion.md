@@ -2,7 +2,7 @@
 
 ## Publicaciones coordinadas
 
-Mi Comunidad comparte `mercado-ciudadano` con otras aplicaciones. El workflow operativo publica una lista explícita de funciones y un único sitio Hosting. Las funciones comerciales tienen procedimiento separado; no ejecutar despliegues globales.
+Mi Comunidad comparte `mercado-ciudadano` con otras aplicaciones. El workflow operativo publica una lista explícita de funciones y un único sitio Hosting. Las funciones comerciales tienen procedimiento separado; no ejecutar despliegues globales. La lista operativa incluye `registrarPagoOperativoMiComunidad`, `gestionarIntegrantesFichaMiComunidad`, `confirmarIngresoComunidad`, `conciliarMovimientoComunidad` y `desvincularConciliacionComunidad`; el smoke tras publicación exige su rechazo sin sesión. La conciliación banco/deuda y la confirmación de ingreso deben validarse también con cuentas autorizadas y concurrencia, porque ese smoke no acredita coherencia de saldos.
 
 La preparación de reglas guarda nombre de versión y SHA-256 de las reglas vigentes. Inmediatamente antes de publicarlas, `--assert-unchanged` consulta otra vez y aborta si cualquiera cambió. Es necesario reconstruir la combinación y volver a probar; no se reintenta con la captura antigua. Después, `--verify` exige coincidencia exacta.
 

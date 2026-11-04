@@ -21,10 +21,12 @@ exports.resumenComercialMiComunidad = onCall(async (request) => {
   ]);
   const licenseMap = new Map(licenses.docs.map((d) => [d.id, d.data()]));
   const additionalReviews = [];
+  let incidentsLimited = false;
   for (const orderDoc of additional.docs) {
     const order = orderDoc.data();
-    const incidents = await orderDoc.ref.collection("incidencias").limit(100).get();
-    for (const incident of incidents.docs) {
+    const incidents = await orderDoc.ref.collection("incidencias").where("estado", "==", "pendiente").limit(101).get();
+    if (incidents.docs.length > 100) incidentsLimited = true;
+    for (const incident of incidents.docs.slice(0, 100)) {
       if (incident.get("estado") === "resuelta") continue;
       additionalReviews.push({id:orderDoc.id,comunidadId:String(order.comunidadId || ""),
         paymentId:incident.id,amount:Number(order.amount) || 0,paymentStatus:"cobro_adicional",additional:true});
@@ -44,7 +46,7 @@ exports.resumenComercialMiComunidad = onCall(async (request) => {
       return {id: doc.id, comunidadId: String(o.comunidadId || ""),
         paymentId: String(o.paymentId || ""), amount: Number(o.amount) || 0, paymentStatus: String(o.paymentStatus || "")};
     }).concat(additionalReviews, failed.docs.map(doc => { const o=doc.data(); return {id:doc.id,comunidadId:String(o.comunidadId || ""),amount:Number(o.amount)||0,paymentStatus:String(o.status)+" / "+String(o.creationOutcome || "sin_antecedentes"),restart:true}; })),
-    limitado: failed.size === 100 || additional.size === 100 || additionalReviews.length >= 100 || communities.size === 200 || licenses.size === 200 || reviews.size === 100,
+    limitado: incidentsLimited || failed.size === 100 || additional.size === 100 || communities.size === 200 || licenses.size === 200 || reviews.size === 100,
   };
 });
 
