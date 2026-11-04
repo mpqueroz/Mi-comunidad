@@ -2103,7 +2103,7 @@ td, .stat-number, .rc-monto, .cj-monto{ font-variant-numeric:tabular-nums; }
 <div id="modalBackdrop"
      class="modal-backdrop hidden">
 
-    <div class="modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1">
 
         <div class="modal-header">
 
@@ -2112,6 +2112,7 @@ td, .stat-number, .rc-monto, .cj-monto{ font-variant-numeric:tabular-nums; }
             </h2>
 
             <button class="close-btn"
+                    aria-label="Cerrar ventana"
                     onclick="closeModal()">
                 ×
             </button>
@@ -2816,6 +2817,14 @@ function saveData(name, value){
    familiares, visitas y control de acceso general.
 ================================ */
 
+// Solo presentación: nunca se sobrescriben listas históricas al filtrar.
+function personasFichaValidas(value){
+    if(!Array.isArray(value)) return [];
+    return value.filter(p => p && typeof p === 'object' && !Array.isArray(p)
+        && typeof p.nombre === 'string'
+        && ['rut','parentesco','motivo'].every(k => p[k] == null || typeof p[k] === 'string'));
+}
+
 function limpiarRut(rut){
     return (rut || "").replace(/[^0-9kK]/g, "").toUpperCase();
 }
@@ -3161,57 +3170,43 @@ async function generarCobroMensual(monto, vencimiento){
 // opciones (las usa la conciliación bancaria): fechaPago y metodoPago del
 // banco, y silencioso para no mostrar un toast por cada movimiento.
 // Devuelve el id del ingreso creado en Contabilidad (o null si falló).
+// Cada confirmación y su asiento contable se guardan en una transacción.
+// La misma promesa se comparte entre clics repetidos para preservar el id
+// del movimiento que necesitan los flujos de conciliación bancaria.
+const ingresosEnCurso = new Map();
+async function confirmarIngresoEnServidor(tipo, registro, opciones){
+    const clave = community.id + ':' + tipo + ':' + registro.id;
+    if(ingresosEnCurso.has(clave)) return ingresosEnCurso.get(clave);
+    const comunidadId = community.id;
+    const datos = {comunidadId, tipo, id:registro.id,
+        fechaPago:opciones.fechaPago || registro.pagoInformado?.fecha || hoyISO(),
+        metodoPago:textoMetodoPago(registro, opciones.metodoPago || 'Registrado por administración')};
+    const pendiente = (async () => {
+        try {
+            const resultado = await functions.httpsCallable('confirmarIngresoComunidad')(datos);
+            if(!resultado.data?.ok || typeof resultado.data.movimientoId !== 'string' || !resultado.data.movimientoId){
+                throw Error('No se pudo confirmar el registro contable. Vuelve a consultar el pago.');
+            }
+            if(community.id === comunidadId){
+                renderAdmin();
+                if(!opciones.silencioso) showToast((tipo === 'gasto' ? 'Pago registrado para el depto ' : 'Pago de multa registrado para el depto ') + registro.depto);
+            }
+            return resultado.data.movimientoId;
+        } catch(err){
+            console.error(err);
+            showToast(err.message || 'No se pudo guardar el pago. Intenta nuevamente.');
+            return null;
+        }
+    })();
+    ingresosEnCurso.set(clave, pendiente);
+    try { return await pendiente; }
+    finally { ingresosEnCurso.delete(clave); }
+}
+
 async function marcarGastoPagado(id, opciones = {}){
-
     const gasto = gastosComunes.find(g => g.id === id);
-
-    if(!gasto){
-        return null;
-    }
-
-    gasto.fechaPago = opciones.fechaPago || (gasto.pagoInformado && gasto.pagoInformado.fecha) || hoyISO();
-    gasto.metodoPago = textoMetodoPago(gasto, opciones.metodoPago || "Registrado por administración");
-    gasto.estado = "Pagado";
-
-    renderAdmin();
-
-    try {
-        await refComunidadActual().collection("gastosComunes").doc(id).update({
-            estado:"Pagado",
-            fechaPago:gasto.fechaPago,
-            metodoPago:gasto.metodoPago,
-            confirmadoEn:Date.now()
-        });
-    } catch(err){
-        console.error(err);
-        showToast("No se pudo guardar el pago. Revisa tu conexión.");
-        return null;
-    }
-
-    const contableId = await registrarMovimientoContable({
-        tipo:"Ingreso",
-        categoria:"Gasto común",
-        descripcion:`Gasto común depto ${gasto.depto} · ${periodoLabel(gasto.periodo)}`,
-        monto:gasto.monto,
-        fecha:gasto.fechaPago,
-        origen:"Automático",
-        depto:gasto.depto
-    });
-
-    crearNotificacion({
-        icon:"circle-check",
-        titulo:"Pago de gasto común confirmado",
-        meta:`${periodoLabel(gasto.periodo)} · ${formatCLP(gasto.monto)}`,
-        depto:gasto.depto,
-        paraTodos:false
-    });
-
-    if(!opciones.silencioso){
-        showToast("Pago registrado para el depto " + gasto.depto);
-    }
-
-    return contableId;
-
+    if(!gasto) return null;
+    return confirmarIngresoEnServidor('gasto', gasto, opciones);
 }
 
 
@@ -4856,39 +4851,32 @@ async function generarNominaMensual(){
 }
 
 
+const pagosOperativosEnCurso = new Map();
+async function registrarPagoOperativo(tipo, id, mensaje){
+    const clave = community.id + ':' + tipo + ':' + id;
+    if(pagosOperativosEnCurso.has(clave)) return pagosOperativosEnCurso.get(clave);
+    const comunidadId = community.id;
+    const pendiente = (async () => {
+        try {
+            const resultado = await functions.httpsCallable('registrarPagoOperativoMiComunidad')({comunidadId, tipo, id});
+            if(!resultado.data?.ok) throw Error('No se pudo confirmar la operación. Vuelve a consultar el registro.');
+            if(community.id === comunidadId){ showToast(mensaje); renderAdmin(); }
+            return resultado.data.movimientoId;
+        } catch(err){
+            console.error(err);
+            showToast(err.message || 'No se pudo registrar la operación. Intenta nuevamente.');
+            return null;
+        }
+    })();
+    pagosOperativosEnCurso.set(clave, pendiente);
+    try { return await pendiente; }
+    finally { pagosOperativosEnCurso.delete(clave); }
+}
+
 async function pagarRemuneracion(id){
-
     const r = remuneraciones.find(x => x.id === id);
-
-    if(!r){
-        return;
-    }
-
-    const fechaPago = hoyISO();
-
-    try {
-        await refComunidadActual().collection("remuneraciones").doc(id).update({
-            estado:"Pagado",
-            fechaPago:fechaPago
-        });
-    } catch(err){
-        console.error(err);
-        showToast("No se pudo registrar el pago. Revisa tu conexión.");
-        return;
-    }
-
-    await registrarMovimientoContable({
-        tipo:"Egreso",
-        categoria:"Remuneraciones",
-        descripcion:`Sueldo ${r.nombre} (${r.cargo}) · ${periodoLabel(r.periodo)}`,
-        monto:r.monto,
-        fecha:fechaPago,
-        origen:"Automático"
-    });
-
-    showToast("Sueldo pagado a " + r.nombre);
-    renderAdmin();
-
+    if(!r) return;
+    return registrarPagoOperativo('remuneracion', id, 'Sueldo pagado a ' + r.nombre);
 }
 
 
@@ -4928,38 +4916,8 @@ function actualizarEstadosMantencion(){
 
 
 async function marcarMantencionRealizada(id){
-
-    const m = mantenciones.find(x => x.id === id);
-
-    if(!m){
-        return;
-    }
-
-    const fechaRealizada = hoyISO();
-
-    try {
-        await refComunidadActual().collection("mantenciones").doc(id).update({
-            estado:"Realizada",
-            fechaRealizada:fechaRealizada
-        });
-    } catch(err){
-        console.error(err);
-        showToast("No se pudo actualizar la mantención. Revisa tu conexión.");
-        return;
-    }
-
-    await registrarMovimientoContable({
-        tipo:"Egreso",
-        categoria:"Proveedores",
-        descripcion:`${m.tipo} · ${m.proveedor}`,
-        monto:m.monto,
-        fecha:fechaRealizada,
-        origen:"Automático"
-    });
-
-    showToast("Mantención marcada como realizada");
-    renderAdmin();
-
+    if(!mantenciones.some(m => m.id === id)) return;
+    return registrarPagoOperativo('mantencion', id, 'Mantención y egreso registrados correctamente');
 }
 
 
@@ -7291,8 +7249,8 @@ function renderPerfil(){
                         </p>
 
                         ${
-                            (miResidente.familiares || []).length
-                                ? miResidente.familiares.map((f, idx) => `
+                            personasFichaValidas(miResidente.familiares).length
+                                ? personasFichaValidas(miResidente.familiares).map((f, idx) => `
                                     <div class="list-item">
                                         <div class="list-icon">${icon('👤')}</div>
                                         <div class="list-content">
@@ -7328,8 +7286,8 @@ function renderPerfil(){
                         </p>
 
                         ${
-                            (miResidente.restringidos || []).length
-                                ? miResidente.restringidos.map((p, idx) => `
+                            personasFichaValidas(miResidente.restringidos).length
+                                ? personasFichaValidas(miResidente.restringidos).map((p, idx) => `
                                     <div class="restricted-card">
                                         <div class="restricted-icon">${icon('ban')}</div>
                                         <div class="list-content">
@@ -8002,7 +7960,7 @@ function exportarTabAdmin(){
         descargarCSV("residentes_" + sufijo,
             ["Depto", "Nombre", "RUT", "Teléfono", "Estado", "Propietario", "Arrendatario", "Airbnb", "Familiares"],
             residentesDirectorio.slice().sort((a, b) => String(a.depto).localeCompare(String(b.depto), "es", {numeric:true}))
-                .map(r => [r.depto, r.nombre, r.rut, r.telefono, r.estado, r.nombreDueno || "", r.nombreArrendatario || "", r.esAirbnb ? "Sí" : "No", (r.familiares || []).length]));
+                .map(r => [r.depto, r.nombre, r.rut, r.telefono, r.estado, r.nombreDueno || "", r.nombreArrendatario || "", r.esAirbnb ? "Sí" : "No", personasFichaValidas(r.familiares).length]));
     } else if(adminTab === "finanzas"){
         descargarCSV("gastos_comunes_" + sufijo,
             ["Período", "Depto", "Residente", "Monto", "Vencimiento", "Estado", "Fecha de pago", "Método de pago"],
@@ -8961,56 +8919,9 @@ function actualizarMontoSugeridoMulta(){
 
 // Mismas opciones y retorno que marcarGastoPagado().
 async function marcarMultaPagada(id, opciones = {}){
-
     const multa = multas.find(m => m.id === id);
-
-    if(!multa){
-        return null;
-    }
-
-    multa.estado = "Pagada";
-    multa.fechaPago = opciones.fechaPago || (multa.pagoInformado && multa.pagoInformado.fecha) || hoyISO();
-    multa.metodoPago = textoMetodoPago(multa, opciones.metodoPago || "Registrado por administración");
-
-    renderAdmin();
-
-    try {
-        await refComunidadActual().collection("multas").doc(id).update({
-            estado:"Pagada",
-            fechaPago:multa.fechaPago,
-            metodoPago:multa.metodoPago,
-            confirmadoEn:Date.now()
-        });
-    } catch(err){
-        console.error(err);
-        showToast("No se pudo guardar el pago. Revisa tu conexión.");
-        return null;
-    }
-
-    const contableId = await registrarMovimientoContable({
-        tipo:"Ingreso",
-        categoria:"Multa",
-        descripcion:`Multa "${multa.tipoMultaNombre}" · Depto ${multa.depto}`,
-        monto:multa.monto,
-        fecha:multa.fechaPago,
-        origen:"Automático",
-        depto:multa.depto
-    });
-
-    crearNotificacion({
-        icon:"circle-check",
-        titulo:"Pago de multa confirmado",
-        meta:`${multa.tipoMultaNombre} · ${formatCLP(multa.monto)}`,
-        depto:multa.depto,
-        paraTodos:false
-    });
-
-    if(!opciones.silencioso){
-        showToast("Pago de multa registrado para el depto " + multa.depto);
-    }
-
-    return contableId;
-
+    if(!multa) return null;
+    return confirmarIngresoEnServidor('multa', multa, opciones);
 }
 
 
@@ -9619,8 +9530,8 @@ function fichaDeptoHtml(r){
     const badgeSolicitud = {Pendiente:"badge-yellow", "En proceso":"badge-blue", Resuelto:"badge-green"};
     const badgePago = {Pagado:"badge-green", Pagada:"badge-green", Pendiente:"badge-yellow", Atrasado:"badge-red", "Por confirmar":"badge-blue"};
 
-    const familiares = (r.familiares || []).filter(Boolean);
-    const restringidos = (r.restringidos || []).filter(Boolean);
+    const familiares = personasFichaValidas(r.familiares);
+    const restringidos = personasFichaValidas(r.restringidos);
     const solicitudes = incidencias.filter(i => i.depto === r.depto).sort((a, b) => mcTs(b.ts) - mcTs(a.ts));
     const gastosDepto = gastosComunes.filter(g => g.depto === r.depto).sort((a, b) => String(b.periodo).localeCompare(String(a.periodo)));
     const multasDepto = multas.filter(m => m.depto === r.depto).sort((a, b) => mcTs(b.ts) - mcTs(a.ts));
@@ -9924,7 +9835,7 @@ function resultadosBusquedaConserjeHtml(q){
         .forEach(r => {
             const porDepto = String(r.depto).startsWith(n);
             const porNombre = normalizarTexto(r.nombre).includes(n);
-            const familiar = (r.familiares || []).filter(Boolean).find(f => normalizarTexto(f.nombre).includes(n));
+            const familiar = personasFichaValidas(r.familiares).find(f => normalizarTexto(f.nombre).includes(n));
             if(!porDepto && !porNombre && !familiar){ return; }
             const detalle = [
                 familiar && !porNombre && !porDepto ? "Familiar: " + familiar.nombre : "",
@@ -11263,7 +11174,7 @@ const modalFormBuilders = {
 
         const e = confirmarRetiroPaquete;
         const residente = residentesDirectorio.find(r => r.depto === e.depto);
-        const familiaresOpts = (residente && residente.familiares || [])
+        const familiaresOpts = personasFichaValidas(residente?.familiares)
             .map((f, i) => `<option value="familiar:${esc(i)}">${esc(f.nombre)} (familiar)</option>`)
             .join("");
 
@@ -11682,6 +11593,60 @@ const modalFormBuilders = {
 };
 
 
+let focoAnteriorModal = null;
+let focoExteriorModal = null;
+let focoModalActivo = false;
+document.addEventListener('focusin', event => {
+    if(!event.target.closest('#modalBackdrop')) focoExteriorModal = event.target;
+});
+function activarFocoModal(){
+    const fondo = document.getElementById('modalBackdrop');
+    if(fondo.classList.contains('hidden')) return;
+    const dialogo = fondo.querySelector('.modal');
+    if(!dialogo) return;
+    if(!focoModalActivo){
+        focoAnteriorModal = dialogo.contains(document.activeElement) ? focoExteriorModal : document.activeElement;
+        focoModalActivo = true;
+    }
+    document.getElementById('app').inert = true;
+    document.getElementById('loginScreen').inert = true;
+    if(!dialogo.contains(document.activeElement)){
+        (dialogo.querySelector('input:not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled])') || dialogo).focus();
+    }
+}
+function restaurarFocoModal(){
+    document.getElementById('app').inert = false;
+    document.getElementById('loginScreen').inert = false;
+    const anterior = focoAnteriorModal;
+    focoAnteriorModal = null;
+    focoModalActivo = false;
+    if(anterior?.isConnected && !anterior.closest('.hidden')) anterior.focus();
+}
+document.addEventListener('keydown', event => {
+    const fondo = document.getElementById('modalBackdrop');
+    if(fondo.classList.contains('hidden')) return;
+    if(event.key === 'Escape'){ event.preventDefault(); closeModal(); return; }
+    if(event.key !== 'Tab') return;
+    const dialogo = fondo.querySelector('.modal');
+    const controles = [...dialogo.querySelectorAll('button, [href], input, select, textarea, [tabindex]')]
+        .filter(el => !el.disabled && el.tabIndex >= 0 && !el.closest('.hidden, [hidden]') && el.getClientRects().length);
+    const primero = controles[0], ultimo = controles[controles.length - 1];
+    if(!primero){ event.preventDefault(); dialogo.focus(); return; }
+    if(event.shiftKey && (document.activeElement === primero || !controles.includes(document.activeElement))){
+        event.preventDefault(); ultimo.focus();
+    } else if(!event.shiftKey && (document.activeElement === ultimo || !controles.includes(document.activeElement))){
+        event.preventDefault(); primero.focus();
+    }
+});
+// También cubre los paneles de los módulos que muestran el modal directamente.
+if(typeof MutationObserver !== 'undefined'){
+    new MutationObserver(() => {
+        if(document.getElementById('modalBackdrop').classList.contains('hidden')){
+            if(focoModalActivo) restaurarFocoModal();
+        } else activarFocoModal();
+    }).observe(document.getElementById('modalBackdrop'), {attributes:true, attributeFilter:['class']});
+}
+
 function openModal(mode, context){
 
     modalMode = mode;
@@ -11710,6 +11675,7 @@ function openModal(mode, context){
     if(mode === "buscarFicha"){
         renderBuscarFicha();
     }
+    activarFocoModal();
 
 }
 
@@ -12056,30 +12022,36 @@ function abrirModalFamiliar(depto){
 }
 
 
-async function quitarFamiliar(depto, idx){
-
+async function guardarIntegranteFicha(residente, tipo, accion, persona){
+    const resultado = await functions.httpsCallable('gestionarIntegrantesFichaMiComunidad')({
+        comunidadId:community.id, uid:residente.uid, tipo, accion, persona
+    });
+    if(!resultado.data?.ok || !Array.isArray(resultado.data.personas)) throw Error('No se pudo confirmar la ficha actualizada. Vuelve a consultarla.');
+    residente[tipo] = resultado.data.personas;
+}
+function refrescarIntegrantesFicha(residente){
+    if(currentPage === 'perfil'){ closeModal(); renderPerfil(); }
+    else openModal('detalleResidente', residente);
+}
+const integrantesEnCurso = new Set();
+async function quitarIntegranteFicha(depto, idx, tipo){
     const residente = residentesDirectorio.find(r => r.depto === depto);
-
-    if(!residente || !residente.familiares){
-        return;
-    }
-
-    residente.familiares.splice(idx, 1);
-    showToast("Familiar eliminado de la ficha.");
-
-    if(currentPage === "perfil"){
-        renderPerfil();
-    } else {
-        openModal("detalleResidente", residente);
-    }
-
+    const persona = personasFichaValidas(residente?.[tipo])[idx];
+    const clave = `${residente?.uid}:${tipo}:${JSON.stringify(persona)}`;
+    if(!residente || !persona || integrantesEnCurso.has(clave)) return;
+    integrantesEnCurso.add(clave);
     try {
-        await residenteDocRef(residente).update({familiares: residente.familiares});
+        await guardarIntegranteFicha(residente, tipo, 'eliminar', persona);
+        refrescarIntegrantesFicha(residente);
+        showToast(tipo === 'familiares' ? 'Familiar eliminado de la ficha.' : 'Persona eliminada de la lista sin acceso autorizado.');
     } catch(err){
         console.error(err);
-        showToast("No se pudo guardar el cambio. Revisa tu conexión.");
-    }
+        showToast(err.message || 'No se pudo guardar el cambio. Intenta nuevamente.');
+    } finally { integrantesEnCurso.delete(clave); }
+}
 
+async function quitarFamiliar(depto, idx){
+    return quitarIntegranteFicha(depto, idx, 'familiares');
 }
 
 
@@ -12089,29 +12061,7 @@ function abrirModalRestringido(depto){
 
 
 async function quitarRestringido(depto, idx){
-
-    const residente = residentesDirectorio.find(r => r.depto === depto);
-
-    if(!residente || !residente.restringidos){
-        return;
-    }
-
-    residente.restringidos.splice(idx, 1);
-    showToast("Persona eliminada de la lista sin acceso autorizado.");
-
-    if(currentPage === "perfil"){
-        renderPerfil();
-    } else {
-        openModal("detalleResidente", residente);
-    }
-
-    try {
-        await residenteDocRef(residente).update({restringidos: residente.restringidos});
-    } catch(err){
-        console.error(err);
-        showToast("No se pudo guardar el cambio. Revisa tu conexión.");
-    }
-
+    return quitarIntegranteFicha(depto, idx, 'restringidos');
 }
 
 
@@ -12171,7 +12121,7 @@ function buscarRestriccionEnDepto(depto, nombre, rut){
     const rutLimpio = limpiarRut(rut || "");
     const nombreLimpio = (nombre || "").trim().toLowerCase();
 
-    return residente.restringidos.filter(Boolean).find(p => {
+    return personasFichaValidas(residente.restringidos).find(p => {
         const pRutLimpio = limpiarRut(p.rut || "");
         const pNombreLimpio = (p.nombre || "").trim().toLowerCase();
         const matchRut = pRutLimpio && rutLimpio && pRutLimpio === rutLimpio;
@@ -12514,6 +12464,7 @@ function closeModal(){
 
     modalMode = null;
     modalContext = null;
+    restaurarFocoModal();
 
 }
 
@@ -12702,7 +12653,7 @@ async function confirmarEntregaEncomienda(){
         }
     } else if(quien.indexOf("familiar:") === 0){
         const idx = parseInt(quien.split(":")[1], 10);
-        const familiar = residente && residente.familiares ? residente.familiares[idx] : null;
+        const familiar = personasFichaValidas(residente?.familiares)[idx] || null;
         retiradoPorNombre = familiar ? familiar.nombre : "Familiar";
         retiradoPorRelacion = "Familiar";
     }
@@ -13409,26 +13360,13 @@ async function saveModal(){
             return;
         }
 
-        if(!residente.familiares){
-            residente.familiares = [];
-        }
-
-        residente.familiares.push({nombre:nombre, rut:rut, parentesco:parentesco});
-
-        showToast("Familiar agregado a la ficha");
-
-        if(currentPage === "perfil"){
-            closeModal();
-            renderPerfil();
-        } else {
-            openModal("detalleResidente", residente);
-        }
-
         try {
-            await residenteDocRef(residente).update({familiares: residente.familiares});
+            await guardarIntegranteFicha(residente, 'familiares', 'agregar', {nombre, rut, parentesco});
+            refrescarIntegrantesFicha(residente);
+            showToast('Familiar agregado a la ficha');
         } catch(err){
             console.error(err);
-            showToast("No se pudo guardar el cambio. Revisa tu conexión.");
+            showToast(err.message || 'No se pudo guardar el cambio. Intenta nuevamente.');
         }
 
     } else if(modalMode === "restringido"){
@@ -13455,26 +13393,13 @@ async function saveModal(){
             return;
         }
 
-        if(!residente.restringidos){
-            residente.restringidos = [];
-        }
-
-        residente.restringidos.push({nombre:nombre, rut:rut, motivo:motivo});
-
-        showToast("Persona agregada a la lista sin acceso autorizado");
-
-        if(currentPage === "perfil"){
-            closeModal();
-            renderPerfil();
-        } else {
-            openModal("detalleResidente", residente);
-        }
-
         try {
-            await residenteDocRef(residente).update({restringidos: residente.restringidos});
+            await guardarIntegranteFicha(residente, 'restringidos', 'agregar', {nombre, rut, motivo});
+            refrescarIntegrantesFicha(residente);
+            showToast('Persona agregada a la lista sin acceso autorizado');
         } catch(err){
             console.error(err);
-            showToast("No se pudo guardar el cambio. Revisa tu conexión.");
+            showToast(err.message || 'No se pudo guardar el cambio. Intenta nuevamente.');
         }
 
     } else if(modalMode === "conserje"){

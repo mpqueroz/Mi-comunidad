@@ -3,6 +3,12 @@
 const fs=require('node:fs');
 const path=require('node:path');
 const {createRequire}=require('node:module');
+const crypto=require('node:crypto');
+function fingerprint(ruleset){return {name:ruleset.name,sha256:crypto.createHash('sha256').update(ruleset.source[0].content).digest('hex')};}
+function assertUnchanged(prepared,current){
+ const actual=fingerprint(current);
+ if(!prepared.name||prepared.name!==actual.name||prepared.sha256!==actual.sha256)throw Error('Las reglas compartidas cambiaron durante la validación. Abortar, preparar y probar otra vez.');
+}
 
 function skip(source,at){
   while(at<source.length){
@@ -60,6 +66,11 @@ async function main(){
   if(current.source.length!==1)throw Error('El conjunto publicado tiene varios archivos; requiere revisión.');
   const file=path.join(root,'firestore.rules');
   const local=fs.readFileSync(file,'utf8');
+  const stateFile=path.join(process.env.RUNNER_TEMP||require('node:os').tmpdir(),'mi-comunidad-reglas-base.json');
+  if(process.argv.includes('--assert-unchanged')){
+    assertUnchanged(JSON.parse(fs.readFileSync(stateFile,'utf8')),current);
+    console.log('Reglas base sin cambios desde la preparación.');return;
+  }
   if(process.argv.includes('--verify')){
     if(current.source[0].content!==local)throw Error('Las reglas publicadas no coinciden con las preparadas.');
     console.log('Reglas publicadas verificadas; se conservaron las demás aplicaciones.');
@@ -69,8 +80,9 @@ async function main(){
   const merged=merge(live,local);
   const backup=path.join(process.env.RUNNER_TEMP||require('node:os').tmpdir(),'mi-comunidad-reglas-anteriores.rules');
   fs.writeFileSync(backup,live,{mode:0o600});
+  fs.writeFileSync(stateFile,JSON.stringify(fingerprint(current)),{mode:0o600});
   fs.writeFileSync(file,merged);
   console.log('Preparadas únicamente las reglas de Mi Comunidad sobre las reglas vigentes.');
 }
-module.exports={merge,section};
+module.exports={merge,section,fingerprint,assertUnchanged};
 if(require.main===module)main().catch(err=>{console.error(err.message);process.exitCode=1;});

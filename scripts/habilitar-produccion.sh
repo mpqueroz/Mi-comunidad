@@ -1,14 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
-# Probar y publicar el bloqueo de fixtures antes de conectar credenciales reales.
-gcloud auth print-access-token >/dev/null
-npm --prefix functions ci --no-audit --no-fund
+root_dir="$PWD"
+# Instalar y probar antes de consultar credenciales. No crear secretos ni IAM.
+npm --prefix functions ci --ignore-scripts --no-audit --no-fund
 npm --prefix functions test
-# Las funciones de cobro viven en su propio grupo de despliegue
-# ("mi-comunidad"); firebase.pagos.json lo declara sin tocar el resto.
-# Reutiliza los secretos *_PRODUCTION ya guardados: no pide credenciales.
-npx --yes firebase-tools@15.34.0 deploy --project mercado-ciudadano --config firebase.pagos.json \
-  --only functions:mi-comunidad:crearCheckoutMiComunidad,functions:mi-comunidad:webhookMercadoPagoMiComunidad \
+npm --prefix tests ci --ignore-scripts --no-audit --no-fund
+npm --prefix tests audit --audit-level=moderate
+staging_parent="$(mktemp -d)"
+trap 'rm -rf "$staging_parent"' EXIT
+# Declaraciones productivas desde el análisis, nunca parche posterior desde TEST.
+node scripts/preparar-pagos-produccion.cjs "$staging_parent/release"
+npm --prefix "$staging_parent/release/functions" ci --ignore-scripts --no-audit --no-fund
+gcloud auth print-access-token >/dev/null
+python3 "$root_dir/scripts/conectar-produccion.py" --preflight
+cd "$staging_parent/release"
+"$root_dir/tests/node_modules/.bin/firebase" deploy --project mercado-ciudadano --config firebase.json \
+  --only functions:mi-comunidad:webhookMercadoPagoMiComunidad,functions:mi-comunidad:conciliarPagosMiComunidad,functions:mi-comunidad:consultarLicenciaMiComunidad,functions:mi-comunidad:cotizarPlanMiComunidad,functions:mi-comunidad:resolverRevisionPagoMiComunidad,functions:mi-comunidad:reiniciarCheckoutFallidoMiComunidad,functions:mi-comunidad:crearCheckoutMiComunidad \
   --non-interactive
-python3 scripts/conectar-produccion.py
+python3 "$root_dir/scripts/conectar-produccion.py"
+node "$root_dir/scripts/comprobar-despliegue.cjs" --commercial

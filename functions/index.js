@@ -1372,43 +1372,9 @@ function hoyChile() {
   return new Intl.DateTimeFormat("en-CA", {timeZone: "America/Santiago"}).format(new Date());
 }
 
-async function marcarVencidos(query, campoFecha, hoy, nuevoEstado) {
-  const snap = await query.get();
-  const vencidos = snap.docs.filter((d) => String(d.get(campoFecha) || "") < hoy);
-  for (let i = 0; i < vencidos.length; i += 400) {
-    const batch = getFirestore().batch();
-    vencidos.slice(i, i + 400).forEach((d) => batch.update(d.ref, {estado: nuevoEstado}));
-    await batch.commit();
-  }
-  return vencidos.length;
-}
-
 exports.actualizarVencimientosMiComunidad = onSchedule(
-    {schedule: "15 0 * * *", timeZone: "America/Santiago"},
-    async () => {
-      const db = getFirestore();
-      const hoy = hoyChile();
-      const comunidades = await db.collection(COMUNIDADES_COLLECTION).get();
-
-      let gastos = 0;
-      let mantenciones = 0;
-
-      for (const c of comunidades.docs) {
-        if (c.get("estado") === "Suspendida") {
-          continue;
-        }
-        const licencia = await db.collection(LICENCIAS_COLLECTION).doc(c.id).get();
-        if (licencia.exists && !require("./licencias").evaluateLicense(licencia.data()).allowed) continue;
-        gastos += await marcarVencidos(
-            c.ref.collection("gastosComunes").where("estado", "==", "Pendiente"),
-            "vencimiento", hoy, "Atrasado");
-        mantenciones += await marcarVencidos(
-            c.ref.collection("mantenciones").where("estado", "==", "Programada"),
-            "fecha", hoy, "Atrasada");
-      }
-
-      console.log(`Vencimientos ${hoy}: ${gastos} gastos atrasados, ${mantenciones} mantenciones atrasadas`);
-    });
+    {schedule: "15 0 * * *", timeZone: "America/Santiago", timeoutSeconds: 540},
+    async () => require("./vencimientos").actualizarVencimientos(getFirestore(), hoyChile()));
 
 
 /* =====================================================================
@@ -1440,3 +1406,7 @@ const profesional = require('./profesional')({firestore: Object.assign(() => get
 Object.keys(profesional).forEach((nombre) => {
   if (!exports[nombre]) exports[nombre] = profesional[nombre];
 });
+
+Object.assign(exports, require("./integridad")({
+  firestore: Object.assign(() => getFirestore(), {FieldValue, Timestamp}),
+}, onCall, HttpsError));

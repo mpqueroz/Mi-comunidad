@@ -52,24 +52,15 @@ Tus archivos `firebase.json`, `.firebaserc` y `functions/package.json` no vienen
 
 ## Cómo subirlo
 
-Copia todo sobre tu carpeta `mi-comunidad-firebase` y ejecuta:
+La publicación operativa se realiza con el workflow `Firebase` sobre `main` tras revisar el cambio. Publica funciones explícitas y un sitio, combina las reglas con las vigentes, las prueba y comprueba otra vez su versión antes de publicarlas. No usar despliegues globales de funciones y reglas ni copiar reglas antiguas desde otra carpeta.
 
-    firebase deploy --only functions,firestore:rules,hosting
+Los pagos usan `bash scripts/habilitar-produccion.sh`, un procedimiento separado con declaraciones de secretos productivos desde el análisis. No modifica Hosting ni reglas. Publica únicamente siete funciones comerciales (checkout, webhook, consulta, cotización, resolución, reinicio verificado de checkout y conciliación). Ver `docs/pagos-produccion.md`.
 
-Si Firebase pregunta si borrar funciones que "no existen en tu código local"
-(onAnuncioAprobado, onContactoConfirmado, etc.), responde **N**: son de Mercado Ciudadano.
+## Reglas compartidas y concurrencia
 
-Para cambios solo del `index.html` o la demo, basta con:
+El proyecto `mercado-ciudadano` comparte Firestore entre Mi Comunidad, Mercado Ciudadano y Almacén Digital. Preparar reglas guarda versión y SHA-256 de la base vigente. La comprobación `--assert-unchanged` inmediatamente antes de publicar aborta si otro actor cambió esa base: preparar y probar nuevamente. No reintentar publicando una captura antigua.
 
-    firebase deploy --only hosting
-
-## Reglas de Firestore: IMPORTANTE
-
-El proyecto `mercado-ciudadano` es compartido por 3 apps: Mercado Ciudadano,
-Almacén Digital y Mi Comunidad. Firebase admite **un solo archivo de reglas**:
-el deploy de reglas desde cualquier carpeta reemplaza las de las tres.
-Copia este mismo `firestore.rules` a las carpetas de Mercado Ciudadano y
-Almacén Digital, y si cambias reglas de una app, edítalas aquí y vuelve a copiarlo.
+Firebase Rules no ofrece CAS (comparación e intercambio atómica) del release. Persiste un intervalo mínimo entre la última lectura y la publicación; coordinar una ventana exclusiva entre las tres aplicaciones y las operaciones de consola. `concurrency` solo coordina este repositorio. Ver `docs/operacion-produccion.md`.
 
 ## Scripts locales (crear-superadmin.js y restablecer-clave.js)
 

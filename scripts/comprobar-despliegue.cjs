@@ -22,8 +22,11 @@ async function main() {
     'gestionarEncomiendaMiComunidad', 'verificarFichaMiComunidad',
     'consultarLicenciaMiComunidad', 'crearCheckoutMiComunidad',
   ];
+  // El grupo comercial se valida solo tras su publicación explícita separada.
+  if(process.argv.includes('--commercial'))functions.push('cotizarPlanMiComunidad',
+      'resolverRevisionPagoMiComunidad', 'reiniciarCheckoutFallidoMiComunidad');
   // Las funciones nuevas solo existen publicadas después del deploy.
-  if(process.argv.includes('--release'))functions.push('generarCobrosMiComunidad',
+  if(process.argv.includes('--release'))functions.push('registrarPagoOperativoMiComunidad', 'gestionarIntegrantesFichaMiComunidad', 'confirmarIngresoComunidad', 'generarCobrosMiComunidad',
       'directorioConserjeriaMiComunidad', 'cambiarEstadoAdminMiComunidad', 'cambiarEstadoCuentaMiComunidad', 'crearAdministradorMiComunidad',
       'resumenComercialMiComunidad', 'historialPagosMiComunidad', 'rehabilitarLicenciaMiComunidad');
   for (const name of functions) {

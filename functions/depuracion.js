@@ -22,51 +22,80 @@ const PLAZOS = [
   {coleccion: "novedades", meses: 12},
   {coleccion: "notificaciones", meses: 12},
   // Las reservas guardan invitados con RUT; las de fecha futura se conservan.
-  {coleccion: "reservas", meses: 12, conservar: (d) => String(d.fecha || "") >= new Date().toISOString().slice(0, 10)},
+  {coleccion: "reservas", meses: 12, conservar: (d, ahora) => String(d.fecha || "") >= new Date(ahora).toISOString().slice(0, 10)},
   {coleccion: "auditoria", meses: 24},
 ];
 
 // Los registros guardan ts como milisegundos (Date.now()) o como Timestamp del
 // servidor; Firestore compara cada tipo por separado, así que se consultan ambos.
-async function vencidos(ref, plazo, ahora, Timestamp) {
+async function* paginasVencidas(ref, plazo, ahora, Timestamp) {
   const corte = ahora - plazo.meses * MES_MS;
-  const [numericos, fechas] = await Promise.all([
-    ref.collection(plazo.coleccion).where("ts", "<", corte).get(),
-    ref.collection(plazo.coleccion).where("ts", "<", Timestamp.fromMillis(corte)).get(),
-  ]);
-  return [...numericos.docs, ...fechas.docs].filter((d) => !(plazo.conservar && plazo.conservar(d.data())));
+  for (const limite of [corte, Timestamp.fromMillis(corte)]) {
+    let cursor;
+    for (;;) {
+      let query = ref.collection(plazo.coleccion).where("ts", "<", limite)
+          .orderBy("ts").orderBy("__name__").limit(400);
+      if (cursor) query = query.startAfter(cursor);
+      const snap = await query.get();
+      if (snap.empty) break;
+      yield snap.docs.filter((d) => {
+        const value = d.get("ts");
+        const tipoCorrecto = typeof limite === "number" ? typeof value === "number" : typeof value?.toMillis === "function";
+        return tipoCorrecto && !(plazo.conservar && plazo.conservar(d.data(), ahora));
+      });
+      // Avanzar incluso si la página completa contiene registros conservados.
+      cursor = snap.docs[snap.docs.length - 1];
+      if (snap.size < 400) break;
+    }
+  }
 }
 
 // Recorre todas las comunidades; con borrar=false solo devuelve cuántos
 // registros vencidos hay por comunidad y colección.
 async function depurar(db, {ahora = Date.now(), borrar = DEPURACION_ACTIVA, Timestamp, FieldValue}) {
   const resumen = [];
-  const comunidades = await db.collection("mi_comunidad_comunidades").get();
-  for (const comunidad of comunidades.docs) {
-    const conteo = {};
-    let total = 0;
-    for (const plazo of PLAZOS) {
-      const docs = await vencidos(comunidad.ref, plazo, ahora, Timestamp);
-      conteo[plazo.coleccion] = docs.length;
-      total += docs.length;
-      if (borrar) {
-        for (let i = 0; i < docs.length; i += 400) {
-          const batch = db.batch();
-          docs.slice(i, i + 400).forEach((d) => batch.delete(d.ref));
-          await batch.commit();
+  const fallos = [];
+  let cursor;
+  for (;;) {
+    let query = db.collection("mi_comunidad_comunidades").orderBy("__name__").limit(100);
+    if (cursor) query = query.startAfter(cursor);
+    const comunidades = await query.get();
+    if (comunidades.empty) break;
+    for (const comunidad of comunidades.docs) {
+      const conteo = {};
+      let total = 0;
+      try {
+      for (const plazo of PLAZOS) {
+        conteo[plazo.coleccion] = 0;
+        for await (const docs of paginasVencidas(comunidad.ref, plazo, ahora, Timestamp)) {
+          if (borrar && docs.length) {
+            const batch = db.batch();
+            // No borrar un registro que cambió después de leer la página.
+            docs.forEach((d) => batch.delete(d.ref, {lastUpdateTime: d.updateTime}));
+            await batch.commit();
+          }
+          conteo[plazo.coleccion] += docs.length;
+          total += docs.length;
         }
       }
+      if (borrar && total > 0) {
+        await comunidad.ref.collection("auditoria").add({
+          tipo: "Depuración programada",
+          detalle: conteo,
+          actorNombre: "Sistema",
+          ts: FieldValue.serverTimestamp(),
+        });
+      }
+      resumen.push({comunidadId: comunidad.id, total, conteo});
+      } catch (error) {
+        fallos.push(comunidad.id);
+        console.error("Depuración incompleta", {comunidadId: comunidad.id, mensaje: error.message});
+      }
     }
-    if (borrar && total > 0) {
-      await comunidad.ref.collection("auditoria").add({
-        tipo: "Depuración programada",
-        detalle: conteo,
-        actorNombre: "Sistema",
-        ts: FieldValue.serverTimestamp(),
-      });
-    }
-    resumen.push({comunidadId: comunidad.id, total, conteo});
+    cursor = comunidades.docs[comunidades.docs.length - 1];
+    if (comunidades.size < 100) break;
   }
+  if (fallos.length) throw new Error(`Depuración incompleta en ${fallos.length} comunidades; revisar registros y reintentar.`);
   return resumen;
 }
 

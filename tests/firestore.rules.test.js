@@ -74,10 +74,10 @@ test("administración sigue pudiendo notificar a todos", async () => {
 
 // ---- ficha del residente ----
 
-test("residente edita sus familiares y restringidos", async () => {
+test("residente no reemplaza listas: las modifica la función transaccional", async () => {
   const ref = residente().doc(`${BASE}/residentes/res1`);
-  await assertSucceeds(ref.update({familiares: [{nombre: "Luis", relacion: "Hijo"}]}));
-  await assertSucceeds(ref.update({restringidos: [{nombre: "Pedro"}]}));
+  await assertFails(ref.update({familiares: [{nombre: "Luis", relacion: "Hijo"}]}));
+  await assertFails(ref.update({restringidos: [{nombre: "Pedro"}]}));
 });
 
 test("residente NO puede agregar campos nuevos a su ficha", async () => {

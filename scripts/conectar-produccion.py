@@ -1,109 +1,67 @@
 #!/usr/bin/env python3
-"""Conecta únicamente los dos endpoints comerciales; no publica Hosting ni reglas."""
+"""Verificación de solo lectura; no parchea funciones, IAM ni secretos."""
 import json
 import subprocess
-import time
-import urllib.request
-import urllib.error
-
+import sys
 PROJECT = "mercado-ciudadano"
-ROOT = "projects/" + PROJECT + "/locations/us-central1/functions/"
-API = "https://cloudfunctions.googleapis.com/v2/"
-
-def gcloud(*args, value=None):
-    result = subprocess.run(["gcloud", *args, "--project=" + PROJECT],
-                            input=value, text=True, capture_output=True)
-    if result.returncode:
-        raise SystemExit("Google Cloud rechazó la operación: " + " ".join(args[:3]) +
-                         ". Revisa autorización y permisos. No repitas compras.")
-    return result.stdout.strip()
-
-TOKEN = gcloud("auth", "print-access-token")
-
-def api(path, payload=None, method=None):
-    req = urllib.request.Request(API + path,
-        data=json.dumps(payload).encode() if payload is not None else None,
-        headers={"Authorization": "Bearer " + TOKEN, "Content-Type": "application/json"},
-        method=method)
-    try:
-        with urllib.request.urlopen(req, timeout=60) as response:
-            return json.load(response)
-    except urllib.error.HTTPError as error:
-        raise SystemExit("Google Cloud respondió HTTP " + str(error.code) +
-                         ". Cambio incompleto; no inicies pagos.") from None
-
-def wait(operation):
-    for attempt in range(180):
-        result = api(operation["name"])
-        if result.get("done"):
-            if result.get("error"):
-                raise SystemExit("Actualización rechazada por Google Cloud. No inicies pagos.")
-            return
-        if attempt % 6 == 0:
-            print("Google Cloud sigue aplicando el cambio…", flush=True)
-        time.sleep(5)
-    raise SystemExit("La operación sigue en curso. No repitas el comando ni inicies pagos.")
-
-def version(secret):
-    data = json.loads(gcloud("secrets", "versions", "describe", "latest",
-                             "--secret=" + secret, "--format=json"))
-    if data.get("state") != "ENABLED":
-        raise SystemExit("Secreto no habilitado: " + secret)
-    return data["name"].rsplit("/", 1)[-1]
-
-def constant(secret, value):
-    result = subprocess.run(["gcloud", "secrets", "describe", secret,
-                             "--project=" + PROJECT], capture_output=True, text=True)
-    if result.returncode:
-        if "NOT_FOUND" not in result.stderr:
-            raise SystemExit("No se pudo consultar " + secret)
-        gcloud("secrets", "create", secret, "--replication-policy=automatic")
-    name = gcloud("secrets", "versions", "add", secret,
-                  "--data-file=-", "--format=value(name)", value=value)
-    return name.rsplit("/", 1)[-1]
-
-functions = {name: api(ROOT + name) for name in
-             ("crearCheckoutMiComunidad", "webhookMercadoPagoMiComunidad")}
-for name, function in functions.items():
+EXPECTED = {
+    "crearCheckoutMiComunidad": {"MC_MP_ACCESS_TOKEN", "MC_PLAN_ANUAL_CLP", "MC_MP_ENVIRONMENT", "MC_MP_WEBHOOK_URL", "MC_MP_TEST_ACCOUNT"},
+    "cotizarPlanMiComunidad": {"MC_PLAN_ANUAL_CLP", "MC_MP_ENVIRONMENT"},
+    "resolverRevisionPagoMiComunidad": {"MC_MP_ACCESS_TOKEN"},
+    "reiniciarCheckoutFallidoMiComunidad": {"MC_MP_ACCESS_TOKEN"},
+    "webhookMercadoPagoMiComunidad": {"MC_MP_ACCESS_TOKEN", "MC_MP_WEBHOOK_SECRET"},
+    "conciliarPagosMiComunidad": {"MC_MP_ACCESS_TOKEN"},
+    "consultarLicenciaMiComunidad": set(),
+}
+def read(*args):
+    result = subprocess.run(["gcloud", *args, "--project=" + PROJECT, "--format=json"], capture_output=True, text=True, check=True)
+    return json.loads(result.stdout)
+def verify_bindings(name, function, project_ids=None):
+    project_ids = project_ids or {PROJECT}
     if function.get("state") != "ACTIVE":
-        raise SystemExit("Función no activa: " + name)
-
-access = "MC_MP_ACCESS_TOKEN_PRODUCTION"
-signature = "MC_MP_WEBHOOK_SECRET_PRODUCTION"
-versions = {access: version(access), signature: version(signature)}
-# Configuración comercial confirmada por Marcelo: 800000 CLP / 12 meses.
-versions["MC_PLAN_ANUAL_CLP_PRODUCTION"] = constant("MC_PLAN_ANUAL_CLP_PRODUCTION", "800000")
-versions["MC_MP_ENVIRONMENT_PRODUCTION"] = constant("MC_MP_ENVIRONMENT_PRODUCTION", "production")
-mapping = {"MC_MP_ACCESS_TOKEN": access, "MC_MP_WEBHOOK_SECRET": signature,
-           "MC_PLAN_ANUAL_CLP": "MC_PLAN_ANUAL_CLP_PRODUCTION",
-           "MC_MP_ENVIRONMENT": "MC_MP_ENVIRONMENT_PRODUCTION"}
-plans = {}
-for name, function in functions.items():
-    config = function["serviceConfig"]
-    bindings = config.get("secretEnvironmentVariables", [])
-    expected = {"MC_MP_ACCESS_TOKEN", "MC_PLAN_ANUAL_CLP", "MC_MP_ENVIRONMENT"} if name.startswith("crear") else {"MC_MP_ACCESS_TOKEN", "MC_MP_WEBHOOK_SECRET"}
-    if not expected.issubset({item["key"] for item in bindings}):
-        raise SystemExit("Configuración inesperada en " + name + ". No se conectó producción.")
-    account = config.get("serviceAccountEmail")
-    if not account:
-        raise SystemExit("Falta cuenta de servicio en " + name)
-    for item in bindings:
-        if item["key"] in mapping:
-            target = mapping[item["key"]]
-            gcloud("secrets", "add-iam-policy-binding", target,
-                   "--member=serviceAccount:" + account,
-                   "--role=roles/secretmanager.secretAccessor", "--quiet")
-            item.update(projectId=PROJECT, secret=target, version=versions[target])
-    plans[name] = bindings
-
-# Primero receptor de avisos; después habilitar nuevas compras reales.
-for name in ("webhookMercadoPagoMiComunidad", "crearCheckoutMiComunidad"):
-    print("Conectando " + name + "…", flush=True)
-    wait(api(ROOT + name + "?updateMask=serviceConfig.secretEnvironmentVariables",
-             {"serviceConfig": {"secretEnvironmentVariables": plans[name]}}, "PATCH"))
-    current = api(ROOT + name)
-    actual = {s["key"]: (s["secret"], s["version"]) for s in current["serviceConfig"]["secretEnvironmentVariables"]}
-    if current.get("state") != "ACTIVE" or any(actual.get(s["key"]) != (s["secret"], s["version"]) for s in plans[name]):
-        raise SystemExit("No se confirmó la configuración. No inicies pagos.")
-print("SERVIDOR CONECTADO: producción, 800000 CLP, 12 meses.")
-print("Pendiente validar la pantalla comercial. No uses el enlace de prueba para comprar.")
+        raise ValueError("Función no activa: " + name)
+    bindings = function.get("serviceConfig", {}).get("secretEnvironmentVariables", [])
+    actual = {item["key"]: item for item in bindings}
+    if set(actual) != {key + "_PRODUCTION" for key in EXPECTED[name]}:
+        raise ValueError("Secretos inesperados en " + name)
+    for key, item in actual.items():
+        if item.get("secret") != key or not item.get("version") or str(item.get("projectId")) not in project_ids:
+            raise ValueError("Enlace de secreto inválido en " + name)
+def verify_receipt_ttl(fields):
+    suffix = "/collectionGroups/mi_comunidad_webhook_recibos/fields/expiresAt"
+    matching = [field for field in fields if field.get("name", "").endswith(suffix)]
+    if len(matching) != 1 or matching[0].get("ttlConfig", {}).get("state") != "ACTIVE":
+        raise ValueError("TTL de recibos webhook no ACTIVE; preparar expiresAt y esperar antes de publicar")
+    if matching[0]["ttlConfig"].get("expirationOffset", "0s") not in ("0s", "0.000000000s"):
+        raise ValueError("TTL de recibos tiene un desplazamiento inesperado")
+def preflight():
+    verify_receipt_ttl(read("firestore", "fields", "ttls", "list", "--collection-group=mi_comunidad_webhook_recibos", "--database=(default)"))
+    for key in {key for keys in EXPECTED.values() for key in keys}:
+        data = read("secrets", "versions", "describe", "latest", "--secret=" + key + "_PRODUCTION")
+        if data.get("state") != "ENABLED":
+            raise ValueError("Secreto no habilitado: " + key + "_PRODUCTION")
+    # Solo configuración no sensible. Tokens y firmas nunca se leen ni imprimen.
+    expected = {"MC_MP_ENVIRONMENT_PRODUCTION": "production", "MC_PLAN_ANUAL_CLP_PRODUCTION": "800000", "MC_MP_WEBHOOK_URL_PRODUCTION": "https://us-central1-mercado-ciudadano.cloudfunctions.net/webhookMercadoPagoMiComunidad"}
+    for secret, value in expected.items():
+        result = subprocess.run(["gcloud", "secrets", "versions", "access", "latest", "--secret=" + secret, "--project=" + PROJECT], capture_output=True, text=True, check=True)
+        if result.stdout.strip() != value:
+            raise ValueError("Configuración productiva inesperada: " + secret)
+    print("TTL y configuración comercial esperada verificados; ningún recurso modificado.")
+def main():
+    preflight()
+    if "--preflight" in sys.argv:
+        return
+    project = read("projects", "describe", PROJECT)
+    project_ids = {PROJECT, str(project["projectNumber"])}
+    for name in EXPECTED:
+        verify_bindings(name, read("functions", "describe", name, "--gen2", "--region=us-central1"), project_ids)
+        print(name + ": activa y configuración de producción verificada")
+    job = read("scheduler", "jobs", "describe", "firebase-schedule-conciliarPagosMiComunidad-us-central1", "--location=us-central1")
+    if job.get("state") != "ENABLED":
+        raise ValueError("Conciliación programada no habilitada")
+    print("Conciliación habilitada. Compra y reversos reales requieren validación separada.")
+if __name__ == "__main__":
+    try:
+        main()
+    except (ValueError, subprocess.CalledProcessError, json.JSONDecodeError) as error:
+        raise SystemExit("No se confirmó producción; no iniciar pagos. " + str(error)) from None

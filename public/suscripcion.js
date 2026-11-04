@@ -23,7 +23,7 @@
     return Math.max(0, Math.ceil((vence - (ahora || Date.now())) / MS_DIA));
   }
 
-  function htmlDocumentoTributario() {
+  function htmlDocumentoTributario(precio) {
     return '<form id="mc-datos-tributarios" style="margin-top:18px">' +
       '<fieldset style="display:grid;gap:10px;min-width:0;padding:16px;border:1px solid var(--border,#dbe3ef);border-radius:12px"><legend>Documento tributario</legend>' +
       '<label for="mc-documento-tipo">¿Boleta o factura?</label>' +
@@ -35,11 +35,14 @@
         return '<label for="mc-factura-' + campo[0] + '">' + campo[1] + '</label><input class="form-control" id="mc-factura-' + campo[0] + '" name="' + campo[0] + '" maxlength="' + campo[2] + '" disabled>';
       }).join('') + '</div></fieldset>' +
       '<p>El comprobante de pago y el documento tributario se gestionan por separado. Nodar emitirá y enviará tu boleta o factura al correo indicado una vez confirmado el pago.</p>' +
-      '<button type="submit" id="mc-pagar-licencia" class="primary-btn" style="margin-top:16px">Pagar 12 meses · $800.000</button></form>';
+      '<button type="submit" id="mc-pagar-licencia" class="primary-btn" style="margin-top:16px">Pagar 12 meses · ' + textoSeguro(precio) + '</button></form>';
   }
 
   function htmlLicencia(datos, ahora) {
     const d = datos || {};
+    const cotizacion = d.cotizacion;
+    const precioValido = cotizacion && Number.isSafeInteger(cotizacion.amount) && cotizacion.amount > 0 && cotizacion.currency === "CLP" && cotizacion.months === 12;
+    const precio = precioValido ? new Intl.NumberFormat("es-CL", {style:"currency", currency:"CLP", maximumFractionDigits:0}).format(cotizacion.amount) : "Precio pendiente de verificar";
     const sinLicencia = !d.estado || d.estado === "sin_licencia" || d.estado === "sin_estado";
     const suspendida = d.estado === "suspended";
     const prueba = d.estado === "trial";
@@ -54,9 +57,9 @@
       '<h2>' + titulo + '</h2>' +
       '<p>' + descripcion + '</p>' +
       (fecha ? '<p><strong>' + dias + '</strong> días restantes</p><p>Vencimiento: ' + textoSeguro(formatoFecha(fecha)) + '</p>' : '') +
-      '<p style="margin-top:18px"><strong>$800.000 CLP por comunidad · 12 meses</strong></p>' +
+      '<p style="margin-top:18px"><strong>' + textoSeguro(precio) + ' por comunidad · 12 meses</strong></p>' +
       '<p class="mc-suscripcion-nota">Pago seguro con Mercado Pago. La vigencia se actualiza cuando el servidor confirma el pago aprobado.</p>' +
-      (sinLicencia || suspendida ? '' : htmlDocumentoTributario()) +
+      (sinLicencia || suspendida || !precioValido ? '' : htmlDocumentoTributario(precio)) +
       '<button type="button" id="mc-actualizar-licencia" class="outline-btn" style="margin-top:12px">Actualizar estado</button>' +
       '<p id="mc-estado-pago" role="status" aria-live="polite"></p>' +
       '</section>';
@@ -67,7 +70,12 @@
     contenedor.textContent = "Consultando suscripción…";
     try {
       const resultado = await functions.httpsCallable("consultarLicenciaMiComunidad")({comunidadId: comunidadId});
-      contenedor.innerHTML = htmlLicencia(resultado.data);
+      const datos = resultado.data || {};
+      if (!["sin_licencia", "suspended"].includes(datos.estado)) {
+        const quote = await functions.httpsCallable("cotizarPlanMiComunidad")({});
+        datos.cotizacion = quote.data;
+      }
+      contenedor.innerHTML = htmlLicencia(datos);
       const boton = contenedor.querySelector("#mc-pagar-licencia");
       contenedor.querySelector("#mc-actualizar-licencia").addEventListener("click", function () {
         mostrar(contenedor, functions, comunidadId).catch(console.error);
