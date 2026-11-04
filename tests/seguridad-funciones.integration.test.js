@@ -47,7 +47,7 @@ test('respuesta correcta entrega la ficha protegida y todo intento queda auditad
   const mal = await h.call('verificarPreguntaSecretaMiComunidad', {uid: 'r1', respuesta: 'Sol'});
   assert.equal(mal.ok, false); assert.equal(mal.ficha, undefined);
   const bien = await h.call('verificarPreguntaSecretaMiComunidad', {uid: 'r1', respuesta: ' lúna '});
-  assert.equal(bien.ok, true); assert.equal(bien.ficha.rut, '111111111'); assert.equal(bien.ficha.restringidos[0].motivo, 'Orden judicial');
+  assert.equal(bien.ok, true); assert.equal(bien.ficha.rut, '111111111'); assert.equal(bien.ficha.restringidos[0].nombre, 'Pedro'); assert.equal(bien.ficha.restringidos[0].motivo, undefined);
   const audit = (await h.base.collection('auditoria').get()).docs.map(d => d.data());
   assert.deepEqual(audit.map(a => a.resultado).sort(), ['Correcta', 'Incorrecta']);
   assert.ok(audit.every(a => a.actorNombre === 'Conserje Uno' && a.depto === '101'));
@@ -179,4 +179,9 @@ test('la ficha tolera elementos nulos en sus listas', {skip: !enabled}, async ()
   const {ficha} = await h.call('verificarFichaMiComunidad', {uid: 'r2', motivo: 'Consulta por citofonía con el residente'});
   assert.deepEqual(ficha.restringidos, []);
   assert.deepEqual(ficha.familiares, []);
+});
+
+test('las reservas tienen ventana máxima de 90 días', {skip: !enabled}, async () => {
+  const h = await fixture();
+  await assert.rejects(h.call('crearReservaMiComunidad', {lugar: 'Quincho', fecha: '2099-01-01', bloqueId: 'b'}, 'r1', 'residente', {depto: '101'}), {code: 'invalid-argument'});
 });

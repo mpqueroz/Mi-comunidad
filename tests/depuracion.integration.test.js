@@ -43,7 +43,7 @@ test('simulación cuenta los vencidos sin borrar nada', {skip: !enabled}, async 
   const base = await sembrar();
   const resumen = await depurar(db, {ahora, borrar: false, Timestamp, FieldValue});
   const c = resumen.find((r) => r.comunidadId === base.id);
-  assert.deepEqual(c.conteo, {visitas: 2, visitasProgramadas: 2, accesos: 2, vehiculos: 2, encomiendas: 1, auditoria: 1});
+  assert.deepEqual(c.conteo, {visitas: 2, visitasProgramadas: 2, accesos: 2, vehiculos: 2, encomiendas: 1, novedades: 0, notificaciones: 0, reservas: 0, auditoria: 1});
   assert.equal(c.total, 10);
   assert.deepEqual(await ids(base, 'visitas'), ['nuevo', 'viejo-ms', 'viejo-ts']);
   assert.equal((await base.collection('auditoria').get()).size, 2);

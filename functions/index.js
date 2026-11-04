@@ -637,11 +637,6 @@ exports.crearReservaMiComunidad = onCall(async (request) => {
   if (fecha < hoyChile()) {
     throw new HttpsError("invalid-argument", "No puedes reservar una fecha pasada.");
   }
-  const fechaMaxima = new Date(Date.parse(`${hoyChile()}T00:00:00Z`) + MAX_DIAS_RESERVA * 86400000)
-      .toISOString().slice(0, 10);
-  if (fecha > fechaMaxima) {
-    throw new HttpsError("invalid-argument", `Solo puedes reservar hasta ${MAX_DIAS_RESERVA} días hacia adelante.`);
-  }
 
   if (!bloqueId || bloqueId.includes("/")) {
     throw new HttpsError("invalid-argument", "Falta elegir un bloque horario.");
@@ -665,6 +660,12 @@ exports.crearReservaMiComunidad = onCall(async (request) => {
   }
 
   await exigirCuentaActiva(request, comunidadId);
+
+  const fechaMaxima = new Date(Date.parse(`${hoyChile()}T00:00:00Z`) + MAX_DIAS_RESERVA * 86400000)
+      .toISOString().slice(0, 10);
+  if (fecha > fechaMaxima) {
+    throw new HttpsError("invalid-argument", `Solo puedes reservar hasta ${MAX_DIAS_RESERVA} días hacia adelante.`);
+  }
 
   // Cuenta como deuda: "Atrasado", o cualquier gasto no pagado ya vencido
   // (incluye "Por confirmar": informar un pago no desbloquea las reservas
