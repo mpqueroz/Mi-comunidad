@@ -30,10 +30,20 @@ async function main() {
       'directorioConserjeriaMiComunidad', 'cambiarEstadoAdminMiComunidad', 'cambiarEstadoCuentaMiComunidad', 'crearAdministradorMiComunidad',
       'resumenComercialMiComunidad', 'historialPagosMiComunidad', 'rehabilitarLicenciaMiComunidad');
   for (const name of functions) {
+    // Usar datos estructuralmente válidos para llegar al control de sesión.
+    // Ninguna solicitud incluye credenciales ni puede operar una comunidad real.
+    const scope = {comunidadId:'smoke-sin-sesion', id:'smoke-sin-sesion'};
+    const payloads = {
+      registrarPagoOperativoMiComunidad: {...scope,tipo:'remuneracion'},
+      confirmarIngresoComunidad: {...scope,tipo:'gasto'},
+      conciliarMovimientoComunidad: {...scope,tipo:'gasto',movimientoId:'smoke-sin-sesion'},
+      desvincularConciliacionComunidad: {...scope,movimientoId:'smoke-sin-sesion',motivo:'Comprobación pública de rechazo sin sesión'},
+      gestionarIntegrantesFichaMiComunidad: {...scope,uid:'smoke-sin-sesion',tipo:'familiares',accion:'agregar',persona:{nombre:'Ensayo sin sesión',rut:'',parentesco:'Prueba'}},
+    };
     const response = await fetch(`https://us-central1-mercado-ciudadano.cloudfunctions.net/${name}`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({data: {}}),
+      body: JSON.stringify({data: payloads[name] || {}}),
       signal: AbortSignal.timeout(30000),
     });
     const result = await response.json();

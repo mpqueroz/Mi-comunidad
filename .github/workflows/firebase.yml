@@ -113,7 +113,7 @@ jobs:
       # Las funciones de cobro (crearCheckout, webhookMercadoPago, consultarLicencia,
       # conciliarPagos) NO se despliegan desde aquí: están conectadas a mano a los
       # secretos de producción y un despliegue normal las volvería a enlazar a los
-      # de prueba. Se publican solo con scripts/habilitar-produccion.sh.
+      # de prueba. El job comercial las publica con scripts/habilitar-produccion.sh.
       # El proyecto es compartido con Mercado Ciudadano y Almacén Digital:
       # se nombran las functions de Mi Comunidad una por una para que el
       # deploy nunca borre ni toque las de las otras apps, y el hosting va
@@ -156,3 +156,22 @@ jobs:
           node-version: 22
       - name: Comprobar servicio publicado y solicitudes sin sesión
         run: node scripts/comprobar-despliegue.cjs
+
+
+  commercial:
+    name: Publicar grupo comercial de producción
+    needs: deploy
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - name: Publicar siete funciones con secretos exclusivos de producción
+        run: bash scripts/habilitar-produccion.sh
