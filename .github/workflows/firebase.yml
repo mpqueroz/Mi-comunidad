@@ -29,6 +29,12 @@ on:
       - "scripts/**"
       - ".github/workflows/firebase.yml"
   workflow_dispatch:
+    inputs:
+      enable_audit_apis:
+        description: 'Habilitar SOLO App Check API y API Keys API (autorización expresa)'
+        type: boolean
+        required: false
+        default: false
 
 # Mínimo privilegio para el token de GitHub: solo leer el repositorio.
 permissions:
@@ -270,3 +276,32 @@ jobs:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
       - name: Confirmar que las reglas publicadas no cambiaron durante la prueba
         run: node scripts/preparar-reglas-compartidas.cjs --assert-unchanged
+
+  enable-audit-apis:
+    name: Habilitar dos APIs autorizadas y consultar
+    needs: tests
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/security/auditoria-blindaje-2026-11' && github.repository == 'mpqueroz/Mi-comunidad' && inputs.enable_audit_apis == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - name: Instalar SDK antes de autenticar
+        working-directory: functions
+        run: npm ci --ignore-scripts
+      - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - name: Habilitar exclusivamente las dos APIs aprobadas
+        env:
+          ENABLE_AUDIT_APIS_APPROVED: 'true'
+        run: node scripts/habilitar-apis-auditoria.cjs --project mercado-ciudadano --apply
+      - name: Consultar configuración después del intento de habilitación
+        if: always()
+        run: node scripts/auditar-configuracion.cjs --project mercado-ciudadano
