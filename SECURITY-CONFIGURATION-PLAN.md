@@ -39,3 +39,7 @@ Cualquier PATCH de restricciones, registro de proveedor, nueva credencial, despl
 ## 4. Cierre verificable
 
 Repetir inventario de acceso, configuración y composición de reglas después de las intervenciones autorizadas. Resolver la equivalencia con el código desplegado o documentar la diferencia exacta: los cambios del PR no están en producción. Conservar PR en borrador y los despliegues omitidos mientras sigan vigentes las prohibiciones del usuario. No declarar todo perfecto por el conteo de pruebas o complete=true en una consulta.
+
+## Confirmación del acceso principal
+
+La revisión privada por RUT confirmó tipoPrincipal=superadmin y fichaComunitariaNecesaria=false para el titular. No se propone crear su ficha ni modificar Auth/claims. cuentasSinFicha=[] es un resultado filtrado al principal, no un inventario global sin hallazgos. Las dos cuentas comunitarias sin ficha fueron clasificadas como pruebas por el titular; su tratamiento sigue pendiente de decisión concreta, sin cambios automáticos ni excepciones al inventario. Se mantienen los pendientes de App Check, clave compartida y revisión del código desplegado. No se modificó producción.

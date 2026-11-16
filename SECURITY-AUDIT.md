@@ -2,7 +2,17 @@
 
 **Estado:** revisión preventiva; no desplegar este PR sin completar las verificaciones.
 
-## Estado más reciente — 397 pruebas y bloqueo de identidad confirmado
+## Confirmación vigente: acceso real verificado como superadministrador
+
+La captura del titular de la comprobación privada de la revisión 88402da muestra soloLectura=true, principalVerificadoPorCorreo=true, tipoPrincipal=superadmin, fichaComunitariaNecesaria=false y cuentasSinFicha=[] para el selector de su RUT de acceso. No se recibió ni publicó el RUT, contraseña, correo sintético o UID.
+
+Queda resuelto el bloqueo de identificación del acceso real. No crear ficha comunitaria para el superadministrador, no cambiar sus claims ni convertir el correo de contacto en cuenta de Mi Comunidad. El resultado vacío corresponde únicamente al principal seleccionado: no elimina las dos fichas ausentes del inventario general anterior. El titular ya clasificó las otras cuentas como pruebas; no se autorizaron por ello altas, bajas, eliminación ni cambios de permisos.
+
+La revisión ejecutable 88402da tiene los cuatro workflows del PR aprobados, con 158 funciones + 239 emulador = 397 pruebas, sin fallos ni omitidas, Chromium y auditorías npm aprobados. Esta actualización es documental y no modifica ejecutables ni producción. Las pruebas reales de composición de #191 siguen siendo la última evidencia de preservación de otras apps y base publicada sin cambios.
+
+Siguen abiertos: tratamiento explícito de cuentas de prueba que mantiene el inventario general no apto, proveedor/cliente App Check y pruebas de tokens, compatibilidad efectiva de la clave compartida y comparación del código desplegado. Mantener PR en borrador, sin fusión ni despliegue. Esta confirmación no autoriza escrituras en Firebase.
+
+## Evidencia anterior — 397 pruebas y bloqueo de identidad entonces pendiente
 
 [Firebase #190](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43955834705), revisión b5a6cf8, aprobó 158 pruebas de funciones y 239 emulador = 397, sin fallos ni omitidas; Chromium y auditorías npm aprobaron (0 vulnerabilidades auditadas). Los cuatro workflows aprobaron. [#191](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43956025622) aprobó también las pruebas y composición real; preservó otras apps y la base publicada no cambió. Despliegues, reparación y habilitación de APIs omitidos.
 

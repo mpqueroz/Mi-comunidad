@@ -121,3 +121,14 @@ La huella del script actual es `83fe3a83a7eba2b55a46b26609c93178e0ce6e1273a9c776
 Validación remota de b5a6cf8: Firebase #190 del PR aprobó 158 funciones y 239 emulador = 397 casos, sin fallos ni omitidos; Chromium y auditorías npm aprobaron (0 vulnerabilidades en árboles auditados). Los otros tres workflows aprobaron. #191 repitió las mismas 239 pruebas con composición real, preservó otras apps y confirmó base publicada sin cambios. Ambos despliegues, reparación y habilitación de APIs omitidos. El fallo global de #191 corresponde a la identidad principal no vinculada a la app, no a las pruebas. La nueva opción privada requiere su propia ejecución y no demuestra por sí sola correspondencia con la cuenta real.
 
 Estado final de preparación: pendiente identificar el acceso real; no crear fichas de prueba ni desactivar cuentas automáticamente. App Check/proveedores, clave compartida y diferencias del código desplegado siguen abiertos. Preparación del PR no equivale a aprobación de producción; se mantienen prohibidas fusión y despliegue.
+
+## 13. Identidad resuelta: superadministrador sin ficha comunitaria
+
+La captura del titular de la comprobación privada de la revisión 88402da muestra soloLectura=true, principalVerificadoPorCorreo=true, tipoPrincipal=superadmin, fichaComunitariaNecesaria=false y cuentasSinFicha=[] para el selector de su RUT de acceso. No se recibió ni publicó el RUT, contraseña, correo sintético o UID.
+
+Queda resuelto el bloqueo de identificación del acceso real. No crear ficha comunitaria para el superadministrador, no cambiar sus claims ni convertir el correo de contacto en cuenta de Mi Comunidad. El resultado vacío corresponde únicamente al principal seleccionado: no elimina las dos fichas ausentes del inventario general anterior. El titular ya clasificó las otras cuentas como pruebas; no se autorizaron por ello altas, bajas, eliminación ni cambios de permisos.
+
+La revisión ejecutable 88402da tiene los cuatro workflows del PR aprobados, con 158 funciones + 239 emulador = 397 pruebas, sin fallos ni omitidas, Chromium y auditorías npm aprobados. Esta actualización es documental y no modifica ejecutables ni producción. Las pruebas reales de composición de #191 siguen siendo la última evidencia de preservación de otras apps y base publicada sin cambios.
+
+Siguen abiertos: tratamiento explícito de cuentas de prueba que mantiene el inventario general no apto, proveedor/cliente App Check y pruebas de tokens, compatibilidad efectiva de la clave compartida y comparación del código desplegado. Mantener PR en borrador, sin fusión ni despliegue. Esta confirmación no autoriza escrituras en Firebase.
+
