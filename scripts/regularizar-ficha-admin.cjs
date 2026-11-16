@@ -2,7 +2,7 @@
 // Preparación de una reparación puntual. No CLI ni workflow de escritura.
 // La ejecución real exige aprobación por cuenta y verificación privada fuera de CI.
 const PROJECT='mercado-ciudadano';
-function identifier(value,max){return typeof value==='string'&&value.length>0&&value.length<=max&&!value.includes('/');}
+function identifier(value,max){return typeof value==='string'&&value.length>0&&value.length<=max&&!['.','..'].includes(value)&&!/[\x00-\x1f\x7f/]/.test(value);}
 function authState(user){
  const c=user.customClaims||{};
  return {uid:user.uid,disabled:!!user.disabled,app:c.app,role:c.role,comunidadId:c.comunidadId};

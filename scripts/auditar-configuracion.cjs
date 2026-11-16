@@ -77,7 +77,7 @@ function keyRestrictionDetails(keys){
   });
 }
 
-async function configuration({projectId, localRules, getRules, read}) {
+async function configuration({projectId, localRules, getRules, read, webAppId}) {
   if (!/^[a-z][a-z0-9-]{4,61}[a-z0-9]$/.test(projectId)) throw Error('Proyecto inválido.');
   const report = {readOnly: true, projectId, complete: true};
   async function check(name, action) {
@@ -97,7 +97,7 @@ async function configuration({projectId, localRules, getRules, read}) {
       sameMiComunidad: live.slice(a.start, a.end) === localRules.slice(b.start, b.end),
       sameOtherApps: live.slice(0, a.start) === localRules.slice(0, b.start) && live.slice(a.end) === localRules.slice(b.end)};
   });
-  let number;
+  let number,webApps;
   await check('project', async () => {
     const project = await read(`https://firebase.googleapis.com/v1beta1/projects/${projectId}?fields=projectId,projectNumber`);
     if (project.projectId !== projectId || !/^\d+$/.test(String(project.projectNumber || ''))) throw Error('Proyecto no coincide.');
@@ -128,15 +128,52 @@ async function configuration({projectId, localRules, getRules, read}) {
       for(const p of data.resourcePolicies||[]){const mode=p.enforcementMode||'UNSPECIFIED';if(!Object.hasOwn(modes,mode))throw Error('Modo no verificable.');modes[mode]++;}
       return {scope:'oauth-ios-resource-policies-only',count:Object.values(modes).reduce((a,b)=>a+b,0),modes};
     });
+    await check('webAppAssociations',async()=>{
+      const data=await read(`https://firebase.googleapis.com/v1beta1/projects/${projectId}/webApps?pageSize=100&fields=apps(appId,apiKeyId),nextPageToken`);
+      if(data.nextPageToken)throw Error('Listado parcial de apps.');
+      if(data.apps!==undefined&&!Array.isArray(data.apps))throw Error('Apps no comparables.');
+      webApps=data.apps||[];
+      return {registeredWebApps:webApps.length,miComunidadRegistered:!!webAppId&&webApps.some(a=>a.appId===webAppId),
+        distinctAssociatedKeys:new Set(webApps.map(a=>a.apiKeyId).filter(Boolean)).size,
+        appsWithoutKeyAssociation:webApps.filter(a=>!a.apiKeyId).length,scope:'registered-app-metadata-not-runtime-consumers'};
+    });
+    await check('hostingClients',async()=>{
+      const data=await read(`https://firebasehosting.googleapis.com/v1beta1/projects/${projectId}/sites?pageSize=100&fields=sites(appId,defaultUrl),nextPageToken`);
+      if(data.nextPageToken)throw Error('Listado parcial de sitios.');
+      const sites=data.sites||[];
+      return {registeredSites:sites.length,sitesLinkedToMiComunidad:webAppId?sites.filter(s=>s.appId===webAppId).length:0,
+        miComunidadDefaultHostPresent:sites.some(s=>s.defaultUrl==='https://mi-comunidad-md.web.app'),scope:'hosting-metadata-not-all-custom-origins'};
+    });
+    await check('authDomains',async()=>{
+      const data=await read(`https://identitytoolkit.googleapis.com/admin/v2/projects/${projectId}/config?fields=authorizedDomains`);
+      const domains=data.authorizedDomains||[];
+      if(!Array.isArray(domains)||domains.some(d=>typeof d!=='string'))throw Error('Dominios no comparables.');
+      const known=['mi-comunidad-md.web.app','mi-comunidad-md.firebaseapp.com','mercado-ciudadano.firebaseapp.com','nodar.cl','www.nodar.cl'];
+      return {count:domains.length,knownOrigins:known.map(host=>({host,authorized:domains.includes(host)})),
+        otherDomainCount:domains.filter(d=>!known.includes(d)).length,scope:'auth-authorized-domains-not-api-key-policy'};
+    });
+    if(webAppId&&webApps?.some(a=>a.appId===webAppId)){
+      for(const [label,provider]of Object.entries({appCheckRecaptchaV3:'recaptchaV3Config',appCheckRecaptchaEnterprise:'recaptchaEnterpriseConfig'})){
+        await check(label,async()=>{
+          const name=`projects/${number}/apps/${webAppId}/${provider}`;
+          let data;try{data=await read(`https://firebaseappcheck.googleapis.com/v1/projects/${number}/apps/${encodeURIComponent(webAppId)}/${provider}?fields=name`);}
+          catch(error){if(error.status===404)return {configured:false,httpStatus:404,scope:'provider-resource-presence-only'};throw error;}
+          if(data.name&&data.name!==name)throw Error('Proveedor no corresponde a la app.');
+          return {configured:data.name===name,scope:'provider-resource-presence-only'};
+        });
+      }
+    }
     await check('apiKeyRestrictions', async () => {
-      const data = await read(`https://apikeys.googleapis.com/v2/projects/${number}/locations/global/keys?pageSize=300&fields=keys(restrictions),nextPageToken`);
+      const data = await read(`https://apikeys.googleapis.com/v2/projects/${number}/locations/global/keys?pageSize=300&fields=keys(uid,restrictions(browserKeyRestrictions(allowedReferrers),serverKeyRestrictions(allowedIps),androidKeyRestrictions(allowedApplications),iosKeyRestrictions(allowedBundleIds),apiTargets(service,methods))),nextPageToken`);
       if (data.nextPageToken) throw Error('Listado parcial de restricciones.');
       const keys = data.keys || [];
       const appRestricted = key => !!(key.restrictions?.browserKeyRestrictions || key.restrictions?.serverKeyRestrictions ||
         key.restrictions?.androidKeyRestrictions || key.restrictions?.iosKeyRestrictions);
       return {keysCount: keys.length, withApplicationRestriction: keys.filter(appRestricted).length,
         withApiRestriction: keys.filter(key => key.restrictions?.apiTargets?.length).length,
-        scope:'presence-and-breadth-not-client-key-binding',details:keyRestrictionDetails(keys)};
+        scope:'restriction-breadth-and-registered-app-associations',details:keyRestrictionDetails(keys).map((detail,index)=>({...detail,
+          registeredWebAppsUsingKey:webApps&&keys[index].uid?webApps.filter(a=>a.apiKeyId===keys[index].uid).length:null,
+          associatedWithMiComunidad:webApps&&webAppId&&keys[index].uid?webApps.some(a=>a.appId===webAppId&&a.apiKeyId===keys[index].uid):null}))};
     });
   } else {
     report.appCheck = report.apiKeyRestrictions = {verified: false, reason: 'project-number-unavailable'};
@@ -160,7 +197,10 @@ async function main() {
   const credential = applicationDefault();
   const app = initializeApp({projectId: opts.projectId, credential}, 'auditoria-configuracion');
   try {
-    const report = await configuration({projectId: opts.projectId, localRules: fs.readFileSync(path.join(__dirname, '../firestore.rules'), 'utf8'),
+    const appSource=fs.readFileSync(path.join(__dirname,'../public/app.js'),'utf8');
+    const webAppId=appSource.match(/\bappId:\s*"(1:[0-9]+:web:[a-f0-9]+)"/)?.[1];
+    if(!webAppId)throw Error('App web local no identificable.');
+    const report = await configuration({projectId: opts.projectId,webAppId,localRules: fs.readFileSync(path.join(__dirname, '../firestore.rules'), 'utf8'),
       getRules: () => getSecurityRules(app).getFirestoreRuleset(), read: async url => {
         const {access_token: token} = await credential.getAccessToken();
         const response = await fetch(url, {method: 'GET', redirect: 'error', headers: {Authorization: `Bearer ${token}`}, signal: AbortSignal.timeout(30000)});

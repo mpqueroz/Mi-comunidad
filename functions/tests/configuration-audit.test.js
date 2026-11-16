@@ -8,14 +8,18 @@ const rules = fs.readFileSync(path.join(__dirname, '../../firestore.rules'), 'ut
 
 function fixture() {
   const urls = [];
-  return {urls, projectId: 'demo-mi-comunidad', localRules: rules, getRules: async () => ({source: [{content: rules}]}),
+  return {urls, projectId: 'demo-mi-comunidad',webAppId:'1:123456:web:cafe',localRules: rules, getRules: async () => ({source: [{content: rules}]}),
     read: async url => {
       urls.push(url);
+      if(url.includes('/webApps?'))return {apps:[{appId:'1:123456:web:cafe',apiKeyId:'test-key'}]};
+      if(url.includes('/sites?'))return {sites:[{appId:'1:123456:web:cafe',defaultUrl:'https://mi-comunidad-md.web.app'}]};
+      if(url.includes('/config?'))return {authorizedDomains:['mi-comunidad-md.web.app','NO-IMPRIMIR.example']};
+      if(url.includes('/apps/'))throw Object.assign(Error('NO-IMPRIMIR'),{status:404});
       if (url.startsWith('https://firebase.googleapis.com/')) return {projectId: 'demo-mi-comunidad', projectNumber: '123456'};
       if(url.includes('/resourcePolicies?'))return {resourcePolicies:[]};
       if(/\/services\/[^?]+\?/.test(url))return {enforcementMode:'OFF',replayProtection:'OFF'};
       if (url.startsWith('https://firebaseappcheck.googleapis.com/')) return {services: [{name: 'projects/123456/services/firestore.googleapis.com', enforcementMode: 'UNENFORCED'}]};
-      if (url.startsWith('https://apikeys.googleapis.com/')) return {keys: [{keyString: 'NO-IMPRIMIR', displayName: 'NO-IMPRIMIR', restrictions: {browserKeyRestrictions: {}, apiTargets: [{}]}}, {}]};
+      if (url.startsWith('https://apikeys.googleapis.com/')) return {keys: [{uid:'test-key',keyString: 'NO-IMPRIMIR', displayName: 'NO-IMPRIMIR', restrictions: {browserKeyRestrictions: {}, apiTargets: [{}]}}, {}]};
       return {functions: [{name: 'projects/demo/locations/region/functions/crearCuentaMiComunidad', state: 'ACTIVE', buildConfig: {runtime: 'nodejs22'}, serviceConfig: {environmentVariables: {SECRET: 'NO-IMPRIMIR'}}},
         {name: 'projects/demo/locations/region/functions/otraAplicacion', buildConfig: {runtime: 'nodejs24'}}]};
     }};
@@ -113,4 +117,20 @@ test('restricciones distinguen lista vacía, todos los hosts y wildcard sin emit
  assert.equal(r.browserReferrerCount,5);assert.equal(r.allHostsPatternCount,2);assert.equal(r.wildcardHostPatternCount,1);assert.equal(r.unclassifiedReferrerCount,1);
  assert.equal(r.authApiInAllowlist,true);assert.equal(r.tokenApiInAllowlist,false);assert.ok(!JSON.stringify(r).includes('NO-IMPRIMIR'));
  assert.equal(details([{}])[0].apiTargetCount,0);assert.equal(details([{}])[0].authApiInAllowlist,true);
+});
+
+test('asocia apps registradas sin valores de claves, ids ni dominios ajenos en la salida',async()=>{
+ const f=fixture(),r=await configuration(f);
+ assert.equal(r.webAppAssociations.registeredWebApps,1);assert.equal(r.webAppAssociations.miComunidadRegistered,true);
+ assert.equal(r.apiKeyRestrictions.details[0].registeredWebAppsUsingKey,1);assert.equal(r.apiKeyRestrictions.details[0].associatedWithMiComunidad,true);
+ assert.equal(r.hostingClients.miComunidadDefaultHostPresent,true);assert.equal(r.authDomains.otherDomainCount,1);
+ assert.equal(r.appCheckRecaptchaV3.configured,false);assert.equal(r.appCheckRecaptchaEnterprise.configured,false);
+ assert.ok(!JSON.stringify(r).includes('test-key'));assert.ok(!JSON.stringify(r).includes('NO-IMPRIMIR'));
+ assert.ok(f.urls.every(url=>!url.includes('getKeyString')&&!url.includes('/config?fields=apiKey')));
+});
+test('apps parciales impiden asegurar asociaciones; proveedor de otra app no se acepta',async()=>{
+ const f=fixture(),read=f.read;f.read=async url=>url.includes('/webApps?')?{apps:[],nextPageToken:'NO-IMPRIMIR'}:read(url);
+ const r=await configuration(f);assert.equal(r.webAppAssociations.verified,false);assert.equal(r.complete,false);assert.equal(r.apiKeyRestrictions.details[0].registeredWebAppsUsingKey,null);
+ const g=fixture(),original=g.read;g.read=async url=>url.includes('/apps/')?{name:'NO-IMPRIMIR'}:original(url);
+ const bad=await configuration(g);assert.equal(bad.appCheckRecaptchaV3.verified,false);assert.equal(bad.complete,false);assert.ok(!JSON.stringify(bad).includes('NO-IMPRIMIR'));
 });
