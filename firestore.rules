@@ -591,16 +591,9 @@ service cloud.firestore {
         allow read: if mcEsDeEstaComunidadActiva(comunidadId) &&
                        (mcEsAdmin() || mcEsConserje() || (mcEsResidente() && resource.data.depto == mcMiDepto()));
         allow create: if false;
-        allow update: if mcEsDeEstaComunidadActiva(comunidadId) &&
-                         mcEsResidente() && resource.data.depto == mcMiDepto() &&
-                         request.resource.data.depto == resource.data.depto &&
-                         request.resource.data.lugar == resource.data.lugar &&
-                         request.resource.data.fecha == resource.data.fecha &&
-                         request.resource.data.hora == resource.data.hora &&
-                         request.resource.data.bloqueId == resource.data.bloqueId &&
-                         request.resource.data.estado == resource.data.estado &&
-                         resource.data.estado == "Confirmada" && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["invitados"]) &&
-                         request.resource.data.invitados is list && request.resource.data.invitados.size() <= 100;
+        // guardarInvitadosReservaMiComunidad valida cada invitado y la propiedad
+        // dentro de una transacción; ningún cliente escribe esta lista directamente.
+        allow update: if false;
         allow delete: if false;
       }
 

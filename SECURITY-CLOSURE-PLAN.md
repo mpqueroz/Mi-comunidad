@@ -1,20 +1,18 @@
 # Cierre pendiente de la auditoría del PR #18
 
-Estado: preparado para revisión; no ejecutar cambios reales con la autorización actual. Se mantienen prohibidas la fusión y cualquier despliegue a Firebase.
+Estado: PR en borrador. La autorización expresa del usuario permitió únicamente habilitar App Check API y API Keys API en `mercado-ciudadano`; no autoriza cambiar IAM, enforcement, restricciones de claves, fichas ni licencias. Se mantienen prohibidas la fusión y cualquier despliegue a Firebase.
 
-## 1. Habilitar dos APIs para poder consultar la configuración
+## 1. Habilitación autorizada, bloqueada en ejecución
 
-La lectura autenticada devolvió `SERVICE_DISABLED`, no solo un 403 genérico, para Firebase App Check API y API Keys API. No se habilitaron servicios ni se cambiaron permisos.
+[Firebase #167](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43866375618), commit `a4528d3`: el job manual se ejecutó con la opción de habilitación activada después de aprobar las pruebas. Terminó con HTTP 403, sin confirmar la habilitación de ninguna API. La consulta posterior autenticada confirmó `SERVICE_DISABLED` para ambas. El error de habilitación no aportó una razón permitida ni identifica si falló la lectura del estado o el POST; no atribuir un permiso IAM concreto sin evidencia.
 
-Cambio propuesto, pendiente de autorización expresa porque modifica la configuración del proyecto compartido:
+La consola de Google Cloud devolvió «Site Unavailable» en este navegador durante el intento de continuación. La alternativa pendiente es que una sesión con permisos existentes suficientes habilite exclusivamente:
 
 ```sh
 gcloud services enable firebaseappcheck.googleapis.com apikeys.googleapis.com --project mercado-ciudadano
 ```
 
-Alcance: habilitar únicamente esas dos APIs. No activar la exigencia de App Check, no cambiar restricciones de claves, no leer valores de claves, no crear credenciales y no agregar roles IAM. La habilitación no acredita que después existan todos los permisos de consulta; cualquier denegación adicional debe diagnosticarse sin ampliar permisos automáticamente.
-
-Después: repetir `auditar-configuracion.cjs` en la rama de auditoría, consultar las configuraciones permitidas y registrar los resultados. Si hacen falta cambios de seguridad efectivos, proponerlos por separado y probar compatibilidad con los clientes.
+No se necesita repetir la autorización para ese alcance. No agregar roles IAM automáticamente, no activar la exigencia de App Check, no cambiar restricciones de claves ni consultar sus valores. Después se debe repetir `auditar-configuracion.cjs` y registrar la configuración efectiva. La autorización para habilitar APIs no autoriza cambios adicionales de seguridad.
 
 ## 2. Verificar y regularizar las dos fichas ausentes
 

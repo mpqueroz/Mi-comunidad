@@ -9744,6 +9744,16 @@ function abrirModalInvitado(reservaId){
 }
 
 
+async function guardarInvitadosReserva(reserva,invitados){
+    const {data}=await functions.httpsCallable('guardarInvitadosReservaMiComunidad')({
+        comunidadId:community.id,id:reserva.id,invitados,
+        revision:reserva.revisionInvitados===undefined?0:reserva.revisionInvitados
+    });
+    // Cambiar la vista solo después de que el servidor confirme la escritura.
+    reserva.invitados=data.invitados;
+    reserva.revisionInvitados=data.revisionInvitados;
+}
+
 async function quitarInvitadoReserva(reservaId, idx){
 
     const reserva = reservas.find(r => r.id === reservaId);
@@ -9752,14 +9762,14 @@ async function quitarInvitadoReserva(reservaId, idx){
         return;
     }
 
-    reserva.invitados.splice(idx, 1);
-    openModal("invitadosReserva", reserva);
-
+    if(!Number.isInteger(idx)||idx<0||idx>=reserva.invitados.length)return;
+    const invitados=reserva.invitados.filter((_,i)=>i!==idx);
     try {
-        await refComunidadActual().collection("reservas").doc(reservaId).update({invitados: reserva.invitados});
+        await guardarInvitadosReserva(reserva,invitados);
+        openModal("invitadosReserva", reserva);
     } catch(err){
         console.error(err);
-        showToast("No se pudo guardar el cambio. Revisa tu conexión.");
+        showToast("No se pudo guardar. Si la lista cambió, vuelve a abrir la reserva.");
     }
 
 }
@@ -11611,16 +11621,13 @@ async function saveModal(){
         }
 
         const invitados = (reserva.invitados || []).concat([{nombre, rut}]);
-        reserva.invitados = invitados;
-
-        closeModal();
-        openModal("invitadosReserva", reserva);
-
         try {
-            await refComunidadActual().collection("reservas").doc(reserva.id).update({invitados});
+            await guardarInvitadosReserva(reserva,invitados);
+            closeModal();
+            openModal("invitadosReserva", reserva);
         } catch(err){
             console.error(err);
-            showToast("No se pudo guardar el invitado. Revisa tu conexión.");
+            showToast("No se pudo guardar. Si la lista cambió, vuelve a abrir la reserva.");
         }
 
     } else if(modalMode === "cobroMensual"){

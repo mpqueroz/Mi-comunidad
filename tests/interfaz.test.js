@@ -86,3 +86,16 @@ test('datos de pago y documento tributario conservan texto hostil sin crear etiq
  html=a.run(`detalleDocumentoTributario({estado:'paid',documentoTributario:{tipo:'factura',correo:payload,rut:payload,razonSocial:payload,giro:payload,direccion:payload,comuna:payload}})`);
  assert.ok(html.includes('Factura electrónica'));assert.ok(html.includes('&lt;img'));assert.ok(!html.includes('<img'));assert.ok(!html.includes('<script'));
 });
+
+test('invitados: un fallo del servidor conserva la lista y la revisión visibles',async()=>{
+ const a=app();let received;
+ a.run(`community.id='edificio';reservas=[{id:'r',invitados:[{nombre:'Ana',rut:''}],revisionInvitados:3}];functions.httpsCallable=()=>async data=>{throw Error('Conflicto simulado');};`);
+ a.ctx.console={...console,error(){}};
+ await a.run(`quitarInvitadoReserva('r',0)`);
+ assert.equal(a.run('reservas[0].invitados.length'),1);assert.equal(a.run('reservas[0].revisionInvitados'),3);
+ a.ctx.capture=data=>{received=data;return {data:{invitados:[],revisionInvitados:4}};};
+ a.run(`functions.httpsCallable=name=>{if(name!=='guardarInvitadosReservaMiComunidad')throw Error('Operación inesperada');return async data=>capture(data);};`);
+ await a.run(`quitarInvitadoReserva('r',0)`);
+ assert.equal(received.comunidadId,'edificio');assert.equal(received.id,'r');assert.equal(received.revision,3);
+ assert.equal(a.run('reservas[0].invitados.length'),0);assert.equal(a.run('reservas[0].revisionInvitados'),4);
+});

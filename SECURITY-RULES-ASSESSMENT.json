@@ -1,18 +1,12 @@
 {
   "score": 4,
-  "summary": "Revisión acotada de la sección Mi Comunidad propuesta en el PR #18, sin aprobación de producción. La autoridad se basa en claims de servidor, pertenencia de comunidad, perfil habilitado y licencia vigente. Las pruebas cubren aislamiento, cambio de departamento, licencia/ficha ausente y escrituras financieras reservadas al backend. La publicación requiere regularizar las cuentas legítimas y verificar la composición contra las reglas efectivas. La puntuación no evalúa ni certifica toda la política de las otras aplicaciones.",
+  "summary": "Revisión acotada de la sección Mi Comunidad propuesta en el PR #18, sin aprobación de producción. La autoridad se basa en claims de servidor, pertenencia de comunidad, perfil habilitado y licencia vigente. Las pruebas cubren aislamiento, cambio de departamento, licencia/ficha ausente y escrituras financieras reservadas al backend. La publicación requiere regularizar las cuentas legítimas y verificar la composición contra las reglas efectivas. La puntuación no evalúa ni certifica toda la política de las otras aplicaciones. La lista de invitados queda reservada a una callable de residente con esquema y límites por elemento, comprobación transaccional de acceso/propiedad y revisión optimista; requiere validar CI del cambio antes de publicar.",
   "findings": [
     {
       "check": "Type Safety / Storage Abuse",
       "severity": "minor",
       "issue": "Persisten escrituras directas de administración en documentos, bloques de reserva y fichas laborales sin un esquema completo de campos, tipos y tamaños en las reglas. Exigen administración habilitada de la misma comunidad; no se encontró en esas condiciones una elevación de rol, pero un cliente administrativo alterado puede corromper sus datos o consumir recursos.",
       "recommendation": "Completar esquemas y límites de esas rutas o trasladarlas a operaciones del servidor, preservando los contratos de la interfaz y validando tanto creación como actualización antes de publicar esa mejora."
-    },
-    {
-      "check": "Type Safety / Update Bypass",
-      "severity": "minor",
-      "issue": "La actualización de invitados de una reserva exige propiedad del departamento, campos inmutables y lista de hasta 100 elementos, pero las reglas no validan el esquema y tamaño de cada elemento. El alcance queda limitado a la reserva propia; no se acredita ausencia de corrupción de datos frente a llamadas directas al SDK.",
-      "recommendation": "Validar cada invitado mediante una operación del servidor y cerrar la escritura directa, o limitar y tipar los elementos con una estrategia compatible con Firestore Rules; añadir pruebas de elementos nulos, tipos incorrectos y tamaños excesivos."
     }
   ]
 }

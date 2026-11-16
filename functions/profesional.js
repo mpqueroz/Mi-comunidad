@@ -181,6 +181,37 @@ module.exports = function profesional(admin, onCall, HttpsError) {
       return {id:nueva.id,denegado:restriccion};
     });
   });
+  // Lista completa validada en servidor; la revisión evita perder cambios concurrentes.
+  const guardarInvitadosReservaMiComunidad=onCall(async req=>{
+    const s=await scope(req,['residente']);
+    if(typeof s.depto!=='string'||!s.depto.trim())throw new HttpsError('permission-denied','Falta el departamento de la cuenta.');
+    const d=req.data;
+    if(!Array.isArray(d.invitados)||d.invitados.length>100||
+       !Number.isSafeInteger(d.revision)||d.revision<0||d.revision>=Number.MAX_SAFE_INTEGER)
+      throw new HttpsError('invalid-argument','Lista o revisión inválida.');
+    const invitados=d.invitados.map(p=>{
+      if(!p||typeof p!=='object'||Array.isArray(p)||Object.keys(p).some(k=>!['nombre','rut'].includes(k))||
+         typeof p.nombre!=='string'||!p.nombre.trim()||p.nombre.length>150||
+         typeof p.rut!=='string'||p.rut.length>20||!/^[0-9Kk.\s-]*$/.test(p.rut))
+        throw new HttpsError('invalid-argument','Invitado inválido.');
+      const rut=p.rut.replace(/[.\s-]/g,'').toUpperCase();
+      if(rut&&!rutValido(rut))throw new HttpsError('invalid-argument','RUT de invitado inválido.');
+      return {nombre:p.nombre.trim(),rut};
+    });
+    const ref=s.base.collection('reservas').doc(docId(d.id));
+    return db.runTransaction(async tx=>{
+      await comprobarAccesoTransaccion(tx,s);
+      const snap=await tx.get(ref);
+      if(!snap.exists)throw new HttpsError('not-found','No se encontró la reserva.');
+      const r=snap.data();
+      if(r.depto!==s.depto)throw new HttpsError('permission-denied','Solo puedes editar una reserva de tu departamento.');
+      if(r.estado!=='Confirmada')throw new HttpsError('failed-precondition','La reserva no está confirmada.');
+      const revision=r.revisionInvitados===undefined?0:r.revisionInvitados;
+      if(revision!==d.revision)throw new HttpsError('failed-precondition','La lista cambió. Actualiza la reserva antes de guardar.');
+      tx.update(ref,{invitados,revisionInvitados:revision+1});
+      return {invitados,revisionInvitados:revision+1};
+    });
+  });
   const cancelarReservaMiComunidad=onCall(async req=>{
     const s=await scope(req,['admin','residente']);
     const motivo=text(req.data.motivo,500);
@@ -358,5 +389,5 @@ module.exports = function profesional(admin, onCall, HttpsError) {
     return db.runTransaction(async tx=>{
       await comprobarAccesoTransaccion(tx, s);const snap=await tx.get(s.base);const version=snap.data().configuracionPago?.version||0;if(version!==(d.version||0))throw new HttpsError('failed-precondition','La configuración cambió. Vuelve a abrirla.');configuracion.version=version+1;tx.update(s.base,{configuracionPago:configuracion,configuracionPagoActualizadaEn:stamp(),configuracionPagoActualizadaPor:s.uid});log(tx,s,'Configuración de pagos actualizada',configuracion.metodos.join(', '));return {configuracion};});
   });
-  return {generarCobrosMiComunidad,configurarPagosMiComunidad,guardarPlanMantencionMiComunidad,registrarRevisionMantencionMiComunidad,gestionarAvisoMiComunidad,confirmarAvisoMiComunidad,gestionarVisitaMiComunidad,cancelarReservaMiComunidad,registrarEncomiendaMiComunidad,gestionarTurnoMiComunidad,gestionarEncomiendaMiComunidad};
+  return {guardarInvitadosReservaMiComunidad,generarCobrosMiComunidad,configurarPagosMiComunidad,guardarPlanMantencionMiComunidad,registrarRevisionMantencionMiComunidad,gestionarAvisoMiComunidad,confirmarAvisoMiComunidad,gestionarVisitaMiComunidad,cancelarReservaMiComunidad,registrarEncomiendaMiComunidad,gestionarTurnoMiComunidad,gestionarEncomiendaMiComunidad};
 };

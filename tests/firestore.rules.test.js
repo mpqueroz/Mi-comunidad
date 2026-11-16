@@ -220,11 +220,12 @@ test("visita anunciada solo con los campos de la app y en estado Pendiente", asy
   await assertFails(residente().collection(`${BASE}/visitasProgramadas`).add({...visita, nombre: "x".repeat(151)}));
 });
 
-test("invitados de una reserva deben ser una lista acotada", async () => {
+test("invitados solo se modifican mediante la operación validada del servidor", async () => {
   await env.withSecurityRulesDisabled(async (ctx) => {
     await ctx.firestore().doc(`${BASE}/reservas/r1`).set({depto: "101", lugar: "Quincho", fecha: "2099-01-01", hora: "10:00 - 14:00", bloqueId: "b1", estado: "Confirmada", invitados: []});
   });
-  await assertSucceeds(residente().doc(`${BASE}/reservas/r1`).update({invitados: [{nombre: "Luis", rut: ""}]}));
+  await assertFails(residente().doc(`${BASE}/reservas/r1`).update({invitados: [{nombre: "Luis", rut: ""}]}));
+  await assertFails(adminDb().doc(`${BASE}/reservas/r1`).update({invitados: []}));
   await assertFails(residente().doc(`${BASE}/reservas/r1`).update({invitados: "texto"}));
   await assertFails(residente().doc(`${BASE}/reservas/r1`).update({invitados: Array(101).fill({nombre: "x", rut: ""})}));
 });

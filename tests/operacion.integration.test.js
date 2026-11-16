@@ -99,3 +99,17 @@ test('Firestore real: identidad de residente activo sigue funcionando con SDK mo
  assert.equal((await h.base.collection('residentes').doc('r1').get()).get('respuestaSecreta'),undefined);
  await h.call('verificarPreguntaSecretaMiComunidad',{uid:'r1',respuesta:'Azul'});
 });
+
+test('Firestore real: invitados concurrentes conservan una lista validada y rechazan una revisión vieja',{skip:!enabled},async()=>{
+ const h=await fixture(),ref=h.base.collection('reservas').doc('invitados');
+ await ref.set({depto:'101',estado:'Confirmada',invitados:[],lugar:'Quincho'});
+ const results=await Promise.allSettled(['Ana','Luis'].map(nombre=>h.call('guardarInvitadosReservaMiComunidad',{id:ref.id,revision:0,invitados:[{nombre,rut:''}]},'r1','residente')));
+ assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
+ assert.equal(results.find(r=>r.status==='rejected').reason.code,'failed-precondition');
+ const saved=(await ref.get()).data();assert.equal(saved.revisionInvitados,1);assert.equal(saved.invitados.length,1);assert.equal(saved.lugar,'Quincho');
+ await assert.rejects(h.call('guardarInvitadosReservaMiComunidad',{id:ref.id,revision:1,invitados:[null]},'r1','residente'),{code:'invalid-argument'});
+ await assert.rejects(h.call('guardarInvitadosReservaMiComunidad',{id:ref.id,revision:1,invitados:[]},'adm','admin'),{code:'permission-denied'});
+ await ref.update({depto:'999'});
+ await assert.rejects(h.call('guardarInvitadosReservaMiComunidad',{id:ref.id,revision:1,invitados:[]},'r1','residente'),{code:'permission-denied'});
+ assert.deepEqual((await ref.get()).data().invitados,saved.invitados);
+});

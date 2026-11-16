@@ -60,7 +60,8 @@ test('licencia vencida o suspendida bloquea todas las funciones operativas antes
   const h=harness();h.rows.set('mi_comunidad_licencias/edificio',license);
   for(const name of Object.keys(h.api)){
    const before=JSON.stringify([...h.rows]);
-   await assert.rejects(h.call(name,{},'admin','admin'),{code:'failed-precondition'},name);
+   const residente=name==='guardarInvitadosReservaMiComunidad';
+   await assert.rejects(h.call(name,{},residente?'residente':'admin',residente?'residente':'admin'),{code:'failed-precondition'},name);
    assert.equal(JSON.stringify([...h.rows]),before,name);
   }
  }
@@ -92,5 +93,52 @@ test('desactivación o pérdida de licencia entre la consulta y el commit bloque
   const name=change==='depto'?'confirmarAvisoMiComunidad':'gestionarTurnoMiComunidad';
   await assert.rejects(h.call(name,{accion:'iniciar',id:'aviso'},uid,role),{code:change==='licencia'?'failed-precondition':'permission-denied'});
   assert.ok(![...h.rows.keys()].some(p=>p.includes('/turnos/')||p.includes('/lecturasAvisos/')||p.includes('/novedades/')));
+ }
+});
+
+test('invitados: valida cada elemento, no trunca ni acepta campos arbitrarios',async()=>{
+ const h=harness(),ref=h.base+'/reservas/r';
+ h.rows.set(ref,{estado:'Confirmada',depto:'101',invitados:[],lugar:'Quincho'});
+ for(const invitados of [null,'lista',Array(101).fill({nombre:'Ana',rut:''}),[null],[[]],[{nombre:3,rut:''}],[{nombre:' ',rut:''}],[{nombre:'x'.repeat(151),rut:''}],[{nombre:'Ana'}],[{nombre:'Ana',rut:4}],[{nombre:'Ana',rut:'x'.repeat(21)}],[{nombre:'Ana',rut:'12345678-0'}],[{nombre:'Ana',rut:'<script>'}],[{nombre:'Ana',rut:'',role:'admin'}]]){
+  await assert.rejects(h.call('guardarInvitadosReservaMiComunidad',{id:'r',invitados,revision:0},'residente','residente'),{code:'invalid-argument'});
+  assert.deepEqual(h.rows.get(ref).invitados,[]);
+ }
+ const data=await h.call('guardarInvitadosReservaMiComunidad',{id:'r',invitados:[{nombre:' Ana ',rut:'12.345.678-5'},{nombre:'Luis',rut:''}],revision:0},'residente','residente');
+ assert.deepEqual(data,{invitados:[{nombre:'Ana',rut:'123456785'},{nombre:'Luis',rut:''}],revisionInvitados:1});
+ assert.equal(h.rows.get(ref).lugar,'Quincho');
+});
+test('invitados: solo residentes habilitados, reserva propia y confirmada',async()=>{
+ const h=harness(),ref=h.base+'/reservas/r',data={id:'r',invitados:[],revision:0};
+ h.rows.set(ref,{estado:'Confirmada',depto:'999',invitados:[]});
+ for(const [uid,role] of [['admin','admin'],['uno','conserje'],['residente','residente']])
+  await assert.rejects(h.call('guardarInvitadosReservaMiComunidad',data,uid,role),{code:'permission-denied'});
+ h.rows.get(ref).depto='101';h.rows.get(ref).estado='Cancelada';
+ await assert.rejects(h.call('guardarInvitadosReservaMiComunidad',data,'residente','residente'),{code:'failed-precondition'});
+ h.rows.get(ref).estado='Confirmada';h.rows.delete(h.base+'/residentes/residente');
+ await assert.rejects(h.call('guardarInvitadosReservaMiComunidad',data,'residente','residente'),{code:'permission-denied'});
+});
+test('invitados: revisión obligatoria y conflictos no sobrescriben la lista',async()=>{
+ const h=harness(),ref=h.base+'/reservas/r';h.rows.set(ref,{estado:'Confirmada',depto:'101',invitados:[]});
+ for(const revision of [undefined,null,'0',-1,0.5,Number.MAX_SAFE_INTEGER])
+  await assert.rejects(h.call('guardarInvitadosReservaMiComunidad',{id:'r',invitados:[],revision},'residente','residente'),{code:'invalid-argument'});
+ const results=await Promise.allSettled(['Ana','Luis'].map(nombre=>h.call('guardarInvitadosReservaMiComunidad',{id:'r',invitados:[{nombre,rut:''}],revision:0},'residente','residente')));
+ assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
+ assert.equal(results.find(r=>r.status==='rejected').reason.code,'failed-precondition');
+ assert.equal(h.rows.get(ref).revisionInvitados,1);assert.equal(h.rows.get(ref).invitados.length,1);
+ await h.call('guardarInvitadosReservaMiComunidad',{id:'r',invitados:[],revision:1},'residente','residente');
+ assert.deepEqual(h.rows.get(ref).invitados,[]);assert.equal(h.rows.get(ref).revisionInvitados,2);
+});
+test('invitados: revalida licencia, ficha y departamento dentro de la transacción',async()=>{
+ for(const change of ['licencia','ficha','depto']){
+  const h=harness(),ref=h.base+'/reservas/r';h.rows.set(ref,{estado:'Confirmada',depto:'101',invitados:[]});
+  const original=h.db.runTransaction;
+  h.db.runTransaction=fn=>{
+   if(change==='licencia')h.rows.delete('mi_comunidad_licencias/edificio');
+   if(change==='ficha')h.rows.get(h.base+'/residentes/residente').estado='Inactivo';
+   if(change==='depto')h.rows.get(h.base+'/residentes/residente').depto='999';
+   return original(fn);
+  };
+  await assert.rejects(h.call('guardarInvitadosReservaMiComunidad',{id:'r',invitados:[{nombre:'Ana',rut:''}],revision:0},'residente','residente'),{code:change==='licencia'?'failed-precondition':'permission-denied'});
+  assert.deepEqual(h.rows.get(ref).invitados,[]);
  }
 });
