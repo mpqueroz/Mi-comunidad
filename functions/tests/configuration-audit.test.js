@@ -109,8 +109,8 @@ test('políticas parciales y modos desconocidos no se presentan como ausencia de
 });
 test('restricciones distinguen lista vacía, todos los hosts y wildcard sin emitir patrones privados',()=>{
  const {keyRestrictionDetails:details}=require('../../scripts/auditar-configuracion.cjs');
- const [r]=details([{keyString:'NO-IMPRIMIR',restrictions:{browserKeyRestrictions:{allowedReferrers:['*','https://*.example.test/*','https://NO-IMPRIMIR.example.test/*','https://example.test/?NO-IMPRIMIR']},apiTargets:[{service:'identitytoolkit.googleapis.com'}]}}]);
- assert.equal(r.browserReferrerCount,4);assert.equal(r.allHostsPatternCount,1);assert.equal(r.wildcardHostPatternCount,1);assert.equal(r.unclassifiedReferrerCount,1);
+ const [r]=details([{keyString:'NO-IMPRIMIR',restrictions:{browserKeyRestrictions:{allowedReferrers:['*','https://*/prefix/*','https://*.example.test/*','https://NO-IMPRIMIR.example.test/*','https://example.test/?NO-IMPRIMIR']},apiTargets:[{service:'identitytoolkit.googleapis.com'}]}}]);
+ assert.equal(r.browserReferrerCount,5);assert.equal(r.allHostsPatternCount,2);assert.equal(r.wildcardHostPatternCount,1);assert.equal(r.unclassifiedReferrerCount,1);
  assert.equal(r.authApiInAllowlist,true);assert.equal(r.tokenApiInAllowlist,false);assert.ok(!JSON.stringify(r).includes('NO-IMPRIMIR'));
  assert.equal(details([{}])[0].apiTargetCount,0);assert.equal(details([{}])[0].authApiInAllowlist,true);
 });

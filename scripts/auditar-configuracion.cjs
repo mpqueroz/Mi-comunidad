@@ -64,7 +64,8 @@ function keyRestrictionDetails(keys){
       try{
         const u=new URL(pattern);
         if(!['http:','https:'].includes(u.protocol)||u.username||u.password||u.search||u.hash)throw Error();
-        if(u.hostname.includes('*'))wildcardHosts++;
+        if(u.hostname==='*')allHosts++;
+        else if(u.hostname.includes('*'))wildcardHosts++;
       }catch(_){unclassified++;}
     }
     const unrestricted=targets.length===0;
