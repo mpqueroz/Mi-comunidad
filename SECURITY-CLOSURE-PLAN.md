@@ -4,7 +4,7 @@ Estado: PR en borrador. La autorización expresa del usuario permitió únicamen
 
 ## 1. Habilitación autorizada, bloqueada en ejecución
 
-[Firebase #167](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43866375618), commit `a4528d3`: el job manual se ejecutó con la opción de habilitación activada después de aprobar las pruebas. Terminó con HTTP 403, sin confirmar la habilitación de ninguna API. La consulta posterior autenticada confirmó `SERVICE_DISABLED` para ambas. El error de habilitación no aportó una razón permitida ni identifica si falló la lectura del estado o el POST; no atribuir un permiso IAM concreto sin evidencia.
+[Firebase #171](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43905015078), commit `cfe0f96`: el job manual confirmó HTTP 403 en la fase `enable-service` de `firebaseappcheck.googleapis.com`. La lectura previa de estado sí se completó; fue rechazado el POST de habilitación, antes de intentar la segunda API. La consulta posterior devolvió `SERVICE_DISABLED` para ambas. No se conoce un rol concreto faltante y no se amplió IAM. #170/#171 aprobaron 372 pruebas y la composición real aprobó las mismas 237 del emulador.
 
 La consola de Google Cloud devolvió «Site Unavailable» en este navegador durante el intento de continuación. La alternativa pendiente es que una sesión con permisos existentes suficientes habilite exclusivamente:
 
@@ -38,3 +38,9 @@ La composición conserva byte por byte las secciones publicadas de las otras apl
 El archivo compuesto se guarda solo en el runner; no se publica ni se adjunta el código desplegado a logs o artefactos. La evidencia de cada ejecución se conserva en `SECURITY-AUDIT.md`.
 
 Ni el éxito del emulador ni la autorización para consultar/habilitar APIs autorizan fusionar o desplegar este PR.
+
+## 4. Compatibilidad de datos históricos antes de publicar
+
+Los casos administrativos de documentos, bloques y fichas laborales señalados en la evaluación se corrigieron en `cfe0f96`. Los validadores de bloques exigen el esquema completo también al actualizar; un bloque histórico sin campos requeridos o con tipos/tamaños fuera del contrato puede necesitar regularización antes de poder activar/desactivar. No se debe ampliar las reglas para aceptar datos arbitrarios ni modificar esos registros reales automáticamente. Completar un inventario agregado de compatibilidad y revisar cualquier migración por separado.
+
+Resultado de la comprobación agregada en #173 (`5f1bb74`): cuatro comunidades, 0 bloques guardados y 0 incompatibles. No existe una migración de bloques pendiente con esa instantánea. La utilidad paginada de solo lectura se incorpora a la barrera de publicación para detectar incompatibilidades futuras.

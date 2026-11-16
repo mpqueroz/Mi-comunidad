@@ -1,12 +1,12 @@
 {
   "score": 4,
-  "summary": "Revisión acotada de la sección Mi Comunidad propuesta en el PR #18, sin aprobación de producción. La autoridad se basa en claims de servidor, pertenencia de comunidad, perfil habilitado y licencia vigente. Las pruebas cubren aislamiento, cambio de departamento, licencia/ficha ausente y escrituras financieras reservadas al backend. La publicación requiere regularizar las cuentas legítimas y verificar la composición contra las reglas efectivas. La puntuación no evalúa ni certifica toda la política de las otras aplicaciones. La lista de invitados queda reservada a una callable de residente con esquema y límites por elemento, comprobación transaccional de acceso/propiedad y revisión optimista; validada en Firebase #168 sobre commit 4b528ad (368 pruebas aprobadas), sin despliegue.",
+  "summary": "Revisión acotada del PR #18, sin aprobación de producción. Los casos de invitados y los tres casos administrativos originalmente señalados se corrigieron y validaron en cfe0f96: 372 pruebas aprobadas y repetición de 237 sobre la composición con reglas publicadas, preservando las otras apps. El resultado no certifica ausencia de vulnerabilidades, equivalencia del código desplegado ni compatibilidad de todos los registros históricos. El inventario adicional de #173 encontró 0 bloques existentes y 0 incompatibles en las cuatro comunidades. Se mantiene 4/5 por el riesgo de acceso de cuentas legítimas pendiente de resolver antes de publicar; no es una puntuación de la seguridad actual de producción.",
   "findings": [
     {
-      "check": "Type Safety / Storage Abuse",
+      "check": "Business Logic vs. Rules / Migration compatibility",
       "severity": "minor",
-      "issue": "Persisten escrituras directas de administración en documentos, bloques de reserva y fichas laborales sin un esquema completo de campos, tipos y tamaños en las reglas. Exigen administración habilitada de la misma comunidad; no se encontró en esas condiciones una elevación de rol, pero un cliente administrativo alterado puede corromper sus datos o consumir recursos.",
-      "recommendation": "Completar esquemas y límites de esas rutas o trasladarlas a operaciones del servidor, preservando los contratos de la interfaz y validando tanto creación como actualización antes de publicar esa mejora."
+      "issue": "Dos cuentas administrativas habilitadas no tienen ficha y una está en una comunidad activa/licenciada. El acceso estricto propuesto la rechazaría; readyForStrictAccess=false impide publicar sin resolverlo. Los casos de validación de invitados, documentos, bloques y escrituras directas de fichas laborales quedaron corregidos en el PR; el inventario de bloques no halló registros existentes que migrar.",
+      "recommendation": "Verificar las cuentas privadamente y crear solo las fichas autorizadas con permiso de escritura, sin modificar licencias ni reactivar cuentas. Repetir el inventario y la composición antes de una publicación autorizada por separado."
     }
   ]
 }

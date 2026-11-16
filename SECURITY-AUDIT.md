@@ -2,6 +2,42 @@
 
 **Estado:** revisión preventiva; no desplegar este PR sin completar las verificaciones.
 
+## Evidencia más reciente — cierre de código de esta etapa
+
+[Firebase #172 (PR)](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43906053490) y [Firebase #173 (manual)](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43906272946), commit `5f1bb74`: **137 pruebas de funciones + 237 del emulador = 374 aprobadas**, sin fallos ni omitidas. Chromium app/demo y auditorías npm aprobaron; 0 vulnerabilidades en los árboles auditados. Los cuatro workflows del PR aprobaron. #173 volvió a aprobar las mismas 237 pruebas sobre la composición real; ambos despliegues y la habilitación de APIs se omitieron. No se repitió la solicitud rechazada de habilitación.
+
+El inventario de #173 confirmó 0 bloques guardados y 0 incompatibles en cuatro comunidades. Las dos fichas administrativas ausentes y las consultas de APIs aún bloqueadas impiden declarar terminada la auditoría de producción. El diagnóstico de #171 sitúa el 403 exactamente en el POST para habilitar App Check. Las correcciones de código de esta etapa quedan validadas en `5f1bb74`; las actualizaciones posteriores de este informe documentan esa evidencia.
+
+## Actualización final de esta etapa — 16 de noviembre de 2026 (Chile)
+
+Código validado en commit `cfe0f96`, todavía sin aprobación de producción:
+
+- [Firebase #170 (PR)](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43904138261) y [Firebase #171 (manual)](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43905015078): **135 pruebas de funciones + 237 del emulador = 372 aprobadas**, 0 fallos y 0 omitidas. Chromium aprobó app y demo; auditorías npm: 0 vulnerabilidades. Los cuatro workflows del PR aprobaron. Ambos despliegues quedaron omitidos.
+- #171 repitió las mismas **237 pruebas** sobre la composición con las reglas realmente publicadas, sin ADC durante las pruebas. Todas aprobaron. `otherApplicationsPreserved=true` y `miComunidadMatchesRepository=true`; la verificación final de versión y huella publicada aprobó. No sumar esta repetición como casos nuevos.
+- Base publicada SHA256 `a30ee4f1cab7575e0fcc19c6c466647e568dc9f2e13da609bb5af56ae8cc62a3`; composición probada `2f9fb71fde526ce2e3935c2f57a3f9ca1e28f1b3f4aa77021e46fb8fc6c4abc4`; reglas de la rama `38dd75e688f771fa2502f27f59a3f793e74c766d7e0f712dbe2431dfa85a0c81`.
+
+### Correcciones de los tres casos administrativos señalados
+
+- Documentos: esquema cerrado con cinco campos requeridos; icono hasta 40 caracteres, título hasta 150, descripción hasta 2000 y contenido hasta 50000; `ts` entero positivo. Solo administración habilitada de la comunidad puede publicar o eliminar; las actualizaciones siguen cerradas.
+- Bloques de reserva: esquema cerrado con seis campos requeridos; lugar de la lista de cuatro espacios que usa la interfaz, nombre hasta 100 caracteres, horarios HH:mm válidos, booleano `activo` y `ts` entero positivo. El mismo validador protege altas y actualizaciones; estas solo pueden cambiar `activo`, preservando horario, lugar y fecha de creación. No se impuso un orden de horas que pudiera eliminar bloques nocturnos existentes. Borrado administrativo conservado.
+- Fichas laborales: cerrada toda escritura directa de `conserjes`. La interfaz ya realiza altas y cambios de estado por las callables de cuentas; esas operaciones de servidor se mantienen. No se migraron ni borraron fichas históricas. Las nuevas restricciones de bloques rechazan registros que incumplan el esquema; el inventario adicional de esta etapa no encontró bloques existentes, como se detalla abajo.
+- La interfaz limita los largos y muestra un aviso antes de enviar documentos o nombres de bloque excesivos. Las reglas propuestas son un prototipo revisable, validado contra los casos indicados; requieren revisión antes de publicación amplia. No equivalen a una garantía absoluta de seguridad de toda la aplicación.
+
+### Inventario adicional de compatibilidad
+
+Commit `5f1bb74` añade una comprobación paginada, de solo lectura, del contrato de bloques de reserva. La salida contiene únicamente conteos; cualquier bloque incompatible bloquea la publicación. Dos pruebas nuevas verifican tipos, campos obligatorios, límites, datos hostiles y ausencia de identificadores en la salida. Los bloques nocturnos válidos siguen siendo compatibles.
+
+[Firebase #173](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43906272946), inventario de las cuatro comunidades: **0 bloques examinados, 0 incompatibles**. No existen bloques actuales que regularizar por este cambio; no se escribieron datos ni se infiere de este conteo que la función de reservas ya esté configurada para usuarios reales. Las dos fichas ausentes mantienen `readyForStrictAccess=false`.
+
+### Bloqueos que permanecen
+
+- El nuevo diagnóstico de habilitación identifica etiquetas constantes de fase/servicio, sin emitir errores remotos ni credenciales. #171 devolvió **HTTP 403 en `enable-service` para `firebaseappcheck.googleapis.com`**: la consulta previa de estado se completó y el POST de habilitación fue rechazado. La segunda API no llegó a intentarse. No atribuir el rechazo a un rol específico: el error no incluyó una razón permitida. No ampliar IAM automáticamente.
+- La consulta posterior confirmó **SERVICE_DISABLED para ambas APIs**. La autorización para habilitar esas dos APIs sigue vigente; falta una sesión que pueda realizar esa operación. No se activó enforcement ni se consultaron valores de claves.
+- El inventario volvió a confirmar **2 administradores sin ficha**, ambos habilitados; uno coincide con propietario registrado y en la otra comunidad no consta ese campo. Una cuenta afectada pertenece a una comunidad activa/licenciada, sin correlacionar los conteos. `readyForStrictAccess=false`; las licencias sin acceso no se activaron.
+- Antes de publicar: completar las consultas bloqueadas, verificar privadamente las cuentas y regularizar únicamente las autorizadas con permiso de escritura, repetir los controles de compatibilidad si cambian los datos y acreditar lo pendiente del código fuente desplegado. Sigue prohibido fusionar o desplegar.
+
+El estado global manual **failure** corresponde a inventario e intento de habilitación; las pruebas y composición aprobaron. No hubo fusión, despliegue ni cambios de usuarios, claims, documentos, licencias, precios, pagos o IAM. Las APIs no quedaron habilitadas según la consulta posterior.
+
 ## Actualización — APIs e invitados, 16 de noviembre de 2026 (Chile)
 
 - [Firebase #167](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43866375618), commit `a4528d3`: **134 pruebas de funciones + 228 del emulador = 362 aprobadas**, 0 fallos y 0 omitidas. Chromium y auditorías npm aprobaron (0 vulnerabilidades). La composición real también aprobó; ambos despliegues se omitieron.
