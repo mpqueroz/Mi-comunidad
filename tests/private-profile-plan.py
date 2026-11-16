@@ -68,6 +68,7 @@ class PrivatePlanTests(unittest.TestCase):
             class Opener:
                 def open(self, req, timeout):
                     self_test.assertEqual(req.get_method(), 'GET')
+                    self_test.assertEqual(req.get_header('X-goog-user-project'), module.PROJECT)
                     raise urllib.error.HTTPError(url, 403, 'SECRET-ERROR', {}, io.BytesIO(b'SECRET-BODY'))
             self_test = self
             stderr, stdout = io.StringIO(), io.StringIO()
@@ -93,6 +94,13 @@ class PrivatePlanTests(unittest.TestCase):
         with patch.dict(module.os.environ, {}, clear=True), patch.object(module.sys, 'argv', ['script', '--project', module.PROJECT, '--diagnostico']), patch.object(module.subprocess, 'check_output', return_value='SECRET-TOKEN'), patch.object(module, 'private_plan', return_value=result), contextlib.redirect_stdout(stdout):
             self.assertEqual(module.cli(), 0)
         self.assertEqual(json.loads(stdout.getvalue()), {'soloLectura': True, 'fase': 'completada', 'codigo': 'OK', 'cuentasSinFicha': 1})
+
+    def test_only_allowlisted_errorinfo_reason_can_leave_response(self):
+        cases = [('SERVICE_DISABLED', 'SERVICE_DISABLED'), ('private-name-token', None)]
+        for reason, expected in cases:
+            body = {'error': {'message': 'SECRET-MESSAGE', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': reason, 'metadata': {'consumer': 'SECRET-PROJECT'}}]}}
+            with urllib.error.HTTPError('https://identitytoolkit.googleapis.com/private', 403, 'SECRET', {}, io.BytesIO(json.dumps(body).encode())) as error:
+                self.assertEqual(module.safe_http_reason(error), expected)
 
 
 if __name__ == '__main__':

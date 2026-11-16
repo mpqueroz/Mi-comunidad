@@ -2,6 +2,12 @@
 
 **Estado:** revisión preventiva; no desplegar este PR sin completar las verificaciones.
 
+## Seguimiento más reciente — 403 Auth, cuota y cierre de respuestas
+
+La captura confirma 403 en `auth_listar_cuentas`; no identifica aún el motivo. Se añade cabecera explícita de cuota limitada a mercado-ciudadano para las consultas REST, sin cambiar configuración, IAM o datos. La recomendación oficial de cuotas con credenciales personales no demuestra que fuera esta la causa concreta. Un ErrorInfo fallido puede emitir exclusivamente un motivo de lista cerrada, nunca mensaje, metadata o cuerpo. La sesión y las identidades siguen sin compartirse; no se autorizaron ni crearon fichas.
+
+La revisión 78fddc8 falló remotamente por la prueba Python de diagnóstico: una respuesta HTTP ficticia sin cerrar produjo salida adicional bajo Python 3.14. Se cierra ahora la respuesta en finally; nueve pruebas Python con ResourceWarning como error y las 154 pruebas Node aprobaron localmente. No atribuir a 78fddc8 las 392 pruebas remotas de 12a6cee. La corrección requiere su nueva validación remota. Procedimiento actualizado en sección 10 del plan de cierre.
+
 ## Seguimiento — fallo de consulta privada sin causa identificada
 
 La captura enviada por el usuario confirma SHA256 OK del script privado, seguido del error genérico. No permite atribuir la causa a permisos o sesión. Se añade diagnóstico de fase/HTTP con mensajes predefinidos, sin cuerpo externo, token, URL ni identidades, y modo de solo conteos. Ocho casos Python simulados y las 154 pruebas Node de funciones aprobaron localmente; el wrapper sigue siendo un solo caso Node. No se obtuvieron huellas de cuentas ni se ejecutó reparación. La evidencia remota de 392 casos de la revisión anterior sigue abajo; no atribuirla automáticamente a esta nueva revisión. Instrucciones en sección 9 del plan de cierre.

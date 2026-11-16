@@ -14,11 +14,31 @@ PROJECT = 'mercado-ciudadano'
 
 class SafeDiagnostic(Exception):
     """Solo códigos predefinidos, nunca mensajes/cuerpos de servicios externos."""
-    def __init__(self, stage, code, http_status=None):
+    def __init__(self, stage, code, http_status=None, reason=None):
         self.result = {'soloLectura': True, 'fase': stage, 'codigo': code}
         if http_status is not None:
             self.result['http'] = http_status
+        if reason is not None:
+            self.result['motivo'] = reason
         super().__init__(code)
+
+
+def safe_http_reason(error):
+    # Solo códigos conocidos de ErrorInfo; nunca su mensaje, metadata o cuerpo.
+    allowed = {'USER_PROJECT_DENIED', 'USER_PROJECT_MISSING', 'SERVICE_DISABLED',
+               'ACCESS_TOKEN_SCOPE_INSUFFICIENT', 'IAM_PERMISSION_DENIED',
+               'QUOTA_EXCEEDED', 'BILLING_DISABLED', 'CONSUMER_INVALID',
+               'CREDENTIALS_MISSING', 'SECURITY_POLICY_VIOLATED'}
+    try:
+        data = json.loads(error.read(65536))
+        details = data.get('error', {}).get('details', [])
+        if isinstance(details, list):
+            for detail in details:
+                if isinstance(detail, dict) and detail.get('@type') == 'type.googleapis.com/google.rpc.ErrorInfo' and detail.get('reason') in allowed:
+                    return detail['reason']
+    except (ValueError, TypeError, AttributeError, OSError):
+        pass
+    return None
 
 
 def identifier(value):
@@ -101,7 +121,7 @@ def main():
         if parsed.scheme != 'https' or parsed.hostname not in ['identitytoolkit.googleapis.com', 'firestore.googleapis.com']:
             raise ValueError('Destino no permitido.')
         stage = 'auth_listar_cuentas' if parsed.hostname == 'identitytoolkit.googleapis.com' else 'firestore_leer_ficha' if '/administradores/' in parsed.path else 'firestore_leer_comunidad'
-        req = urllib.request.Request(url, headers={'Authorization': 'Bearer ' + token}, method='GET')
+        req = urllib.request.Request(url, headers={'Authorization': 'Bearer ' + token, 'x-goog-user-project': PROJECT}, method='GET')
         try:
             with opener.open(req, timeout=30) as response:
                 try:
@@ -109,10 +129,13 @@ def main():
                 except (ValueError, UnicodeError):
                     raise SafeDiagnostic(stage, 'RESPUESTA_NO_JSON') from None
         except urllib.error.HTTPError as error:
-            # Solo la ausencia de un documento Firestore es una ausencia válida.
-            if error.code == 404 and parsed.hostname == 'firestore.googleapis.com':
-                return None
-            raise SafeDiagnostic(stage, 'HTTP_ERROR', error.code) from None
+            try:
+                # Solo la ausencia de un documento Firestore es una ausencia válida.
+                if error.code == 404 and parsed.hostname == 'firestore.googleapis.com':
+                    return None
+                raise SafeDiagnostic(stage, 'HTTP_ERROR', error.code, safe_http_reason(error)) from None
+            finally:
+                error.close()
         except (urllib.error.URLError, OSError):
             raise SafeDiagnostic(stage, 'CONEXION_NO_COMPLETADA') from None
 
