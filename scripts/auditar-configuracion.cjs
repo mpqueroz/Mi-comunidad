@@ -156,10 +156,13 @@ async function configuration({projectId, localRules, getRules, read, webAppId}) 
       for(const [label,provider]of Object.entries({appCheckRecaptchaV3:'recaptchaV3Config',appCheckRecaptchaEnterprise:'recaptchaEnterpriseConfig'})){
         await check(label,async()=>{
           const name=`projects/${number}/apps/${webAppId}/${provider}`;
-          let data;try{data=await read(`https://firebaseappcheck.googleapis.com/v1/projects/${number}/apps/${encodeURIComponent(webAppId)}/${provider}?fields=name`);}
-          catch(error){if(error.status===404)return {configured:false,httpStatus:404,scope:'provider-resource-presence-only'};throw error;}
+          const fields=provider==='recaptchaV3Config'?'name,siteSecretSet':'name,siteKey';
+          let data;try{data=await read(`https://firebaseappcheck.googleapis.com/v1/projects/${number}/apps/${encodeURIComponent(webAppId)}/${provider}?fields=${fields}`);}
+          catch(error){if(error.status===404)return {resourcePresent:false,configurationSignalPresent:false,httpStatus:404,scope:'provider-metadata-not-token-exchange'};throw error;}
           if(data.name&&data.name!==name)throw Error('Proveedor no corresponde a la app.');
-          return {configured:data.name===name,scope:'provider-resource-presence-only'};
+          if(data.siteSecretSet!==undefined&&typeof data.siteSecretSet!=='boolean')throw Error('Señal de proveedor inválida.');
+          if(data.siteKey!==undefined&&typeof data.siteKey!=='string')throw Error('Señal de proveedor inválida.');
+          return {resourcePresent:data.name===name,configurationSignalPresent:provider==='recaptchaV3Config'?data.siteSecretSet===true:typeof data.siteKey==='string'&&data.siteKey.length>0,scope:'provider-metadata-not-token-exchange'};
         });
       }
     }

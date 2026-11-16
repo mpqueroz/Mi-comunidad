@@ -124,7 +124,7 @@ test('asocia apps registradas sin valores de claves, ids ni dominios ajenos en l
  assert.equal(r.webAppAssociations.registeredWebApps,1);assert.equal(r.webAppAssociations.miComunidadRegistered,true);
  assert.equal(r.apiKeyRestrictions.details[0].registeredWebAppsUsingKey,1);assert.equal(r.apiKeyRestrictions.details[0].associatedWithMiComunidad,true);
  assert.equal(r.hostingClients.miComunidadDefaultHostPresent,true);assert.equal(r.authDomains.otherDomainCount,1);
- assert.equal(r.appCheckRecaptchaV3.configured,false);assert.equal(r.appCheckRecaptchaEnterprise.configured,false);
+ assert.equal(r.appCheckRecaptchaV3.configurationSignalPresent,false);assert.equal(r.appCheckRecaptchaEnterprise.configurationSignalPresent,false);
  assert.ok(!JSON.stringify(r).includes('test-key'));assert.ok(!JSON.stringify(r).includes('NO-IMPRIMIR'));
  assert.ok(f.urls.every(url=>!url.includes('getKeyString')&&!url.includes('/config?fields=apiKey')));
 });
@@ -133,4 +133,14 @@ test('apps parciales impiden asegurar asociaciones; proveedor de otra app no se 
  const r=await configuration(f);assert.equal(r.webAppAssociations.verified,false);assert.equal(r.complete,false);assert.equal(r.apiKeyRestrictions.details[0].registeredWebAppsUsingKey,null);
  const g=fixture(),original=g.read;g.read=async url=>url.includes('/apps/')?{name:'NO-IMPRIMIR'}:original(url);
  const bad=await configuration(g);assert.equal(bad.appCheckRecaptchaV3.verified,false);assert.equal(bad.complete,false);assert.ok(!JSON.stringify(bad).includes('NO-IMPRIMIR'));
+});
+
+test('un nombre de recurso no acredita configuración; solo se emiten señales y nunca claves públicas o secretas',async()=>{
+ const f=fixture(),read=f.read,requests=[];
+ f.read=async url=>{requests.push(url);return url.includes('/apps/')?{name:decodeURIComponent(new URL(url).pathname.slice(4))}:read(url);};
+ const empty=await configuration(f);assert.equal(empty.appCheckRecaptchaV3.resourcePresent,true);assert.equal(empty.appCheckRecaptchaV3.configurationSignalPresent,false);assert.equal(empty.appCheckRecaptchaEnterprise.configurationSignalPresent,false);
+ f.read=async url=>url.includes('/apps/')?{name:decodeURIComponent(new URL(url).pathname.slice(4)),siteSecretSet:true,siteKey:'NO-IMPRIMIR-PUBLICA',siteSecret:'NO-IMPRIMIR-SECRETO'}:read(url);
+ const present=await configuration(f);assert.equal(present.appCheckRecaptchaV3.configurationSignalPresent,true);assert.equal(present.appCheckRecaptchaEnterprise.configurationSignalPresent,true);assert.ok(!JSON.stringify(present).includes('NO-IMPRIMIR'));
+ assert.ok(requests.some(url=>url.includes('fields=name,siteSecretSet')));
+ assert.ok(requests.every(url=>!new URL(url).searchParams.get('fields')?.split(',').includes('siteSecret')));
 });
