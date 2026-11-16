@@ -2,6 +2,35 @@
 
 **Estado:** revisión preventiva; no desplegar este PR sin completar las verificaciones.
 
+## Estado vigente — validación real del cierre, 16 de noviembre de 2026 (Chile)
+
+**No declarar lista para producción ni fusionar este PR todavía.** Se mantiene la prohibición de despliegue. Se completó una comprobación con las reglas efectivamente publicadas, sin modificar ningún recurso de Firebase.
+
+### Compatibilidad real verificada
+
+- [Firebase #164](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43851565002), commit `99a7145`: **129 pruebas de funciones + 228 del emulador = 357 aprobadas**, sin fallos ni omitidas. Ambas comprobaciones Chromium aprobaron; auditorías npm: **0 vulnerabilidades**. Los dos jobs de despliegue quedaron **skipped**.
+- En un job separado se leyeron las reglas publicadas, se sustituyó únicamente Mi Comunidad y se ejecutaron nuevamente las **228 pruebas** contra ese archivo compuesto. Todas aprobaron. Es una segunda ejecución del mismo conjunto bajo otra composición, no 228 casos nuevos que deban sumarse a los 357 anteriores.
+- El manifiesto confirmó `otherApplicationsPreserved=true` y `miComunidadMatchesRepository=true`: las secciones de las otras apps se conservaron byte por byte.
+- SHA-256 de las reglas publicadas: `a30ee4f1cab7575e0fcc19c6c466647e568dc9f2e13da609bb5af56ae8cc62a3`; composición probada: `fd0e01fdd46d1b8ca1b01797eadb21ec6b8a12b30e452be8fe34e4b703e68ff1`; archivo de la rama: `bd456e8d493492dc694c5149083e5e4ecad54260ec514f9b1e61d7e05e1728b5`.
+- La credencial ADC se retiró antes de ejecutar las pruebas; las pruebas usaron Auth/Firestore emulados y datos ficticios. Después se volvió a autenticar solo para comprobar que la versión y huella publicadas seguían intactas. Se confirmó que no cambiaron durante la ejecución.
+- #158/#159/#162 señalaron tres fallos de Almacén. Los datos ficticios omitían el espejo comercial que sus reglas publicadas ya exigen (`almacen_commercial_access`: `version`, `storeId`, `status=active`, `expiresAt`). Se completaron los fixtures, sin relajar ninguna regla ni aserción. #164 acredita el resultado sobre la composición efectiva.
+
+### Configuración y cuentas: bloqueo real confirmado
+
+- Firebase App Check API y API Keys API devolvieron **403 / `SERVICE_DISABLED`**. No es correcto seguir describiéndolo solo como una supuesta falta de permisos. Deben habilitarse las APIs para continuar esas consultas; todavía no se puede afirmar cómo están configuradas las restricciones ni el enforcement. La utilidad solo expone razones permitidas, nunca mensajes o metadatos arbitrarios de errores.
+- Se mantienen **2 administradores sin ficha**, ambos habilitados en Auth. Uno coincide con el `adminUid` de su comunidad y el otro pertenece a una comunidad sin ese campo registrado. Ninguno tiene un propietario registrado distinto según esta comprobación.
+- **Una de esas dos cuentas está en una comunidad activa y con licencia vigente**. No correlacionar este conteo con la coincidencia de propietario: los grupos no identifican cuál es cuál. Publicar ahora la denegación por defecto dejaría esa cuenta sin acceso.
+- `readyForStrictAccess=false`. El estado global de #164 es **failure por el inventario con hallazgos**; las pruebas de código y las de composición real aprobaron. Las 3 licencias existentes sin acceso siguen sin activarse.
+- El informe estructurado de reglas propuestas (`SECURITY-RULES-ASSESSMENT.json`) registra dos mejoras menores de validación de datos todavía pendientes. Es una revisión acotada, no una certificación de ausencia de vulnerabilidades.
+
+### Acción necesaria para cerrar
+
+El plan concreto está en `SECURITY-CLOSURE-PLAN.md`. Habilitar las dos APIs de consulta cambia la configuración del proyecto compartido y requiere levantar expresamente esa parte de la restricción actual. No equivale a exigir App Check ni a desplegar código. Las fichas deben verificarse privadamente y regularizarse solo con autorización para esas escrituras, preservando las cuentas deshabilitadas y las licencias.
+
+La compatibilidad de la composición está verificada para la base indicada; repetirla si cambia la versión publicada. La equivalencia del código fuente de las funciones desplegadas y las consultas bloqueadas siguen pendientes. No se fusionó ni se desplegó; no se modificaron usuarios, claims, documentos, licencias, precios, pagos ni permisos de producción.
+
+## Evidencia histórica de etapas anteriores
+
 ## Estado vigente — demo y renderizados, 16 de noviembre de 2026 (Chile)
 
 El PR #18 continúa en borrador. Esta sección actualiza la etapa de CSP; las secciones siguientes conservan la evidencia anterior y sus límites. No hubo fusión ni despliegue.
