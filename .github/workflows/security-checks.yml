@@ -1,0 +1,29 @@
+name: Security regression checks
+on:
+  pull_request:
+    paths:
+      - 'firestore.rules'
+      - 'firebase.json'
+      - 'functions/**'
+      - '.github/workflows/security-checks.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: functions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - name: Install dependencies from lockfile
+        run: npm ci --ignore-scripts
+      - name: Validate JavaScript and run regression tests
+        run: npm run check
