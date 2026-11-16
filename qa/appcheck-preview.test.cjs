@@ -16,7 +16,8 @@ test('preview contiene exclusivamente diagnóstico y SDK públicos',()=>{
  assert.doesNotMatch(js,/console\.|\.token\b|innerHTML|fetch\(/);
  assert.match(js,/textContent/);assert.match(js,/45000/);
  const policy=cfg.hosting.headers[0].headers.find(x=>x.key==='Content-Security-Policy').value;
- assert.doesNotMatch(policy,/unsafe-inline|unsafe-eval|\*/);
+ assert.doesNotMatch(policy.split(';').find(x=>x.trim().startsWith('script-src')),/unsafe-inline|unsafe-eval|\*/);
+ assert.doesNotMatch(policy,/unsafe-eval|\*/);
  assert.match(policy,/frame-ancestors 'none'/);
  }finally{fs.rmSync(OUT,{recursive:true,force:true});}
 });

@@ -18,7 +18,7 @@ function build(){
  fs.copyFileSync(path.join(ROOT,'qa/appcheck-preview.js'),path.join(pub,'diagnostico.js'));
  fs.writeFileSync(path.join(pub,'config.js'),'firebase.initializeApp('+JSON.stringify(config)+');\n');
  fs.writeFileSync(path.join(pub,'robots.txt'),'User-agent: *\nDisallow: /\n');
- const csp="default-src 'none'; script-src 'self' https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/; connect-src https://content-firebaseappcheck.googleapis.com https://firebaseappcheck.googleapis.com https://www.google.com/recaptcha/; frame-src https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; upgrade-insecure-requests";
+ const csp="default-src 'none'; script-src 'self' https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/; connect-src https://content-firebaseappcheck.googleapis.com https://firebaseappcheck.googleapis.com https://www.google.com/recaptcha/; frame-src https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/; style-src 'self' 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; upgrade-insecure-requests";
  fs.writeFileSync(path.join(OUT,'firebase.json'),JSON.stringify({hosting:{site:'mi-comunidad-md',public:'public',ignore:[],headers:[{source:'**',headers:[
  {key:'Content-Security-Policy',value:csp},{key:'Cache-Control',value:'no-store'},
  {key:'X-Content-Type-Options',value:'nosniff'},{key:'Referrer-Policy',value:'strict-origin-when-cross-origin'},
