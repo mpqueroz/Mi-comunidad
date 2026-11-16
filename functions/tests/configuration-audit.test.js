@@ -79,6 +79,7 @@ test('requisitos de Almacén exponen esquema técnico y nunca literales privados
  const {storeAccessRequirements}=require('../../scripts/auditar-configuracion.cjs');
  const fixture=rules.replace('function esDueno(storeId) {',`function licenciaAlmacen(storeId){
   let doc=get(/databases/$(database)/documents/almacen_licencias/$(storeId));
+  let deadline=doc.get('validUntil',null);
   return doc.data.get('estado','') == 'active' && request.auth.token.get('app','') == 'almacen_digital' && 'NO-IMPRIMIR@example.invalid' != '';
  }
  function esDueno(storeId) {`)
@@ -86,5 +87,5 @@ test('requisitos de Almacén exponen esquema técnico y nunca literales privados
  // Insert a technical dependency, without relying on its truth in this parser test.
  const withDependency=fixture.replace('function esDueno(storeId) {','function esDueno(storeId) {\n let valid=licenciaAlmacen(storeId);');
  const result=storeAccessRequirements(withDependency);
- const item=result.find(r=>r.helper==='licenciaAlmacen');assert.ok(item);assert.deepEqual(item.collections,['almacen_licencias']);assert.deepEqual(item.dataFields,['estado']);assert.deepEqual(item.claimFields,['app']);assert.ok(!JSON.stringify(result).includes('NO-IMPRIMIR'));
+ const item=result.find(r=>r.helper==='licenciaAlmacen');assert.ok(item);assert.deepEqual(item.collections,['almacen_licencias']);assert.deepEqual(item.dataFields,['estado','validUntil']);assert.deepEqual(item.claimFields,['app']);assert.ok(!JSON.stringify(result).includes('NO-IMPRIMIR'));
 });

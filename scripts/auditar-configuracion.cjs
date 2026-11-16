@@ -34,13 +34,19 @@ function storeAccessRequirements(source){
     'vendedor','admin','owner','almacen','almacen_digital','almacenDigital','mi_almacen','almacen-digital'];
   while(pending.length){
     const name=pending.pop();if(seen.has(name)||!definitions.has(name))continue;seen.add(name);
-    const body=definitions.get(name),fields=new Set(),collections=new Set(),claims=new Set(),literals=new Set();
-    for(const m of body.matchAll(/\.data\.([A-Za-z_]\w*)/g))if(m[1]!=='get')fields.add(m[1]);
-    for(const m of body.matchAll(/\.data\.get\(\s*['"]([A-Za-z_][A-Za-z_]{0,39})['"]/g))fields.add(m[1]);
-    for(const m of body.matchAll(/\.token(?:\.get\(\s*['"]([A-Za-z_][A-Za-z_]{0,39})['"]|\.([A-Za-z_]\w*))/g))claims.add(m[1]||m[2]);
-    for(const m of body.matchAll(/\/documents\/([A-Za-z_]{1,40})\/\$\(/g))collections.add(m[1]);
-    for(const m of body.matchAll(/['"]([^'"\n]*)['"]/g))if(allowedLiterals.includes(m[1]))literals.add(m[1]);
-    const dependencies=[...definitions.keys()].filter(key=>key!==name&&new RegExp('\\b'+key+'\\s*\\(').test(body));
+    const body=definitions.get(name),fields=new Set(),collections=new Set(),claims=new Set(),literals=new Set(),strings=[];
+    const code=body.replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\/|'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"/g,token=>{
+      if(token.startsWith('//')||token.startsWith('/*'))return ' ';
+      const plain=token.slice(1,-1);strings.push(plain);return `__literal${strings.length-1}__`;
+    });
+    const technicalKey=value=>typeof value==='string'&&/^[A-Za-z_][A-Za-z_]{0,39}$/.test(value);
+    for(const m of code.matchAll(/\b([A-Za-z_]\w*)\.get\(\s*__literal(\d+)__/g))if(m[1]!=='token'&&technicalKey(strings[Number(m[2])]))fields.add(strings[Number(m[2])]);
+    for(const m of code.matchAll(/\b[A-Za-z_]\w*\.([A-Za-z_][A-Za-z_]{0,39})/g))if(!['get','data','auth','token','uid','time'].includes(m[1]))fields.add(m[1]);
+    for(const m of code.matchAll(/\.token\.get\(\s*__literal(\d+)__/g))if(technicalKey(strings[Number(m[1])]))claims.add(strings[Number(m[1])]);
+    for(const m of code.matchAll(/\.token\.([A-Za-z_]\w*)/g))if(m[1]!=='get')claims.add(m[1]);
+    for(const m of code.matchAll(/\/documents\/([A-Za-z_]{1,40})\/\$\(/g))collections.add(m[1]);
+    for(const value of strings)if(allowedLiterals.includes(value))literals.add(value);
+    const dependencies=[...definitions.keys()].filter(key=>key!==name&&new RegExp('\\b'+key+'\\s*\\(').test(code));
     pending.push(...dependencies);
     out.push({helper:name,collections:[...collections].sort(),dataFields:[...fields].sort(),claimFields:[...claims].sort(),knownStatesOrRoles:[...literals].sort(),dependencies});
   }
