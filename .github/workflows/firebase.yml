@@ -184,3 +184,26 @@ jobs:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
       - name: Publicar siete funciones con secretos exclusivos de producción
         run: bash scripts/habilitar-produccion.sh
+
+  audit-access:
+    name: Inventario de accesos (solo lectura)
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/security/auditoria-blindaje-2026-11' && github.repository == 'mpqueroz/Mi-comunidad'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Instalar SDK sin ejecutar scripts de paquetes
+        working-directory: functions
+        run: npm ci --ignore-scripts
+      - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - name: Inventariar licencias y fichas sin modificar Firebase
+        run: node scripts/auditar-accesos.cjs --project mercado-ciudadano --require-clean
