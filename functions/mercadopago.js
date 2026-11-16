@@ -333,7 +333,7 @@ async function checkoutContext(request, tx = null) {
   const ref=db.collection("mi_comunidad_comunidades").doc(comunidadId);
   const read = ref => tx ? tx.get(ref) : ref.get();
   const [comunidad,licencia,admin]=await Promise.all([read(ref),read(db.collection(LICENSES).doc(comunidadId)),read(ref.collection("administradores").doc(request.auth.uid))]);
-  if(admin.exists && admin.get("estado")!=="Activo")throw new HttpsError("permission-denied","Administración desactivada.");
+  if(!admin.exists || admin.get("estado")!=="Activo")throw new HttpsError("permission-denied","Administración desactivada.");
   if(!comunidad.exists || comunidad.get("estado")==="Suspendida" || !licencia.exists || licencia.get("estado")==="suspended")throw new HttpsError("failed-precondition","Comunidad no habilitada para compra.");
   const environment=String(MP_ENVIRONMENT.value()||""),amount=Number(PLAN_PRICE.value());
   if(!["test","production"].includes(environment)||!Number.isSafeInteger(amount)||amount<=0)throw new HttpsError("failed-precondition","Configuración comercial incompleta.");

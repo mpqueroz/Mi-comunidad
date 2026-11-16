@@ -5,6 +5,7 @@ function harness(){
  const orderId='order000000000000001';
  const docs=new Map([
   ['mi_comunidad_comunidades/test-edificio',{estado:'Activa',mpTestFixture:true}],
+  ['mi_comunidad_comunidades/test-edificio/administradores/admin-test',{estado:'Activo'}],
   ['mi_comunidad_licencias/test-edificio',{estado:'trial',paidUntil:null}],
  ]);
  const secrets={MC_MP_ACCESS_TOKEN:'ficticio',MC_MP_WEBHOOK_SECRET:'firma-ficticia',MC_MP_ENVIRONMENT:'test',MC_MP_TEST_ACCOUNT:JSON.stringify({collectorId:'123',liveMode:false}),MC_PLAN_ANUAL_CLP:'1000',MC_MP_WEBHOOK_URL:'https://example.invalid/webhook'};

@@ -196,4 +196,5 @@ test('identidad: licencia ausente y administrador sin ficha quedan bloqueados en
  await license.set({estado:'active',paidUntil:new Date('2099-01-01')});
  await h.base.collection('administradores').doc('adm').delete();
  await assert.rejects(h.call('verificarFichaMiComunidad',{uid:'r1',motivo:'Verificación de prueba'},'adm','admin'),{code:'permission-denied'});
+ await assert.rejects(h.call('consultarLicenciaMiComunidad',{},'adm','admin'),{code:'permission-denied'});
 });

@@ -152,3 +152,16 @@ test('baja entre contexto y transacción impide crear una preferencia',async()=>
  h.db.runTransaction=async callback=>{if(first){first=false;h.docs.set('mi_comunidad_comunidades/test-edificio/administradores/admin-test',{estado:'Inactivo'});}return original(callback);};
  await assert.rejects(h.create(),{code:'permission-denied'});assert.equal(h.state.postCount,0);
 });
+
+test('ficha admin eliminada impide cotizar o iniciar checkout sin llamadas de pago',async()=>{
+ const h=harness();h.docs.delete('mi_comunidad_comunidades/test-edificio/administradores/admin-test');
+ await assert.rejects(h.create(),{code:'permission-denied'});
+ await assert.rejects(h.functions.cotizarPlanMiComunidad({auth:h.auth,data:{}}),{code:'permission-denied'});
+ assert.equal(h.state.calls.length,0);assert.equal(h.order(),undefined);
+});
+test('ficha eliminada entre contexto y transacción no crea preferencia ni orden',async()=>{
+ const h=harness(),original=h.db.runTransaction;
+ h.db.runTransaction=async callback=>{h.docs.delete('mi_comunidad_comunidades/test-edificio/administradores/admin-test');return original(callback);};
+ await assert.rejects(h.create(),{code:'permission-denied'});
+ assert.equal(h.state.postCount,0);assert.equal(h.order(),undefined);
+});
