@@ -5,6 +5,8 @@ on:
       - 'firestore.rules'
       - 'firebase.json'
       - 'functions/**'
+      - 'scripts/auditar-accesos.cjs'
+      - 'public/**'
       - '.github/workflows/security-checks.yml'
   workflow_dispatch:
 permissions:
@@ -17,13 +19,15 @@ jobs:
       run:
         working-directory: functions
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: functions/package-lock.json
       - name: Install dependencies from lockfile
         run: npm ci --ignore-scripts
+      - name: Audit all production dependency severities
+        run: npm audit --omit=dev --audit-level=low
       - name: Validate JavaScript and run regression tests
         run: npm run check

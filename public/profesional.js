@@ -102,7 +102,85 @@ saveModal=async function(){const btn=document.getElementById('modalSaveBtn');if(
   closeModal();showToast('Encomienda registrada: '+result.data.codigo);mcAbrirEncomiendas('Pendientes');return;
 }return await mcGuardarOriginal();}catch(e){console.error(e);showToast(e.message||'No se pudo guardar. Revisa tu conexión.');}finally{btn.disabled=false;}};
 // Delegación de acciones: valores de usuario viajan como datos, nunca como código.
-document.addEventListener('click',async event=>{const b=event.target.closest('[data-mc-action]');if(!b||b.disabled)return;const [fn,...args]=JSON.parse(b.dataset.mcAction);if(typeof window[fn]!=='function'){showToast('Esta acción no está disponible.');return;}b.disabled=true;try{await window[fn](...args);}catch(e){console.error(e);showToast(e.message||'No se pudo guardar. Revisa tu conexión.');}finally{b.disabled=false;}});
+const mcAccionesPermitidas = Object.freeze({
+  abrirBuscarEncomienda: (...args) => abrirBuscarEncomienda(...args),
+  abrirCodigoEncomienda: (...args) => abrirCodigoEncomienda(...args),
+  abrirEscanerRetiro: (...args) => abrirEscanerRetiro(...args),
+  abrirInvitadosReserva: (...args) => abrirInvitadosReserva(...args),
+  confirmarEntregaEncomienda: (...args) => confirmarEntregaEncomienda(...args),
+  mcAbrirOperacion: (...args) => mcAbrirOperacion(...args),
+  mcArchivarAviso: (...args) => mcArchivarAviso(...args),
+  mcBuscarOperacion: (...args) => mcBuscarOperacion(...args),
+  mcCancelarReserva: (...args) => mcCancelarReserva(...args),
+  mcConfirmarAviso: (...args) => mcConfirmarAviso(...args),
+  mcConfirmarSalida: (...args) => mcConfirmarSalida(...args),
+  mcDetalleAviso: (...args) => mcDetalleAviso(...args),
+  mcDetallePaquete: (...args) => mcDetallePaquete(...args),
+  mcDetallePlan: (...args) => mcDetallePlan(...args),
+  mcDetalleSolicitud: (...args) => mcDetalleSolicitud(...args),
+  mcDetalleTurno: (...args) => mcDetalleTurno(...args),
+  mcEnviarMensaje: (...args) => mcEnviarMensaje(...args),
+  mcFiltrarAvisos: (...args) => mcFiltrarAvisos(...args),
+  mcFiltrarPlanes: (...args) => mcFiltrarPlanes(...args),
+  mcFiltrarReservas: (...args) => mcFiltrarReservas(...args),
+  mcFiltro: (...args) => mcFiltro(...args),
+  mcGuardarConfiguracionPagos: (...args) => mcGuardarConfiguracionPagos(...args),
+  mcGuardarGestion: (...args) => mcGuardarGestion(...args),
+  mcGuardarPlan: (...args) => mcGuardarPlan(...args),
+  mcGuardarRevision: (...args) => mcGuardarRevision(...args),
+  mcGuardarSalida: (...args) => mcGuardarSalida(...args),
+  mcGuardarTarea: (...args) => mcGuardarTarea(...args),
+  mcGuardarTurno: (...args) => mcGuardarTurno(...args),
+  mcImprimirTurno: (...args) => mcImprimirTurno(...args),
+  mcIniciarDesdeDetalle: (...args) => mcIniciarDesdeDetalle(...args),
+  mcInicioOperacion: (...args) => mcInicioOperacion(...args),
+  mcIrDesdeBusqueda: (...args) => mcIrDesdeBusqueda(...args),
+  mcMasNovedades: (...args) => mcMasNovedades(...args),
+  mcModalArchivarAviso: (...args) => mcModalArchivarAviso(...args),
+  mcModalAviso: (...args) => mcModalAviso(...args),
+  mcModalCancelarReserva: (...args) => mcModalCancelarReserva(...args),
+  mcModalPlan: (...args) => mcModalPlan(...args),
+  mcModalResolverTarea: (...args) => mcModalResolverTarea(...args),
+  mcModalRevision: (...args) => mcModalRevision(...args),
+  mcModalTarea: (...args) => mcModalTarea(...args),
+  mcModalTurno: (...args) => mcModalTurno(...args),
+  mcPublicarAviso: (...args) => mcPublicarAviso(...args),
+  mcRenderAgenda: (...args) => mcRenderAgenda(...args),
+  mcResolverTarea: (...args) => mcResolverTarea(...args),
+  mcVerificarManual: (...args) => mcVerificarManual(...args),
+  mcVerLecturas: (...args) => mcVerLecturas(...args),
+  mcVerMantencionesAnteriores: (...args) => mcVerMantencionesAnteriores(...args),
+  navigate: (...args) => navigate(...args),
+  openEncomiendaModal: (...args) => openEncomiendaModal(...args),
+  openNovedadModal: (...args) => openNovedadModal(...args),
+  openProveedorModal: (...args) => openProveedorModal(...args),
+  openRequestModal: (...args) => openRequestModal(...args),
+  openVisitaModal: (...args) => openVisitaModal(...args),
+  verFichaDesdeBusqueda: (...args) => verFichaDesdeBusqueda(...args),
+});
+document.addEventListener('click', async event => {
+  const b = event.target.closest('[data-mc-action]');
+  if (!b || b.disabled) return;
+  let action;
+  try {
+    const raw = b.dataset.mcAction;
+    if (typeof raw !== 'string' || raw.length > 4096) throw Error('Acción inválida.');
+    action = JSON.parse(raw);
+    if (!Array.isArray(action) || typeof action[0] !== 'string' ||
+        !Object.hasOwn(mcAccionesPermitidas, action[0]) || action.length > 11 ||
+        action.slice(1).some(v => v !== null && !['string', 'number', 'boolean'].includes(typeof v))) {
+      throw Error('Acción inválida.');
+    }
+  } catch (_) {
+    showToast('Esta acción no está disponible.');
+    return;
+  }
+  const [fn, ...args] = action;
+  b.disabled = true;
+  try { await mcAccionesPermitidas[fn](...args); }
+  catch (e) { console.error(e); showToast(e.message || 'No se pudo guardar. Revisa tu conexión.'); }
+  finally { b.disabled = false; }
+});
 function mcInvitar(){abrirModalVisitaProgramada(profile.depto);}
 
 window.addEventListener('popstate',event=>{if(event.state?.mcOperacion&&mcStaff()){mc.lista=event.state.mcOperacion;mcRenderOperacion();}});
