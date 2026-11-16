@@ -35,6 +35,21 @@ on:
         type: boolean
         required: false
         default: false
+      repair_admin_profiles:
+        description: 'Crear SOLO fichas ausentes de cuentas verificadas y autorizadas'
+        type: boolean
+        required: false
+        default: false
+      profile_repair_codes:
+        description: 'Uno o dos códigos SHA256 de la revisión privada (sin nombres ni UID)'
+        type: string
+        required: false
+        default: ''
+      admin_changes_paused:
+        description: 'Confirmo que no se cambiarán cuentas desde otros paneles durante la reparación'
+        type: boolean
+        required: false
+        default: false
 
 # Mínimo privilegio para el token de GitHub: solo leer el repositorio.
 permissions:
@@ -276,6 +291,40 @@ jobs:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
       - name: Confirmar que las reglas publicadas no cambiaron durante la prueba
         run: node scripts/preparar-reglas-compartidas.cjs --assert-unchanged
+
+  repair-admin-profiles:
+    name: Regularizar únicamente fichas verificadas y aprobadas
+    needs: tests
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/security/auditoria-blindaje-2026-11' &&
+      github.repository == 'mpqueroz/Mi-comunidad' &&
+      inputs.repair_admin_profiles == true && inputs.admin_changes_paused == true &&
+      inputs.profile_repair_codes != ''
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - name: Instalar SDK antes de disponer de credenciales
+        working-directory: functions
+        run: npm ci --ignore-scripts
+      - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+        with:
+          credentials_json: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
+      - name: Crear solo fichas ausentes de las identidades aprobadas
+        env:
+          APPROVE_PROFILE_REPAIR: 'true'
+          ADMIN_CHANGES_PAUSED: 'true'
+          PROFILE_REPAIR_CODES: ${{ inputs.profile_repair_codes }}
+        run: node scripts/ejecutar-reparacion-fichas.cjs --project mercado-ciudadano --apply
+      - name: Repetir inventario después del intento de regularización
+        if: always()
+        run: node scripts/auditar-accesos.cjs --project mercado-ciudadano --require-clean
 
   enable-audit-apis:
     name: Habilitar dos APIs autorizadas y consultar

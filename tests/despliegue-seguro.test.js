@@ -111,3 +111,14 @@ test('auditoría de reglas reales nunca despliega y retira ADC antes del emulado
  assert.ok(job.includes("GOOGLE_APPLICATION_CREDENTIALS: ''"));
  assert.ok(!job.includes('upload-artifact'));
 });
+
+test('reparación de fichas requiere rama exacta, pruebas, aprobación, códigos y pausa de cambios',()=>{
+ const source=require('node:fs').readFileSync(require('node:path').join(__dirname,'../.github/workflows/firebase.yml'),'utf8');
+ const job=source.slice(source.indexOf('  repair-admin-profiles:'),source.indexOf('  enable-audit-apis:'));
+ for(const guard of ["github.event_name == 'workflow_dispatch'","github.ref == 'refs/heads/security/auditoria-blindaje-2026-11'","github.repository == 'mpqueroz/Mi-comunidad'",'inputs.repair_admin_profiles == true','inputs.admin_changes_paused == true',"inputs.profile_repair_codes != ''",'needs: tests'])assert.ok(job.includes(guard),guard);
+ assert.ok(job.indexOf('npm ci --ignore-scripts')<job.indexOf('credentials_json:'));
+ assert.ok(job.includes('PROFILE_REPAIR_CODES: ${{ inputs.profile_repair_codes }}'));
+ assert.ok(!job.match(/run:.*\$\{\{.*profile_repair_codes/));
+ assert.ok(job.includes('node scripts/auditar-accesos.cjs --project mercado-ciudadano --require-clean'));
+ assert.ok(!job.includes('firebase deploy'));
+});

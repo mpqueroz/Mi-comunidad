@@ -56,11 +56,12 @@ def private_plan(read):
         state = {'uid': uid, 'disabled': False, 'app': 'mi_comunidad', 'role': 'admin', 'comunidadId': community_id}
         evidence = {'projectId': PROJECT, 'expectedAuth': state, 'expectedOwner': owner,
                     'communityName': field(community, 'nombre'), 'communityState': field(community, 'estado'),
-                    'accountDisplayName': user.get('displayName', ''), 'registeredAdminName': field(community, 'adminNombre')}
+                    'accountDisplayName': user.get('displayName') or '', 'registeredAdminName': field(community, 'adminNombre')}
         digest = hashlib.sha256(json.dumps(evidence, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
         blocked = (owner is not None and owner != uid) or field(community, 'estado') == 'Suspendida'
         plans.append({'comunidad': evidence['communityName'], 'comunidadId': community_id, 'uid': uid,
                       'nombreEnAuth': evidence['accountDisplayName'], 'nombreAdministracionRegistrado': evidence['registeredAdminName'],
+                      'nombrePropuestoFicha': (evidence['accountDisplayName'] or evidence['registeredAdminName']).strip(),
                       'titularidad': 'coincide' if owner == uid else 'sin propietario registrado' if owner is None else 'propietario distinto',
                       'bloqueada': blocked, 'codigoConfirmacion': digest})
     return {'soloLectura': True, 'proyecto': PROJECT, 'cuentasSinFicha': plans}
