@@ -2,6 +2,44 @@
 
 **Estado:** revisión preventiva; no desplegar este PR sin completar las verificaciones.
 
+## Estado vigente — demo y renderizados, 16 de noviembre de 2026 (Chile)
+
+El PR #18 continúa en borrador. Esta sección actualiza la etapa de CSP; las secciones siguientes conservan la evidencia anterior y sus límites. No hubo fusión ni despliegue.
+
+### Correcciones de esta etapa
+
+- Commit `c749481`: se migraron los **141 manejadores inline de la demo** a 97 destinos explícitos con datos JSON escapados. Sus tres scripts originales se extrajeron a `demo/backend.js`, `demo/qr.js` y `demo/app.js`; `demo/eventos.js` registra las acciones. Se conserva el código del decodificador de QR que ya estaba embebido, sin cambiar su algoritmo.
+- Las dos entradas HTML de `public/` usan scripts externos. La política HTTP común ya **no permite `unsafe-inline` en `script-src`**. La demo añade `script-src 'self'; script-src-attr 'none'; connect-src 'none'; frame-src 'none'`, ya que trabaja con datos simulados locales. Los estilos siguen permitiendo inline; no se afirma haber eliminado todas las apariciones de esa palabra en CSP.
+- Los archivos de la demo exigen revalidación de caché. El orden de carga sigue siendo backend simulado, lector QR, acciones y aplicación.
+- Se corrigió un borrado demasiado amplio: el reinicio de la demo ya no elimina todas las claves `mc_`. Ahora cancela su escritura local pendiente y elimina solo su base `mc_demo_db_v4` y preferencias `mc_demo_los-robles_*`. El almacenamiento de preferencias de la demo usa ese espacio propio. Las pruebas preservan expresamente claves ajenas y antiguas; no se tocaron datos reales.
+
+### Revisión de renderizados adicionales
+
+| Área | Tratamiento revisado | Evidencia y límite |
+| --- | --- | --- |
+| Datos bancarios e instrucciones | `mcEscape` antes de HTML; enlace limitado a prefijo HTTPS y texto escapado | Regresión con comillas, etiquetas y `javascript:`; no verifica legitimidad comercial de un enlace configurado por administración |
+| Documento tributario | `esc` en cada campo antes de unir líneas | Regresión de correo, RUT, razón social, giro, dirección y comuna con texto hostil; sin cambiar operaciones de pago |
+| Suscripción | Texto escapado, títulos constantes, importes numéricos validados y dominio/protocolo de checkout restringidos | Revisión del código existente; no se ejecutaron compras ni modificaciones comerciales |
+| Demo | Atributos de acciones serializados y destinos cerrados; scripts externos | Recorrido de vistas de administración, conserjería y propietario en Chromium; no acredita cada combinación de datos, modales o dispositivo |
+| App autenticada | Se conserva la prueba real de clic, Enter, input y argumentos hostiles | Se comprueba también bajo la cabecera HTTP sin scripts inline |
+
+La revisión y los payloads probados no encontraron inyección en esos campos. No se declara ausencia absoluta de XSS ni protección contra copia del JavaScript publicado.
+
+### Verificación
+
+- [Firebase #154](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43845266545), commit `c749481`: **126 pruebas de funciones + 225 de emulador = 351 aprobadas**, sin fallos ni omitidas. Las dos comprobaciones de Chromium aprobaron app y demo. Se recorrieron los tres roles de la demo, se probó su reinicio y el bloqueo CSP, y no hubo consultas de backend durante el recorrido. Auditorías npm: **0 vulnerabilidades**; comprobación pública y otros tres workflows aprobados. Ambos despliegues: **skipped**.
+- [Firebase #155](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43845795442), commit `aa52283`: **126 pruebas de funciones + 226 de emulador = 352 aprobadas**, sin fallos ni omitidas, incluida la regresión adicional de datos bancarios/tributarios. Las dos comprobaciones Chromium y las auditorías npm aprobaron nuevamente; comprobación pública y otros tres workflows aprobados. Ambos despliegues: **skipped**.
+
+### Barrido ampliado de secretos en el historial disponible
+
+Se recorrieron **159 commits y 451 blobs de texto únicos** (22.237.963 bytes) alcanzables por las referencias locales, con una referencia remota descargada. No hubo coincidencias en los ocho grupos buscados: claves privadas, tokens GitHub clásicos y de alcance fino, secretos OAuth de Google, tokens productivos de Mercado Pago, refresh tokens de Google, tokens Slack e identificadores de acceso AWS. Se omitieron 6 blobs binarios; ninguno superó el límite de 2 MiB. La salida contenía solo conteos, nunca coincidencias ni valores. No se trató la configuración web pública de Firebase como credencial privada.
+
+Es un barrido por patrones sobre el historial descargado, no una validación de credenciales ni una garantía de ausencia de secretos. No cubre otras ramas no descargadas, logs/artifacts de Actions, archivos binarios, secretos cifrados o sistemas externos. No se rotaron credenciales ni se reescribió el historial.
+
+### Límites y bloqueos que permanecen
+
+Las dos fichas de administrador ausentes y las consultas de App Check/restricciones de API con HTTP 403 siguen pendientes, según la lectura real anterior. No se cambiaron permisos para consultar ni se regularizaron usuarios en producción. Las reglas compartidas deben integrarse sobre las versiones efectivamente publicadas y volver a probarse; la equivalencia del código desplegado tampoco está acreditada. La eliminación de scripts inline está preparada y probada en la rama, todavía sin publicar.
+
 ## Continuación — interfaz y política de scripts, 16 de noviembre de 2026 (Chile)
 
 Commit `42f3d37`, preparado en la rama del PR #18, sin fusión ni despliegue:
