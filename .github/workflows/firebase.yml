@@ -221,7 +221,12 @@ jobs:
 
   audit-access:
     name: Inventario de accesos (solo lectura)
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/security/auditoria-blindaje-2026-11' && github.repository == 'mpqueroz/Mi-comunidad'
+    if: >-
+      github.repository == 'mpqueroz/Mi-comunidad' &&
+      ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/security/auditoria-blindaje-2026-11') ||
+       (github.event_name == 'pull_request' && github.event.pull_request.number == 18 &&
+        github.event.pull_request.head.repo.full_name == 'mpqueroz/Mi-comunidad' &&
+        github.event.pull_request.head.ref == 'security/auditoria-blindaje-2026-11'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -252,7 +257,12 @@ jobs:
 
   audit-shared-rules:
     name: Reglas publicadas combinadas (sin despliegue)
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/security/auditoria-blindaje-2026-11' && github.repository == 'mpqueroz/Mi-comunidad'
+    if: >-
+      github.repository == 'mpqueroz/Mi-comunidad' &&
+      ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/security/auditoria-blindaje-2026-11') ||
+       (github.event_name == 'pull_request' && github.event.pull_request.number == 18 &&
+        github.event.pull_request.head.repo.full_name == 'mpqueroz/Mi-comunidad' &&
+        github.event.pull_request.head.ref == 'security/auditoria-blindaje-2026-11'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

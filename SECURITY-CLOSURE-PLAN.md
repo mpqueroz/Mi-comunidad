@@ -162,3 +162,15 @@ Secuencia pendiente, sin modificar la barrera de publicación:
 5. Tras la distribución autorizada del cliente, observar métricas antes de decidir enforcement. Retirar el dominio temporal de Fraud Defense al terminar su uso; no consta todavía su retirada.
 
 El PR permanece en borrador. No se fusionó, publicó Hosting live, modificaron reglas/funciones ni cambiaron cuentas o configuración de producción en esta actualización.
+
+## 16. Dos cuentas de prueba deshabilitadas; resultado real aportado por el titular
+
+El titular autorizó deshabilitar únicamente las dos cuentas de prueba conservando datos y el principal. Aclaró que su cuenta de acceso por RUT es superadmin y que las otras son de prueba. No repetir la identificación principal ya resuelta.
+
+La primera ejecución privada se detuvo antes de escribir (intentos=0) por frase distinta de la requerida. La ejecución posterior del script de `75a4e234a4fc62939b60496e174dccbb8fc3ce09` terminó según la captura con resultado=OK, intentos=2, deshabilitadasVerificadas=2, datosEliminados=false y produccionPublicada=false. Evidencia manual del titular, no una operación ejecutada directamente por el asistente. No publicar identidades de la tabla privada. El script excluye superadmin, revalida Auth y ausencia de fichas, y solo escribe disableUser=true en las dos cuentas identificadas.
+
+Se da por completada la operación autorizada de deshabilitación, sin borrar datos ni crear fichas. No repetirla ni solicitar otra autorización para la misma operación. No se acredita revocación inmediata de tokens existentes, un inventario global apto ni publicación de los cambios de aplicación.
+
+La revisión actual habilita exclusivamente los jobs de inventario de solo lectura y composición/prueba de reglas publicadas en eventos del PR #18 del repositorio/rama exactos. Conserva los modos manuales; no amplía ejecución de reparación, habilitación de APIs, deploy ni grupo comercial. Usa la credencial existente, no modifica IAM. Solo resultados agregados del inventario, sin identidades, y la composición queda temporal en el runner.
+
+Pendiente verificar el nuevo resultado real de inventario/composición. El inventario actual todavía marca ficha ausente para cuentas Auth deshabilitadas: no afirmar que esta operación elimina automáticamente el bloqueo, no ocultar hallazgos ni modificar licencias para obtener verde. Las demás pruebas de aplicación completa/roles/pagos, equivalencia desplegada, consumidores de clave y transición de App Check siguen pendientes conforme a la sección 15.
