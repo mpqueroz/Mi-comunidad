@@ -50,6 +50,8 @@ async function main(){
   await page.locator('#probe-field').fill('TORRE Norte!');assert.equal(await page.locator('#probe-field').inputValue(),'torre-norte-');
   await page.locator('#probe-injected').click();
   assert.equal(await page.evaluate(()=>!!window.injectedScript||!!window.injectedHandler),false);
+  // Los reportes de CSP se entregan como eventos asíncronos.
+  await page.waitForFunction(()=>probe.violations.includes('script-src-elem')&&probe.violations.includes('script-src-attr'), {timeout:5000});
   const violations=await page.evaluate(()=>probe.violations);
   assert.ok(violations.includes('script-src-elem'));assert.ok(violations.includes('script-src-attr'));
   assert.deepEqual(errors,[]);
