@@ -2,7 +2,47 @@
 
 **Estado:** revisión preventiva; no desplegar este PR sin completar las verificaciones.
 
-## Estado actualizado — segunda revisión, 15 de noviembre de 2026 (Chile)
+## Estado vigente — 16 de noviembre de 2026 (UTC)
+
+El PR #18 permanece en borrador, sin fusión ni despliegue. Esta sección sustituye los estados anteriores; las secciones históricas describen el código y las pruebas de su fecha.
+
+### Acceso estricto preparado y probado en la rama
+
+Los commits `f735962`, `50c4739` y `dd0234d` eliminan la compatibilidad que permitía operar sin licencia o sin ficha de administrador. Se aplica en reglas Firestore, funciones, interfaz, integridad contable, consulta de suscripción, cotización/checkout y tarea de vencimientos. No se cambiaron importes, períodos, estados comerciales ni webhooks. El acceso operativo exige licencia vigente y perfil habilitado; la consulta comercial conserva su finalidad de renovación y exige una ficha válida.
+
+Las 13 operaciones transaccionales del módulo profesional vuelven a comprobar comunidad, licencia y perfil dentro de la transacción. Las pruebas incluyen la eliminación o inhabilitación de una cuenta y cambios de departamento entre la comprobación inicial y la escritura, sin permitir escrituras parciales. Las reglas de las otras aplicaciones no se modificaron en estos commits.
+
+Antes de preparar cualquier despliegue, CI ejecutará `auditar-accesos.cjs --require-clean` con las credenciales de despliegue. El guard impide publicar el acceso estricto mientras existan fichas ausentes. No sustituye las restantes revisiones de seguridad.
+
+### Evidencia final de esta etapa
+
+- [Firebase #147](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43796302377), commit `dd0234d`: **126 pruebas de funciones + 217 del emulador = 343 aprobadas**, sin fallos ni omitidas; auditorías npm: **0 vulnerabilidades**. Comprobación pública sin credenciales aprobada; ambos despliegues omitidos. Los otros tres workflows del mismo commit finalizaron correctamente.
+- #146 detectó una expectativa antigua del fixture E2E: se esperaba un número fijo de documentos antes de agregar la ficha válida del administrador. Se corrigió para comparar el contenido completo antes y después de solicitudes rechazadas. Las comprobaciones de acceso permanecieron estrictas; #147 verifica la corrección.
+- [Firebase #148](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43796430403): ejecución manual de solo lectura sobre `dd0234d`. Pruebas aprobadas; ambos despliegues **skipped**. Estado global **failure** porque el inventario conserva hallazgos y sale con código 2.
+- Inventario actualizado: **4 comunidades, 9 cuentas, 2 administradores sin ficha, 3 licencias existentes sin acceso vigente**; ninguna licencia ausente. `readyForStrictAccess=false`. Las licencias sin acceso no se activaron ni se consideran automáticamente un error.
+
+### Configuración real consultada sin modificaciones
+
+El nuevo script `scripts/auditar-configuracion.cjs` usa exclusivamente consultas de lectura, no solicita valores de claves y emite información limitada. Tiene cuatro pruebas que cubren sanitización, permisos insuficientes, resultados parciales y proyecto incorrecto.
+
+- Proyecto confirmado: `mercado-ciudadano`.
+- Reglas publicadas SHA-256: `a30ee4f1cab7575e0fcc19c6c466647e568dc9f2e13da609bb5af56ae8cc62a3`; archivo de la rama: `bd456e8d493492dc694c5149083e5e4ecad54260ec514f9b1e61d7e05e1728b5`.
+- `sameMiComunidad=false` y `sameOtherApps=false`: también hay diferencias en las secciones compartidas de otras aplicaciones. Esto no demuestra por sí solo una vulnerabilidad. No sobrescribir las reglas compartidas con el archivo completo de la rama: conservar las secciones publicadas de las otras apps, integrar solo Mi Comunidad y ejecutar nuevamente las pruebas de compatibilidad antes de publicar.
+- **37 funciones** cuyo nombre termina en MiComunidad figuran `ACTIVE`, runtime `nodejs22`. Solo se verificaron metadatos; no se ha acreditado igualdad del código fuente desplegado con el PR.
+- App Check y restricciones de API devolvieron **HTTP 403**: no verificados. No implica que estén desactivados. No se ampliaron permisos. El reporte declara `complete=false`; el paso permite continuar únicamente para recoger también el inventario, no para declarar aprobada la auditoría.
+
+### Pendientes reales
+
+1. Verificar privadamente las dos cuentas sin ficha y regularizar únicamente las que correspondan, en una intervención de producción separadamente autorizada; conservar cuentas deshabilitadas. Repetir el inventario antes de publicar. No conceder licencias para hacer pasar el control.
+2. Obtener una consulta autorizada de App Check y restricciones de API, y verificar la equivalencia del código desplegado. Los metadatos de funciones no resuelven estas comprobaciones.
+3. Completar revisión de renderizados y migración de scripts/manejadores inline antes de retirar `unsafe-inline` de CSP.
+4. Integrar reglas de Mi Comunidad preservando las reglas efectivas de las otras aplicaciones, probar ese resultado y preparar una publicación separada únicamente cuando se autorice.
+
+No se modificaron datos, usuarios, claims, licencias, pagos, precios, reglas, funciones ni hosting de producción. La auditoría completa continúa abierta; las correcciones de acceso están preparadas y probadas en el PR.
+
+## Registro histórico de revisiones anteriores
+
+## Segunda revisión — 15 de noviembre de 2026 (Chile)
 
 El PR #18 sigue **en borrador y sin autorización de fusión o despliegue**. Las correcciones de esta revisión están en `8301d0c` y `6590ffc`; no se cambiaron reglas, licencias, cuentas ni precios de producción.
 
@@ -40,7 +80,7 @@ Por defecto emite solo conteos, sin nombres, correos, RUT, teléfonos ni credenc
 1. Identificar las dos cuentas en un entorno privado de consulta; verificar UID, claims `app=mi_comunidad`, rol `admin`, comunidad asignada, estado de Auth y si siguen autorizadas por su comunidad. No publicar nombres, correos, RUT ni credenciales en GitHub.
 2. Preparar únicamente las fichas que correspondan a esas cuentas verificadas. Preservar cuentas deshabilitadas como inactivas. Usar creación con precondición de inexistencia, sin sobrescribir fichas que se hayan creado desde el inventario y sin cambiar claims ni contraseñas.
 3. Revisar las tres licencias con el responsable comercial. Mantener su estado y vigencia; no otorgar meses, reiniciar trials ni reconocer pagos sin evidencia.
-4. Repetir el inventario tras la regularización autorizada. Solo cuando no existan bloqueadores, preparar y probar la denegación por defecto de licencias y fichas ausentes en reglas, funciones e interfaz, incluida la compatibilidad de las otras apps.
+4. Repetir el inventario tras la regularización autorizada. La denegación por defecto ya está preparada y probada en la rama (véase el estado vigente); publicar únicamente después de resolver los bloqueadores y volver a comprobar compatibilidad.
 5. Publicar únicamente en una ventana expresamente autorizada. Esta revisión conserva la prohibición de fusionar o desplegar.
 
 ### Pendientes que impiden cerrar la auditoría completa
