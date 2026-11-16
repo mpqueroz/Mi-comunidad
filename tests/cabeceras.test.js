@@ -31,8 +31,19 @@ test('el SDK de Firebase se sirve desde el sitio y coincide con su registro', ()
 });
 
 test('SheetJS se carga desde su CDN solo con huella de integridad', () => {
-  const html = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+  const html = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
   const carga = html.slice(html.indexOf('cdn.sheetjs.com/xlsx-0.20.3'), html.indexOf('cdn.sheetjs.com/xlsx-0.20.3') + 400);
   assert.match(carga, /script\.integrity = "sha384-EnyY0\/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP\+39Ckmn92stwABZynq1JyzdT"/);
   assert.match(carga, /script\.crossOrigin = "anonymous"/);
+});
+
+test('la app autenticada añade CSP sin scripts inline ni manejadores HTML',()=>{
+ const html=fs.readFileSync(path.join(root,'public/index.html'),'utf8');
+ const main=fs.readFileSync(path.join(root,'public/app.js'),'utf8');
+ const meta=html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)">/);
+ assert.ok(meta);assert.match(meta[1],/script-src 'self' https:\/\/cdn.sheetjs.com/);assert.match(meta[1],/script-src-attr 'none'/);assert.doesNotMatch(meta[1],/unsafe-inline|unsafe-eval/);
+ assert.ok(html.indexOf(meta[0])<html.indexOf('<script'));
+ for(const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)){assert.match(match[1],/src=/);assert.equal(match[2].trim(),'');}
+ assert.doesNotMatch(html,/\son\w+\s*=/i);assert.doesNotMatch(main,/\son(?:click|change|input|keydown)\s*=/i);
+ assert.ok(hosting.headers.some(h=>h.source==='/app.js'&&h.headers.some(x=>x.key==='Cache-Control'&&x.value==='no-cache')));
 });

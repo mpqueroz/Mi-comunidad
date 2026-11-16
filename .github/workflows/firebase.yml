@@ -76,6 +76,12 @@ jobs:
       - name: Correr tests en el emulador
         working-directory: tests
         run: npm test
+      - name: Instalar Chromium para comprobar CSP en navegador aislado
+        working-directory: tests
+        run: npx --no-install playwright install --with-deps --only-shell chromium
+      - name: Probar interfaz y bloqueo de scripts inline sin Firebase
+        working-directory: tests
+        run: npm run test:browser
       - name: Auditar herramientas sin excepciones de severidad
         working-directory: tests
         run: npm audit --audit-level=moderate

@@ -2,12 +2,14 @@
   "name": "mi-comunidad-tests",
   "private": true,
   "scripts": {
-    "test": "firebase emulators:exec --only firestore,auth --project demo-mi-comunidad --config ../firebase.test.json \"node --test\""
+    "test": "firebase emulators:exec --only firestore,auth --project demo-mi-comunidad --config ../firebase.test.json \"node --test\"",
+    "test:browser": "node manual/csp-browser.cjs"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "6.0.0",
     "firebase": "13.0.0",
-    "firebase-tools": "15.34.0"
+    "firebase-tools": "15.34.0",
+    "playwright": "1.62.1"
   },
   "overrides": {
     "@grpc/grpc-js": "1.14.5",

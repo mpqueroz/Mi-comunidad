@@ -101,86 +101,191 @@ saveModal=async function(){const btn=document.getElementById('modalSaveBtn');if(
   const result=await functions.httpsCallable('registrarEncomiendaMiComunidad')({comunidadId:community.id,titulo:document.getElementById('mEncomiendaTitulo').value.trim(),depto:document.getElementById('mEncomiendaDepto').value.trim(),destinatario:document.getElementById('mEncomiendaDestinatario').value.trim(),tracking:document.getElementById('mEncomiendaTracking').value.trim(),ubicacion:document.getElementById('mcUbicacion').value.trim(),foto:await mcLeerFoto('mcFoto')});
   closeModal();showToast('Encomienda registrada: '+result.data.codigo);mcAbrirEncomiendas('Pendientes');return;
 }return await mcGuardarOriginal();}catch(e){console.error(e);showToast(e.message||'No se pudo guardar. Revisa tu conexión.');}finally{btn.disabled=false;}};
-// Delegación de acciones: valores de usuario viajan como datos, nunca como código.
+// Acciones declaradas: JSON de datos y funciones explícitas; sin eval ni window[nombre].
 const mcAccionesPermitidas = Object.freeze({
-  abrirBuscarEncomienda: (...args) => abrirBuscarEncomienda(...args),
-  abrirCodigoEncomienda: (...args) => abrirCodigoEncomienda(...args),
-  abrirEscanerRetiro: (...args) => abrirEscanerRetiro(...args),
-  abrirInvitadosReserva: (...args) => abrirInvitadosReserva(...args),
-  confirmarEntregaEncomienda: (...args) => confirmarEntregaEncomienda(...args),
-  mcAbrirOperacion: (...args) => mcAbrirOperacion(...args),
-  mcArchivarAviso: (...args) => mcArchivarAviso(...args),
-  mcBuscarOperacion: (...args) => mcBuscarOperacion(...args),
-  mcCancelarReserva: (...args) => mcCancelarReserva(...args),
-  mcConfirmarAviso: (...args) => mcConfirmarAviso(...args),
-  mcConfirmarSalida: (...args) => mcConfirmarSalida(...args),
-  mcDetalleAviso: (...args) => mcDetalleAviso(...args),
-  mcDetallePaquete: (...args) => mcDetallePaquete(...args),
-  mcDetallePlan: (...args) => mcDetallePlan(...args),
-  mcDetalleSolicitud: (...args) => mcDetalleSolicitud(...args),
-  mcDetalleTurno: (...args) => mcDetalleTurno(...args),
-  mcEnviarMensaje: (...args) => mcEnviarMensaje(...args),
-  mcFiltrarAvisos: (...args) => mcFiltrarAvisos(...args),
-  mcFiltrarPlanes: (...args) => mcFiltrarPlanes(...args),
-  mcFiltrarReservas: (...args) => mcFiltrarReservas(...args),
-  mcFiltro: (...args) => mcFiltro(...args),
-  mcGuardarConfiguracionPagos: (...args) => mcGuardarConfiguracionPagos(...args),
-  mcGuardarGestion: (...args) => mcGuardarGestion(...args),
-  mcGuardarPlan: (...args) => mcGuardarPlan(...args),
-  mcGuardarRevision: (...args) => mcGuardarRevision(...args),
-  mcGuardarSalida: (...args) => mcGuardarSalida(...args),
-  mcGuardarTarea: (...args) => mcGuardarTarea(...args),
-  mcGuardarTurno: (...args) => mcGuardarTurno(...args),
-  mcImprimirTurno: (...args) => mcImprimirTurno(...args),
-  mcIniciarDesdeDetalle: (...args) => mcIniciarDesdeDetalle(...args),
-  mcInicioOperacion: (...args) => mcInicioOperacion(...args),
-  mcIrDesdeBusqueda: (...args) => mcIrDesdeBusqueda(...args),
-  mcMasNovedades: (...args) => mcMasNovedades(...args),
-  mcModalArchivarAviso: (...args) => mcModalArchivarAviso(...args),
-  mcModalAviso: (...args) => mcModalAviso(...args),
-  mcModalCancelarReserva: (...args) => mcModalCancelarReserva(...args),
-  mcModalPlan: (...args) => mcModalPlan(...args),
-  mcModalResolverTarea: (...args) => mcModalResolverTarea(...args),
-  mcModalRevision: (...args) => mcModalRevision(...args),
-  mcModalTarea: (...args) => mcModalTarea(...args),
-  mcModalTurno: (...args) => mcModalTurno(...args),
-  mcPublicarAviso: (...args) => mcPublicarAviso(...args),
-  mcRenderAgenda: (...args) => mcRenderAgenda(...args),
-  mcResolverTarea: (...args) => mcResolverTarea(...args),
-  mcVerificarManual: (...args) => mcVerificarManual(...args),
-  mcVerLecturas: (...args) => mcVerLecturas(...args),
-  mcVerMantencionesAnteriores: (...args) => mcVerMantencionesAnteriores(...args),
-  navigate: (...args) => navigate(...args),
-  openEncomiendaModal: (...args) => openEncomiendaModal(...args),
-  openNovedadModal: (...args) => openNovedadModal(...args),
-  openProveedorModal: (...args) => openProveedorModal(...args),
-  openRequestModal: (...args) => openRequestModal(...args),
-  openVisitaModal: (...args) => openVisitaModal(...args),
-  verFichaDesdeBusqueda: (...args) => verFichaDesdeBusqueda(...args),
+  abrirAsociarMovimiento: (el, event, ...args) => abrirAsociarMovimiento(...args),
+  abrirBuscarEncomienda: (el, event, ...args) => abrirBuscarEncomienda(...args),
+  abrirBuscarFicha: (el, event, ...args) => abrirBuscarFicha(...args),
+  abrirCodigoEncomienda: (el, event, ...args) => abrirCodigoEncomienda(...args),
+  abrirDetalleComunidad: (el, event, ...args) => abrirDetalleComunidad(...args),
+  abrirEscanerRetiro: (el, event, ...args) => abrirEscanerRetiro(...args),
+  abrirFichaDepto: (el, event, ...args) => abrirFichaDepto(...args),
+  abrirImportarCartola: (el, event, ...args) => abrirImportarCartola(...args),
+  abrirInformarPago: (el, event, ...args) => abrirInformarPago(...args),
+  abrirInvitadosReserva: (el, event, ...args) => abrirInvitadosReserva(...args),
+  abrirModalAplicarMulta: (el, event, ...args) => abrirModalAplicarMulta(...args),
+  abrirModalBloque: (el, event, ...args) => abrirModalBloque(...args),
+  abrirModalFamiliar: (el, event, ...args) => abrirModalFamiliar(...args),
+  abrirModalInvitado: (el, event, ...args) => abrirModalInvitado(...args),
+  abrirModalPreguntaSecreta: (el, event, ...args) => abrirModalPreguntaSecreta(...args),
+  abrirModalRestringido: (el, event, ...args) => abrirModalRestringido(...args),
+  abrirModalTipoMulta: (el, event, ...args) => abrirModalTipoMulta(...args),
+  abrirModalVehiculoRegistrado: (el, event, ...args) => abrirModalVehiculoRegistrado(...args),
+  abrirModalVisitaProgramada: (el, event, ...args) => abrirModalVisitaProgramada(...args),
+  abrirNotificaciones: (el, event, ...args) => abrirNotificaciones(...args),
+  abrirVehiculoBuscado: (el, event, ...args) => abrirVehiculoBuscado(...args),
+  actualizarBloquesReservaModal: (el, event, ...args) => actualizarBloquesReservaModal(...args),
+  actualizarCampoRetiroOtro: (el, event, ...args) => actualizarCampoRetiroOtro(...args),
+  actualizarDiferenciaAsociar: (el, event, ...args) => actualizarDiferenciaAsociar(...args),
+  actualizarDisponibilidadPanel: (el, event, ...args) => actualizarDisponibilidadPanel(...args),
+  actualizarMontoSugeridoMulta: (el, event, ...args) => actualizarMontoSugeridoMulta(...args),
+  avanzarEstadoIncidencia: (el, event, ...args) => avanzarEstadoIncidencia(...args),
+  buscarEncomiendaPorCodigo: (el, event, ...args) => buscarEncomiendaPorCodigo(...args),
+  cambiarEstadoAdminComunidad: (el, event, ...args) => cambiarEstadoAdminComunidad(...args),
+  cambiarEstadoCuenta: (el, event, ...args) => cambiarEstadoCuenta(...args),
+  chequearRestriccionAcceso: (el, event, ...args) => chequearRestriccionAcceso(...args),
+  chequearRestriccionVisita: (el, event, ...args) => chequearRestriccionVisita(...args),
+  closeModal: (el, event, ...args) => closeModal(...args),
+  conciliarExactas: (el, event, ...args) => conciliarExactas(...args),
+  conciliarSugerido: (el, event, ...args) => conciliarSugerido(...args),
+  confirmarEntregaEncomienda: (el, event, ...args) => confirmarEntregaEncomienda(...args),
+  confirmarRetiroDesdeItem: (el, event, ...args) => confirmarRetiroDesdeItem(...args),
+  crearNuevoAdminComunidad: (el, event, ...args) => crearNuevoAdminComunidad(...args),
+  descargarDocumento: (el, event, ...args) => descargarDocumento(...args),
+  descargarPlantillaCartola: (el, event, ...args) => descargarPlantillaCartola(...args),
+  eliminarBloque: (el, event, ...args) => eliminarBloque(...args),
+  eliminarTipoMulta: (el, event, ...args) => eliminarTipoMulta(...args),
+  encomiendaParaDepto: (el, event, ...args) => encomiendaParaDepto(...args),
+  exportarTabAdmin: (el, event, ...args) => exportarTabAdmin(...args),
+  fichaTab: (el, event, ...args) => fichaTab(...args),
+  generarNominaDelMes: (el, event, ...args) => generarNominaDelMes(...args),
+  guardarDatosPropiedad: (el, event, ...args) => guardarDatosPropiedad(...args),
+  guardarNotasSoporteComunidad: (el, event, ...args) => guardarNotasSoporteComunidad(...args),
+  guardarPlanComunidad: (el, event, ...args) => guardarPlanComunidad(...args),
+  irAtencion: (el, event, ...args) => irAtencion(...args),
+  login: (el, event, ...args) => login(...args),
+  logout: (el, event, ...args) => logout(...args),
+  marcarGastoPagado: (el, event, ...args) => marcarGastoPagado(...args),
+  marcarIngresoVisitaProgramada: (el, event, ...args) => marcarIngresoVisitaProgramada(...args),
+  marcarMantencionRealizada: (el, event, ...args) => marcarMantencionRealizada(...args),
+  marcarMultaPagada: (el, event, ...args) => marcarMultaPagada(...args),
+  mcAbrirOperacion: (el, event, ...args) => mcAbrirOperacion(...args),
+  mcArchivarAviso: (el, event, ...args) => mcArchivarAviso(...args),
+  mcBuscarOperacion: (el, event, ...args) => mcBuscarOperacion(...args),
+  mcCampo_alElegirArchivoCartola: (el) => alElegirArchivoCartola(el),
+  mcCampo_buscarEnAsociar: (el) => buscarEnAsociar(el.value),
+  mcCampo_cambiarColumnaCartola: (el, event, campo) => cambiarColumnaCartola(campo, el.value),
+  mcCampo_cambiarFilaEncabezadoCartola: (el) => cambiarFilaEncabezadoCartola(el.value),
+  mcCampo_onBuscarConserje: (el) => onBuscarConserje(el.value),
+  mcCampo_setConciliacionPeriodo: (el) => setConciliacionPeriodo(el.value),
+  mcCancelarReserva: (el, event, ...args) => mcCancelarReserva(...args),
+  mcConfirmarAviso: (el, event, ...args) => mcConfirmarAviso(...args),
+  mcConfirmarSalida: (el, event, ...args) => mcConfirmarSalida(...args),
+  mcDetalleAviso: (el, event, ...args) => mcDetalleAviso(...args),
+  mcDetallePaquete: (el, event, ...args) => mcDetallePaquete(...args),
+  mcDetallePlan: (el, event, ...args) => mcDetallePlan(...args),
+  mcDetalleSolicitud: (el, event, ...args) => mcDetalleSolicitud(...args),
+  mcDetalleTurno: (el, event, ...args) => mcDetalleTurno(...args),
+  mcEnviarMensaje: (el, event, ...args) => mcEnviarMensaje(...args),
+  mcFiltrarAvisos: (el, event, ...args) => mcFiltrarAvisos(...args),
+  mcFiltrarPlanes: (el, event, ...args) => mcFiltrarPlanes(...args),
+  mcFiltrarReservas: (el, event, ...args) => mcFiltrarReservas(...args),
+  mcFiltro: (el, event, ...args) => mcFiltro(...args),
+  mcGuardarConfiguracionPagos: (el, event, ...args) => mcGuardarConfiguracionPagos(...args),
+  mcGuardarGestion: (el, event, ...args) => mcGuardarGestion(...args),
+  mcGuardarPlan: (el, event, ...args) => mcGuardarPlan(...args),
+  mcGuardarRevision: (el, event, ...args) => mcGuardarRevision(...args),
+  mcGuardarSalida: (el, event, ...args) => mcGuardarSalida(...args),
+  mcGuardarTarea: (el, event, ...args) => mcGuardarTarea(...args),
+  mcGuardarTurno: (el, event, ...args) => mcGuardarTurno(...args),
+  mcImprimirTurno: (el, event, ...args) => mcImprimirTurno(...args),
+  mcIngresarConEnter: (el, event) => { if(event.key === 'Enter' && !event.isComposing){ event.preventDefault(); return login(); } },
+  mcIniciarDesdeDetalle: (el, event, ...args) => mcIniciarDesdeDetalle(...args),
+  mcInicioOperacion: (el, event, ...args) => mcInicioOperacion(...args),
+  mcInvitar: (el, event, ...args) => mcInvitar(...args),
+  mcIrDesdeBusqueda: (el, event, ...args) => mcIrDesdeBusqueda(...args),
+  mcMasNovedades: (el, event, ...args) => mcMasNovedades(...args),
+  mcModalArchivarAviso: (el, event, ...args) => mcModalArchivarAviso(...args),
+  mcModalAviso: (el, event, ...args) => mcModalAviso(...args),
+  mcModalCancelarReserva: (el, event, ...args) => mcModalCancelarReserva(...args),
+  mcModalPlan: (el, event, ...args) => mcModalPlan(...args),
+  mcModalResolverTarea: (el, event, ...args) => mcModalResolverTarea(...args),
+  mcModalRevision: (el, event, ...args) => mcModalRevision(...args),
+  mcModalTarea: (el, event, ...args) => mcModalTarea(...args),
+  mcModalTurno: (el, event, ...args) => mcModalTurno(...args),
+  mcNormalizarIdComunidad: (el) => { el.value = el.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'); },
+  mcPublicarAviso: (el, event, ...args) => mcPublicarAviso(...args),
+  mcRenderAgenda: (el, event, ...args) => mcRenderAgenda(...args),
+  mcResolverTarea: (el, event, ...args) => mcResolverTarea(...args),
+  mcSeleccionarBloque: (el, event, id) => { reservaBloqueSeleccionado = id; },
+  mcValidarRutAcceso: (el) => { validarRutEnVivo(el); chequearRestriccionAcceso(); },
+  mcValidarRutCampo: (el) => validarRutEnVivo(el),
+  mcValidarRutVisita: (el) => { validarRutEnVivo(el); chequearRestriccionVisita(); },
+  mcVerLecturas: (el, event, ...args) => mcVerLecturas(...args),
+  mcVerMantencionesAnteriores: (el, event, ...args) => mcVerMantencionesAnteriores(...args),
+  mcVerificarManual: (el, event, ...args) => mcVerificarManual(...args),
+  mostrarFichaSinVerificar: (el, event, ...args) => mostrarFichaSinVerificar(...args),
+  navigate: (el, event, ...args) => navigate(...args),
+  openAccesoModal: (el, event, ...args) => openAccesoModal(...args),
+  openAvisoModal: (el, event, ...args) => openAvisoModal(...args),
+  openConserjeModal: (el, event, ...args) => openConserjeModal(...args),
+  openContactoModal: (el, event, ...args) => openContactoModal(...args),
+  openEncomiendaModal: (el, event, ...args) => openEncomiendaModal(...args),
+  openGenerarCobroModal: (el, event, ...args) => openGenerarCobroModal(...args),
+  openIncidenciaStaffModal: (el, event, ...args) => openIncidenciaStaffModal(...args),
+  openMantencionModal: (el, event, ...args) => openMantencionModal(...args),
+  openModal: (el, event, ...args) => openModal(...args),
+  openMovimientoContableModal: (el, event, ...args) => openMovimientoContableModal(...args),
+  openNovedadModal: (el, event, ...args) => openNovedadModal(...args),
+  openProveedorModal: (el, event, ...args) => openProveedorModal(...args),
+  openRequestModal: (el, event, ...args) => openRequestModal(...args),
+  openReservaModal: (el, event, ...args) => openReservaModal(...args),
+  openResidenteModal: (el, event, ...args) => openResidenteModal(...args),
+  openVehiculoModal: (el, event, ...args) => openVehiculoModal(...args),
+  openVisitaModal: (el, event, ...args) => openVisitaModal(...args),
+  pagarRemuneracion: (el, event, ...args) => pagarRemuneracion(...args),
+  quitarDocumento: (el, event, ...args) => quitarDocumento(...args),
+  quitarFamiliar: (el, event, ...args) => quitarFamiliar(...args),
+  quitarInvitadoReserva: (el, event, ...args) => quitarInvitadoReserva(...args),
+  quitarRestringido: (el, event, ...args) => quitarRestringido(...args),
+  quitarVehiculoRegistrado: (el, event, ...args) => quitarVehiculoRegistrado(...args),
+  quitarVisitaProgramada: (el, event, ...args) => quitarVisitaProgramada(...args),
+  rechazarPagoInformado: (el, event, ...args) => rechazarPagoInformado(...args),
+  renderBuscarEncomienda: (el, event, ...args) => renderBuscarEncomienda(...args),
+  renderBuscarFicha: (el, event, ...args) => renderBuscarFicha(...args),
+  renderDirectorioContacto: (el, event, ...args) => renderDirectorioContacto(...args),
+  restablecerClave: (el, event, ...args) => restablecerClave(...args),
+  revertirConciliacion: (el, event, ...args) => revertirConciliacion(...args),
+  saveModal: (el, event, ...args) => saveModal(...args),
+  saveProfile: (el, event, ...args) => saveProfile(...args),
+  setAdminTab: (el, event, ...args) => setAdminTab(...args),
+  setAvisoFiltro: (el, event, ...args) => setAvisoFiltro(...args),
+  setConciliacionFiltro: (el, event, ...args) => setConciliacionFiltro(...args),
+  toggleActivoBloque: (el, event, ...args) => toggleActivoBloque(...args),
+  toggleActivoTipoMulta: (el, event, ...args) => toggleActivoTipoMulta(...args),
+  toggleEstadoComunidad: (el, event, ...args) => toggleEstadoComunidad(...args),
+  toggleTemaOscuro: (el, event, ...args) => toggleTemaOscuro(...args),
+  verDetalleResidente: (el, event, ...args) => verDetalleResidente(...args),
+  verFichaDesdeBusqueda: (el, event, ...args) => verFichaDesdeBusqueda(...args),
+  verificarIdentidadFicha: (el, event, ...args) => verificarIdentidadFicha(...args),
 });
-document.addEventListener('click', async event => {
-  const b = event.target.closest('[data-mc-action]');
-  if (!b || b.disabled) return;
+const mcEventosEnCurso = new WeakSet();
+async function mcDespacharEvento(event, tipo){
+  const selector = tipo === 'click' ? '[data-mc-click], [data-mc-action]' : `[data-mc-${tipo}]`;
+  const b = event.target?.closest?.(selector);
+  if(!b || b.disabled || mcEventosEnCurso.has(b)) return;
   let action;
   try {
-    const raw = b.dataset.mcAction;
-    if (typeof raw !== 'string' || raw.length > 4096) throw Error('Acción inválida.');
+    const raw = b.dataset['mc' + tipo[0].toUpperCase() + tipo.slice(1)] ?? (tipo === 'click' ? b.dataset.mcAction : undefined);
+    if(typeof raw !== 'string' || raw.length > 4096) throw Error('Acción inválida.');
     action = JSON.parse(raw);
-    if (!Array.isArray(action) || typeof action[0] !== 'string' ||
-        !Object.hasOwn(mcAccionesPermitidas, action[0]) || action.length > 11 ||
-        action.slice(1).some(v => v !== null && !['string', 'number', 'boolean'].includes(typeof v))) {
+    if(!Array.isArray(action) || typeof action[0] !== 'string' ||
+       !Object.hasOwn(mcAccionesPermitidas, action[0]) || action.length > 11 ||
+       action.slice(1).some(v => v !== null && !['string', 'number', 'boolean'].includes(typeof v))) {
       throw Error('Acción inválida.');
     }
-  } catch (_) {
-    showToast('Esta acción no está disponible.');
-    return;
-  }
+  } catch (_) { showToast('Esta acción no está disponible.'); return; }
   const [fn, ...args] = action;
-  b.disabled = true;
-  try { await mcAccionesPermitidas[fn](...args); }
-  catch (e) { console.error(e); showToast(e.message || 'No se pudo guardar. Revisa tu conexión.'); }
-  finally { b.disabled = false; }
-});
+  // No deshabilitar inputs durante input/change: preserva foco y selección de archivos.
+  const bloquear = tipo === 'click';
+  if(bloquear){ mcEventosEnCurso.add(b); b.disabled = true; }
+  try { await mcAccionesPermitidas[fn](b, event, ...args); }
+  catch(e){ console.error(e); showToast(e.message || 'No se pudo completar la acción. Revisa tu conexión.'); }
+  finally { if(bloquear){ mcEventosEnCurso.delete(b); b.disabled = false; } }
+}
+for(const tipo of ['click', 'input', 'change', 'keydown']){
+  document.addEventListener(tipo, event => mcDespacharEvento(event, tipo));
+}
 function mcInvitar(){abrirModalVisitaProgramada(profile.depto);}
 
 window.addEventListener('popstate',event=>{if(event.state?.mcOperacion&&mcStaff()){mc.lista=event.state.mcOperacion;mcRenderOperacion();}});
