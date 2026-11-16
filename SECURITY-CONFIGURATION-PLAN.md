@@ -48,3 +48,9 @@ La revisión privada por RUT confirmó tipoPrincipal=superadmin y fichaComunitar
 El registro de Fraud Defense fue realizado por el titular. El cliente se integra en la revisión 9c2e9104e45288a3b0ca5c726770055862c85054, aún sin desplegar. Firebase #197 aprobó 403 casos, Chromium y auditorías; Verify App Check SDK verificó la copia local contra la URL oficial. La CSP mantiene scripts externos locales y solo añade las rutas concretas de reCAPTCHA. Las pruebas de atestación e intercambio son simuladas; falta un token real y su uso por los clientes. No activar enforcement antes de esa validación y la transición de otras apps compartidas.
 
 Los cuadros de #184 son evidencia histórica previa al registro, no el estado actual del proveedor. La clave API compartida no se modificó. No se repararon perfiles, deshabilitaron pruebas, fusionó o desplegó este PR. Véase la sección 14 del plan de cierre para la evidencia y los límites.
+
+## Evidencia manual posterior — 16 de noviembre de 2026
+
+El titular aportó captura del diagnóstico temporal con «Comprobación correcta: Google entregó un token de App Check». La obtención real en ese origen queda registrada como prueba manual satisfactoria; ya no está pendiente esa prueba aislada. No se recibió ni inspeccionó el token. Sigue pendiente el uso por la aplicación completa, roles/checkout, métricas y eventual enforcement. Véase la sección 15 de SECURITY-CLOSURE-PLAN.md para la secuencia actual y sus límites.
+
+No se modificaron cuentas, restricciones, enforcement ni producción. El tratamiento de las dos cuentas de prueba requiere decisión explícita y verificación privada actual; no se crearán fichas ni se ocultarán hallazgos para superar la barrera.

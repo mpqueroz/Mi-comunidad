@@ -145,3 +145,20 @@ El diagnóstico mcVerificarAppCheck devuelve solo estado y nunca el token. Chrom
 
 El principal del titular ya está verificado como superadmin y no requiere ficha comunitaria. No crear fichas de prueba ni debilitar la barrera de publicación. Siguen pendientes tratamiento de cuentas de prueba, compatibilidad efectiva de clave compartida y comparación con el código desplegado. Se mantiene PR en borrador, sin fusión ni despliegue. Las secciones anteriores de proveedor ausente/integración inexistente son evidencia histórica previa al registro y a este commit.
 
+
+## 15. Intercambio real confirmado por captura del titular — 16 de noviembre de 2026
+
+El titular abrió el diagnóstico en `mi-comunidad-md--auditoria-appcheck-noq870xx.web.app` y aportó una captura con el resultado: «Comprobación correcta: Google entregó un token de App Check». Se registra como evidencia manual aportada por el titular, no como una ejecución automatizada o inspección del token por el auditor. No se recibió token ni credencial.
+
+La captura acredita el resultado satisfactorio del diagnóstico en ese origen y navegador. Resuelve la prueba manual pendiente de obtención de token en el preview; no acredita envío de tokens por la aplicación principal, validación de roles/checkout, renovación sostenida, enforcement ni equivalencia del código desplegado. No repetir esta misma prueba como si siguiera pendiente.
+
+Revisión consultada: `6998a7c14b02e39507b9d64391777467e0e87275`. [Firebase #201](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43966289724) muestra Tests de reglas y Comprobación pública sin credenciales aprobados; inventarios/composición reales, reparación, habilitación de APIs y ambos despliegues omitidos. Esta actualización es documental y no aporta nuevas pruebas de ejecutables.
+
+Secuencia pendiente, sin modificar la barrera de publicación:
+1. Resolver expresamente el tratamiento de las dos cuentas de prueba identificadas por el titular. La propuesta conservadora es deshabilitar únicamente las dos cuentas que una revisión privada actual confirme como pruebas y sin ficha, conservando datos, claims, licencias y la cuenta principal. Esta propuesta NO se ejecuta ni autoriza por registrar el plan. No seleccionar cuentas solo por correo o por falta de ficha; verificar identidad y revalidar estado inmediatamente antes de cualquier intervención aprobada.
+2. Repetir inventario agregado y composición de reglas con la configuración actual. No sustituir el inventario global por el resultado filtrado del superadmin.
+3. Validar la aplicación completa en un origen autorizado: token, inicio de sesión del titular, roles con identidades verificadas, licencias y checkout. La página aislada no carga estos componentes.
+4. Revisar diferencias exactas respecto de Hosting/funciones publicados y compatibilidad de consumidores de la clave compartida. No reducir restricciones ni exigir App Check globalmente para cerrar el informe.
+5. Tras la distribución autorizada del cliente, observar métricas antes de decidir enforcement. Retirar el dominio temporal de Fraud Defense al terminar su uso; no consta todavía su retirada.
+
+El PR permanece en borrador. No se fusionó, publicó Hosting live, modificaron reglas/funciones ni cambiaron cuentas o configuración de producción en esta actualización.
