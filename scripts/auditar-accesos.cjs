@@ -31,8 +31,20 @@ async function paged(collection, visit) {
   }
 }
 
+// Contrato de mcBloqueReservaValido, sin devolver campos ni identificadores.
+function compatibleReservationBlock(d){
+  const keys=['lugar','nombre','horaInicio','horaFin','activo','ts'];
+  return !!d&&typeof d==='object'&&keys.every(k=>Object.hasOwn(d,k))&&Object.keys(d).every(k=>keys.includes(k))&&
+    ['Quincho','Centro de eventos','Piscina','Gimnasio'].includes(d.lugar)&&
+    typeof d.nombre==='string'&&d.nombre.length>0&&d.nombre.length<=100&&
+    typeof d.horaInicio==='string'&&/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(d.horaInicio)&&
+    typeof d.horaFin==='string'&&/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(d.horaFin)&&
+    typeof d.activo==='boolean'&&Number.isInteger(d.ts)&&d.ts>0;
+}
+
 async function inventory(db, auth, {now = new Date(), details = false} = {}) {
   const communities = new Map();
+  const reservationBlocks={scanned:0,compatible:0,incompatible:0};
   const issues = [];
   const missingAdminProfiles = {authEnabled: 0, authDisabled: 0, matchesCommunityOwner: 0,
     ownerNotRecorded: 0, differentCommunityOwner: 0, currentlyLicensedAndActive: 0};
@@ -50,6 +62,11 @@ async function inventory(db, auth, {now = new Date(), details = false} = {}) {
       const access = evaluateLicense(license.data(), now);
       if (!access.allowed) issue('licencia_sin_acceso', doc.id);
     }
+    await paged(doc.ref.collection('bloquesReserva'), block => {
+      reservationBlocks.scanned++;
+      if(compatibleReservationBlock(block.data()))reservationBlocks.compatible++;
+      else {reservationBlocks.incompatible++;issue('bloque_reserva_incompatible',doc.id);}
+    });
     await paged(doc.ref.collection('administradores'), admin => {
       state.admins.set(admin.id, {enabled: admin.get('estado') !== 'Inactivo', seen: false});
     });
@@ -95,11 +112,11 @@ async function inventory(db, auth, {now = new Date(), details = false} = {}) {
       if (admin.enabled && !admin.seen) issue('ficha_admin_sin_cuenta_valida', id, uid);
     }
   }
-  const migrationBlockers = ['licencia_ausente', 'ficha_ausente_admin', 'cuenta_sin_comunidad',
+  const migrationBlockers = ['bloque_reserva_incompatible', 'licencia_ausente', 'ficha_ausente_admin', 'cuenta_sin_comunidad',
     'rol_desconocido', 'estado_auth_ficha_inconsistente', 'departamento_inconsistente', 'ficha_admin_sin_cuenta_valida',
     'ficha_ausente_conserje', 'ficha_ausente_residente'];
   return {readOnly: true, scannedAt: now.toISOString(), communities: communities.size, appAccounts,
-    issueCounts, missingAdminProfiles, readyForStrictAccess: migrationBlockers.every(kind => !issueCounts[kind]),
+    issueCounts, missingAdminProfiles, reservationBlocks, readyForStrictAccess: migrationBlockers.every(kind => !issueCounts[kind]),
     ...(details ? {issues} : {})};
 }
 
@@ -123,7 +140,7 @@ async function main(argv = process.argv.slice(2)) {
     if (opts.requireClean && !report.readyForStrictAccess) process.exitCode = 2;
   } finally { await deleteApp(app); }
 }
-module.exports = {inventory, options, paged};
+module.exports = {inventory, options, paged, compatibleReservationBlock};
 if (require.main === module) main().catch(() => {
   // No reproducir mensajes del SDK que puedan incluir datos privados.
   console.error('Inventario incompleto. Comprueba --project, credenciales ADC de solo lectura y permisos de consulta Firestore/Auth.');

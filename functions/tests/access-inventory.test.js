@@ -111,3 +111,22 @@ test('inventario clasifica administradores sin ficha sin identificadores y sin c
  assert.deepEqual(result.missingAdminProfiles,{authEnabled:1,authDisabled:1,matchesCommunityOwner:1,ownerNotRecorded:0,differentCommunityOwner:1,currentlyLicensedAndActive:1});
  assert.equal(result.readyForStrictAccess,false);assert.equal(result.issueCounts.ficha_ausente_admin,2);assert.ok(!JSON.stringify(result).includes('NO-IMPRIMIR'));
 });
+
+test('inventario revisa bloques históricos y bloquea publicación sin imprimir sus datos',async()=>{
+ const good={lugar:'Quincho',nombre:'NO-IMPRIMIR',horaInicio:'10:00',horaFin:'14:00',activo:true,ts:1};
+ const entries={[base]:{estado:'Activa'},'mi_comunidad_licencias/torre':validLicense,[base+'/bloquesReserva/NO-IMPRIMIR-1']:good,[base+'/bloquesReserva/NO-IMPRIMIR-2']:{...good,horaInicio:'25:00'}};
+ const f=fixtures(entries,[[]]),r=await inventory(f.db,f.auth);
+ assert.deepEqual(r.reservationBlocks,{scanned:2,compatible:1,incompatible:1});
+ assert.equal(r.issueCounts.bloque_reserva_incompatible,1);assert.equal(r.readyForStrictAccess,false);
+ assert.ok(!JSON.stringify(r).includes('NO-IMPRIMIR'));
+ delete entries[base+'/bloquesReserva/NO-IMPRIMIR-2'];
+ const clean=await inventory(fixtures(entries,[[]]).db,fixtures(entries,[[]]).auth);
+ assert.equal(clean.readyForStrictAccess,true);
+});
+test('compatibilidad de bloques exige campos, tipos, tamaños y horas válidas',()=>{
+ const {compatibleReservationBlock:valid}=require('../../scripts/auditar-accesos.cjs');
+ const good={lugar:'Quincho',nombre:'Noche',horaInicio:'22:00',horaFin:'06:00',activo:true,ts:1};
+ assert.equal(valid(good),true);
+ for(const patch of [{lugar:'Otro'},{nombre:''},{nombre:'x'.repeat(101)},{horaInicio:'24:00'},{horaFin:'6:00'},{activo:1},{ts:1.5},{extra:true}])assert.equal(valid({...good,...patch}),false);
+ for(const key of Object.keys(good)){const copy={...good};delete copy[key];assert.equal(valid(copy),false);}
+});
