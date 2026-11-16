@@ -78,7 +78,7 @@ async function comprobarAppCheck(browser){
   }
   if(url.origin==='https://www.google.com'&&url.pathname==='/recaptcha/enterprise.js'){
    return route.fulfill({status:200,contentType:'application/javascript',body:
-    "window.grecaptcha={enterprise:{ready:function(fn){fn();},render:function(id,options){window.mcTestSiteKey=options.sitekey;return 17;},execute:function(){return Promise.resolve('SIMULATED_ATTESTATION_FOR_TESTS');}}};"});
+    "window.grecaptcha={enterprise:{ready:function(fn){fn();},render:function(id,options){window.mcTestSiteKey=options.sitekey;window.mcTestRecaptchaCallback=options.callback;return 17;},execute:function(){window.mcTestRecaptchaCallback();return Promise.resolve('SIMULATED_ATTESTATION_FOR_TESTS');}}};"});
   }
   if(url.hostname==='content-firebaseappcheck.googleapis.com'&&url.pathname.endsWith(':exchangeRecaptchaEnterpriseToken')){
    if(request.method()==='OPTIONS')return route.fulfill({status:204,headers:{'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Methods':'POST, OPTIONS','Access-Control-Allow-Headers':'*'}});
