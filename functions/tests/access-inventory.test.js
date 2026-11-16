@@ -130,3 +130,46 @@ test('compatibilidad de bloques exige campos, tipos, tamaños y horas válidas',
  for(const patch of [{lugar:'Otro'},{nombre:''},{nombre:'x'.repeat(101)},{horaInicio:'24:00'},{horaFin:'6:00'},{activo:1},{ts:1.5},{extra:true}])assert.equal(valid({...good,...patch}),false);
  for(const key of Object.keys(good)){const copy={...good};delete copy[key];assert.equal(valid(copy),false);}
 });
+
+test('inventario conserva hallazgo de admin deshabilitado sin ficha sin exigir reactivarlo para migrar',async()=>{
+ const f=fixtures({[base]:{estado:'Activa'},'mi_comunidad_licencias/torre':validLicense},
+ [[{...user('NO-IMPRIMIR-retirado','admin'),disabled:true},user('NO-IMPRIMIR-super','superadmin')]]);
+ const r=await inventory(f.db,f.auth);
+ assert.equal(r.issueCounts.ficha_ausente_admin,1);
+ assert.equal(r.missingAdminProfiles.authDisabled,1);
+ assert.equal(r.missingAdminProfiles.authEnabled,0);
+ assert.equal(r.blockingIssueCounts.ficha_ausente_admin,0);
+ assert.equal(r.readyForStrictAccess,true);
+ assert.ok(!JSON.stringify(r).includes('NO-IMPRIMIR'));
+});
+test('inventario vuelve a bloquear si la cuenta sin ficha se reactiva o disabled no es true booleano',async()=>{
+ for(const disabled of [false,undefined,'true',1]){
+  const f=fixtures({[base]:{},'mi_comunidad_licencias/torre':validLicense},
+  [[{...user('prueba','admin'),disabled}]]);
+  const r=await inventory(f.db,f.auth);
+  assert.equal(r.issueCounts.ficha_ausente_admin,1);
+  assert.equal(r.blockingIssueCounts.ficha_ausente_admin,1);
+  assert.equal(r.readyForStrictAccess,false);
+ }
+});
+test('inventario mixto no oculta administrador habilitado sin ficha entre cuentas deshabilitadas',async()=>{
+ const f=fixtures({[base]:{},'mi_comunidad_licencias/torre':validLicense},
+ [[{...user('retirado','admin'),disabled:true},user('activo','admin')]]);
+ const r=await inventory(f.db,f.auth);
+ assert.equal(r.issueCounts.ficha_ausente_admin,2);
+ assert.equal(r.blockingIssueCounts.ficha_ausente_admin,1);
+ assert.equal(r.readyForStrictAccess,false);
+});
+test('deshabilitar un admin no exime ficha activa inconsistente, comunidad ausente ni otros roles sin ficha',async()=>{
+ for(const [account,entries,kind] of [
+  [{...user('a','admin'),disabled:true},{[base+'/administradores/a']:{estado:'Activo'}},'estado_auth_ficha_inconsistente'],
+  [{...user('a','admin',{comunidadId:'ausente'}),disabled:true},{},'cuenta_sin_comunidad'],
+  [{...user('a','conserje'),disabled:true},{},'ficha_ausente_conserje'],
+  [{...user('a','residente'),disabled:true},{},'ficha_ausente_residente']
+ ]){
+  const f=fixtures({[base]:{},'mi_comunidad_licencias/torre':validLicense,...entries},[[account]]);
+  const r=await inventory(f.db,f.auth);
+  assert.equal(r.blockingIssueCounts[kind],1);
+  assert.equal(r.readyForStrictAccess,false);
+ }
+});

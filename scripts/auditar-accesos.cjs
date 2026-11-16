@@ -93,7 +93,7 @@ async function inventory(db, auth, {now = new Date(), details = false} = {}) {
       if (!account.exists) {
         issue('ficha_ausente_' + claims.role, id, user.uid);
         if(claims.role === 'admin'){
-          missingAdminProfiles[user.disabled ? 'authDisabled' : 'authEnabled']++;
+          missingAdminProfiles[user.disabled === true ? 'authDisabled' : 'authEnabled']++;
           missingAdminProfiles[!community.owner ? 'ownerNotRecorded' : community.owner === user.uid ? 'matchesCommunityOwner' : 'differentCommunityOwner']++;
           if(community.active && community.licensed && !user.disabled) missingAdminProfiles.currentlyLicensedAndActive++;
         }
@@ -115,8 +115,15 @@ async function inventory(db, auth, {now = new Date(), details = false} = {}) {
   const migrationBlockers = ['bloque_reserva_incompatible', 'licencia_ausente', 'ficha_ausente_admin', 'cuenta_sin_comunidad',
     'rol_desconocido', 'estado_auth_ficha_inconsistente', 'departamento_inconsistente', 'ficha_admin_sin_cuenta_valida',
     'ficha_ausente_conserje', 'ficha_ausente_residente'];
+  // Conservar TODOS los hallazgos. Solo el admin explícitamente deshabilitado y
+  // sin ficha queda fuera del bloqueo de migración de administradores activos.
+  // Las reglas/callables exigen ficha: incluso un token anterior no gana acceso.
+  // Reactivarlo vuelve a bloquear la siguiente revisión. No se eximen otros tipos.
+  const blockingIssueCounts = Object.fromEntries(migrationBlockers.map(kind =>
+    [kind, kind === 'ficha_ausente_admin' ? missingAdminProfiles.authEnabled : (issueCounts[kind] || 0)]));
   return {readOnly: true, scannedAt: now.toISOString(), communities: communities.size, appAccounts,
-    issueCounts, missingAdminProfiles, reservationBlocks, readyForStrictAccess: migrationBlockers.every(kind => !issueCounts[kind]),
+    issueCounts, blockingIssueCounts, missingAdminProfiles, reservationBlocks,
+    readyForStrictAccess: Object.values(blockingIssueCounts).every(count => count === 0),
     ...(details ? {issues} : {})};
 }
 
