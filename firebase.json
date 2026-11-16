@@ -12,7 +12,7 @@
         "headers": [
           {
             "key": "Content-Security-Policy",
-            "value": "default-src 'self'; script-src 'self' https://cdn.sheetjs.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https://*.googleapis.com https://us-central1-mercado-ciudadano.cloudfunctions.net; frame-src https://mercado-ciudadano.firebaseapp.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+            "value": "default-src 'self'; script-src 'self' https://cdn.sheetjs.com https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https://*.googleapis.com https://us-central1-mercado-ciudadano.cloudfunctions.net https://www.google.com/recaptcha/; frame-src https://mercado-ciudadano.firebaseapp.com https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
           },
           {
             "key": "X-Frame-Options",
@@ -106,6 +106,15 @@
       },
       {
         "source": "/demo/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "/app-check.js",
         "headers": [
           {
             "key": "Cache-Control",

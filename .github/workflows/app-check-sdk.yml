@@ -19,5 +19,5 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
-      - name: Obtener SDK oficial público para copia local verificada
-        run: node scripts/verificar-sdk-app-check.cjs --export
+      - name: Verificar copia local contra SDK oficial fijado
+        run: node scripts/verificar-sdk-app-check.cjs --verify

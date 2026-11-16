@@ -43,3 +43,13 @@ Repetir inventario de acceso, configuración y composición de reglas después d
 ## Confirmación del acceso principal
 
 La revisión privada por RUT confirmó tipoPrincipal=superadmin y fichaComunitariaNecesaria=false para el titular. No se propone crear su ficha ni modificar Auth/claims. cuentasSinFicha=[] es un resultado filtrado al principal, no un inventario global sin hallazgos. Las dos cuentas comunitarias sin ficha fueron clasificadas como pruebas por el titular; su tratamiento sigue pendiente de decisión concreta, sin cambios automáticos ni excepciones al inventario. Se mantienen los pendientes de App Check, clave compartida y revisión del código desplegado. No se modificó producción.
+
+## Registro realizado por el titular e integración propuesta
+
+El titular creó en Google Cloud una clave Web de Fraud Defense para Mi Comunidad y la registró en App Check; la captura de Firebase muestra Fraud Defense y estado Registrada. Esto es una modificación real de configuración realizada por el titular, adicional a las dos APIs habilitadas anteriormente. No confundir registro del proveedor con tokens emitidos, cliente desplegado o enforcement. La clave de sitio entregada es pública; no se solicitó ni recibió un secreto.
+
+El PR incorpora inicialización con ReCaptchaEnterpriseProvider antes de Auth/Firestore/Functions y auto-refresh explícito. Conserva los SDK de Firebase 10.13.2 servidos localmente; App Check se descarga sin modificar desde la URL oficial versionada y su copia se verifica byte por byte en CI. CSP añade exclusivamente rutas de Google reCAPTCHA para script/frame/connect, manteniendo script-src-attr none y sin unsafe-inline ni unsafe-eval en scripts. La demo no incorpora proveedor ni llamadas nuevas. Localhost conserva emuladores sin activar debug de producción.
+
+El diagnóstico explícito mcVerificarAppCheck devuelve solo ok/estado, nunca el token, y un fallo de intercambio no se presenta como éxito. Las pruebas de unidad usan SDK simulado; Chromium carga el SDK local real pero simula reCAPTCHA y la respuesta del intercambio. Esas pruebas no acreditan un token válido de Google ni el funcionamiento de las tres cuentas/roles reales.
+
+Antes de exigir App Check: validar dominios configurados y condiciones de la clave; probar intercambio real en un origen permitido y acceso de roles/checkout; desplegar solo después de autorización, observar métricas y validar los demás consumidores antes de enforcement compartido. No se cambió enforcement, Auth, claims, licencias, pagos, API key, reglas o hosting de producción mediante esta integración.

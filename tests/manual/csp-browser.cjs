@@ -56,6 +56,52 @@ async function comprobarDemo(browser,origin){
  console.log('PASS Chromium demo: tres roles, vistas, reinicio aislado y rechazo CSP sin consultas al backend.');
  await page.close();
 }
+
+async function comprobarAppCheck(browser){
+ // La aplicación/SDK son reales; reCAPTCHA y el intercambio están simulados.
+ // No se usan credenciales, tokens reales ni backends del proyecto.
+ const page=await browser.newPage(),origin='https://mi-comunidad-md.web.app',errors=[],violations=[];
+ const exchanges=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ await page.addInitScript(()=>{
+  window.mcTestViolations=[];
+  document.addEventListener('securitypolicyviolation',e=>mcTestViolations.push(e.effectiveDirective));
+ });
+ await page.route('**/*',async route=>{
+  const request=route.request(),url=new URL(request.url());
+  if(url.origin===origin){
+   const pathname=decodeURIComponent(url.pathname),file=path.resolve(root,'.'+(pathname.endsWith('/')?pathname+'index.html':pathname));
+   if(!file.startsWith(root+path.sep)||!fs.existsSync(file))return route.fulfill({status:404,body:''});
+   const headers=Object.fromEntries(config.hosting.headers.find(h=>h.source==='**').headers.map(h=>[h.key,h.value]));
+   headers['Content-Type']=file.endsWith('.js')?'application/javascript':file.endsWith('.css')?'text/css':'text/html';
+   return route.fulfill({status:200,headers,body:fs.readFileSync(file)});
+  }
+  if(url.origin==='https://www.google.com'&&url.pathname==='/recaptcha/enterprise.js'){
+   return route.fulfill({status:200,contentType:'application/javascript',body:
+    "window.grecaptcha={enterprise:{ready:function(fn){fn();},render:function(id,options){window.mcTestSiteKey=options.sitekey;return 17;},execute:function(){return Promise.resolve('SIMULATED_ATTESTATION_FOR_TESTS');}}};"});
+  }
+  if(url.hostname==='firebaseappcheck.googleapis.com'&&url.pathname.endsWith(':exchangeRecaptchaEnterpriseToken')){
+   if(request.method()==='OPTIONS')return route.fulfill({status:204,headers:{'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Methods':'POST, OPTIONS','Access-Control-Allow-Headers':'*'}});
+   const data=request.postDataJSON();exchanges.push(data);
+   assert.equal(data.recaptchaEnterpriseToken,'SIMULATED_ATTESTATION_FOR_TESTS');
+   return route.fulfill({status:200,headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':origin},
+    body:JSON.stringify({token:'SIMULATED_APP_CHECK_TOKEN_FOR_TESTS',ttl:'3600s'})});
+  }
+  return route.abort();
+ });
+ await page.goto(origin+'/');
+ await page.waitForFunction(()=>typeof mcVerificarAppCheck==='function');
+ const result=await page.evaluate(()=>mcVerificarAppCheck());
+ assert.deepEqual(result,{ok:true,estado:'token-obtenido'});
+ assert.ok(exchanges.length>0,'El SDK debe intentar un intercambio Enterprise');
+ assert.equal(await page.evaluate(()=>mcTestSiteKey),'6LfE2CMuAAAAAMFP3OOSjxVJoUsd0aOroYjDmBfh');
+ assert.equal(JSON.stringify(result).includes('SIMULATED_APP_CHECK_TOKEN'),false);
+ assert.deepEqual(await page.evaluate(()=>mcTestViolations),[],'La CSP debe permitir las rutas necesarias');
+ assert.deepEqual(errors,[]);
+ await page.close();
+ console.log('PASS Chromium App Check: SDK local real, proveedor e intercambio simulados, CSP y diagnóstico sin token; no acredita atestación real.');
+}
+
 async function main(){
  const server=http.createServer((req,res)=>{
   const pathname=new URL(req.url,'http://localhost').pathname;
@@ -106,6 +152,7 @@ async function main(){
   assert.ok(violations.includes('script-src-elem'));assert.ok(violations.includes('script-src-attr'));
   assert.deepEqual(errors,[]);
   await comprobarDemo(browser,origin);
+  await comprobarAppCheck(browser);
   console.log('PASS Chromium: app externa, clic/Enter/input, datos hostiles y bloqueo CSP de script/handler inline; sin acceso a Firebase.');
  }finally{await browser?.close();await new Promise(r=>server.close(r));}
 }

@@ -22,7 +22,7 @@ test('el SDK de Firebase se sirve desde el sitio y coincide con su registro', ()
   assert.ok(!html.includes('gstatic.com/firebasejs'), 'sin SDK desde CDN');
   const dir = path.join(root, 'public/vendor/firebase-10.13.2');
   const leeme = fs.readFileSync(path.join(dir, 'LEEME.md'), 'utf8');
-  for (const f of ['app', 'auth', 'firestore', 'functions']) {
+  for (const f of ['app', 'auth', 'firestore', 'functions', 'app-check']) {
     const file = `firebase-${f}-compat.js`;
     assert.ok(html.includes(`vendor/firebase-10.13.2/${file}`), file);
     const hash = crypto.createHash('sha256').update(fs.readFileSync(path.join(dir, file))).digest('hex');
@@ -46,4 +46,13 @@ test('la app autenticada añade CSP sin scripts inline ni manejadores HTML',()=>
  for(const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)){assert.match(match[1],/src=/);assert.equal(match[2].trim(),'');}
  assert.doesNotMatch(html,/\son\w+\s*=/i);assert.doesNotMatch(main,/\son(?:click|change|input|keydown)\s*=/i);
  assert.ok(hosting.headers.some(h=>h.source==='/app.js'&&h.headers.some(x=>x.key==='Cache-Control'&&x.value==='no-cache')));
+});
+
+test('App Check permite solo rutas de reCAPTCHA y conserva bloqueo de código inline',()=>{
+ const policy=hosting.headers.find(x=>x.source==='**').headers.find(x=>x.key==='Content-Security-Policy').value;
+ const script=policy.split(';').find(x=>x.trim().startsWith('script-src ')).trim();
+ assert.equal(script,"script-src 'self' https://cdn.sheetjs.com https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/");
+ assert.ok(policy.includes('frame-src https://mercado-ciudadano.firebaseapp.com https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/;'));
+ assert.ok(policy.includes('https://www.google.com/recaptcha/;'));
+ assert.doesNotMatch(script,/unsafe-inline|unsafe-eval|https:\/\/\*/);
 });

@@ -272,6 +272,19 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 
+// Inicializar App Check antes de que otros SDK empiecen a usar Firebase.
+let mcProteccionAppCheck;
+try{
+    mcProteccionAppCheck = mcIniciarAppCheck({firebase,hostname:location.hostname});
+    // Diagnóstico explícito: devuelve solo estado, nunca el token.
+    window.mcVerificarAppCheck = ()=>mcProteccionAppCheck.check();
+}catch(_){
+    const aviso=document.getElementById("loginError");
+    if(aviso){aviso.textContent="No pudimos iniciar la conexión segura. Actualiza la página.";aviso.classList.remove("hidden");}
+    const boton=document.getElementById("loginBtn");if(boton)boton.disabled=true;
+    throw new Error("No se pudo iniciar la conexión segura.");
+}
+
 const auth = firebase.auth();
 const db = firebase.firestore();
 const functions = firebase.functions();
