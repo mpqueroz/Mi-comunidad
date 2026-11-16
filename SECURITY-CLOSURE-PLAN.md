@@ -2,17 +2,12 @@
 
 Estado: PR en borrador. La autorización expresa del usuario permitió únicamente habilitar App Check API y API Keys API en `mercado-ciudadano`; no autoriza cambiar IAM, enforcement, restricciones de claves, fichas ni licencias. Se mantienen prohibidas la fusión y cualquier despliegue a Firebase.
 
-## 1. Habilitación autorizada, bloqueada en ejecución
+## 1. Habilitación completada por el usuario; consultas disponibles
+El usuario habilitó las dos APIs autorizadas desde Cloud Shell. [Firebase #173, intento 2](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43906272946/attempts/2) confirmó `complete=true`: ambas consultas ya responden a la credencial de auditoría. No repetir la habilitación ni agregar IAM.
 
-[Firebase #171](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43905015078), commit `cfe0f96`: el job manual confirmó HTTP 403 en la fase `enable-service` de `firebaseappcheck.googleapis.com`. La lectura previa de estado sí se completó; fue rechazado el POST de habilitación, antes de intentar la segunda API. La consulta posterior devolvió `SERVICE_DISABLED` para ambas. No se conoce un rol concreto faltante y no se amplió IAM. #170/#171 aprobaron 372 pruebas y la composición real aprobó las mismas 237 del emulador.
+App Check devolvió `services=[]` en la configuración base consultada; no equivale a enforcement verificado. API Keys: 1 clave con restricciones de aplicación y de APIs. No se leyó su valor ni se validó semánticamente cada patrón permitido. No exigir App Check ni cambiar restricciones sin preparar y probar la compatibilidad de los clientes y obtener autorización para esos cambios.
 
-La consola de Google Cloud devolvió «Site Unavailable» en este navegador durante el intento de continuación. La alternativa pendiente es que una sesión con permisos existentes suficientes habilite exclusivamente:
-
-```sh
-gcloud services enable firebaseappcheck.googleapis.com apikeys.googleapis.com --project mercado-ciudadano
-```
-
-No se necesita repetir la autorización para ese alcance. No agregar roles IAM automáticamente, no activar la exigencia de App Check, no cambiar restricciones de claves ni consultar sus valores. Después se debe repetir `auditar-configuracion.cjs` y registrar la configuración efectiva. La autorización para habilitar APIs no autoriza cambios adicionales de seguridad.
+La habilitación ya no bloquea el cierre. Siguen pendientes las fichas descritas abajo, el alcance efectivo de configuración y la equivalencia del código desplegado.
 
 ## 2. Verificar y regularizar las dos fichas ausentes
 

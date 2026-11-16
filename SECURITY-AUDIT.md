@@ -2,6 +2,18 @@
 
 **Estado:** revisión preventiva; no desplegar este PR sin completar las verificaciones.
 
+## Actualización vigente — APIs habilitadas y consultas desbloqueadas
+El usuario ejecutó en Cloud Shell la habilitación expresamente autorizada de `firebaseappcheck.googleapis.com` y `apikeys.googleapis.com` en `mercado-ciudadano`; su captura mostró la operación completada. La repetición de solo el job de inventario de [Firebase #173, intento 2](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43906272946/attempts/2) confirmó ambas consultas exitosas el 16 de noviembre a las 13:26 (Chile). Es un cambio real y limitado de servicios habilitados, realizado por el usuario; las APIs ya no están bloqueadas.
+
+- `complete=true` acredita que terminaron las consultas incluidas, no que la auditoría o producción estén aprobadas.
+- App Check: consulta `service-baseline-only` exitosa, `services=[]`. No acredita protección obligatoria, registro de aplicaciones/proveedores ni excepciones por recurso; no se activó enforcement.
+- API Keys: 1 clave, 1 con restricción de aplicación y 1 con restricción de APIs. Son conteos de presencia, no validación semántica de todos los patrones permitidos. No se solicitó ni mostró el valor de la clave.
+- El job volvió a detectar `ficha_ausente_admin=2`, 0 bloques existentes y `readyForStrictAccess=false`. El estado failure corresponde al inventario; el paso de consulta de configuración ahora aprueba.
+- Repetir ese job no vuelve a ejecutar los 374 casos ya aprobados de `5f1bb74`. Se conservan los resultados de las pruebas y composición real. No hubo fusión, despliegue ni cambios de cuentas, documentos, claims, licencias, claves, restricciones o IAM.
+- Antes de cerrar: verificar privadamente y regularizar las fichas legítimas con autorización de escritura, revisar alcance efectivo de App Check/restricciones y completar la equivalencia del código desplegado. No declarar lista producción.
+
+Esta actualización prevalece sobre los bloqueos históricos de APIs de las secciones siguientes.
+
 ## Evidencia más reciente — cierre de código de esta etapa
 
 [Firebase #172 (PR)](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43906053490) y [Firebase #173 (manual)](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43906272946), commit `5f1bb74`: **137 pruebas de funciones + 237 del emulador = 374 aprobadas**, sin fallos ni omitidas. Chromium app/demo y auditorías npm aprobaron; 0 vulnerabilidades en los árboles auditados. Los cuatro workflows del PR aprobaron. #173 volvió a aprobar las mismas 237 pruebas sobre la composición real; ambos despliegues y la habilitación de APIs se omitieron. No se repitió la solicitud rechazada de habilitación.
