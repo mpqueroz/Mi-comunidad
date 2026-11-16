@@ -12,6 +12,15 @@ import urllib.request
 PROJECT = 'mercado-ciudadano'
 
 
+class SafeDiagnostic(Exception):
+    """Solo códigos predefinidos, nunca mensajes/cuerpos de servicios externos."""
+    def __init__(self, stage, code, http_status=None):
+        self.result = {'soloLectura': True, 'fase': stage, 'codigo': code}
+        if http_status is not None:
+            self.result['http'] = http_status
+        super().__init__(code)
+
+
 def identifier(value):
     return isinstance(value, str) and 0 < len(value) <= 128 and value not in ['.', '..'] and '/' not in value and not any(ord(c) < 32 or ord(c) == 127 for c in value)
 
@@ -75,37 +84,58 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 def main():
     parser = argparse.ArgumentParser(description='Verificar privadamente fichas administrativas ausentes; no escribe en Firebase.')
     parser.add_argument('--project', required=True, choices=[PROJECT])
-    parser.parse_args()
+    parser.add_argument('--diagnostico', action='store_true', help='Mostrar solo conteos y errores seguros, sin identidades.')
+    args = parser.parse_args()
     if os.environ.get('GITHUB_ACTIONS') or os.environ.get('CI'):
         raise ValueError('La revisión de identidades debe ejecutarse fuera de CI.')
-    token = subprocess.check_output(['gcloud', 'auth', 'print-access-token'], text=True, stderr=subprocess.DEVNULL).strip()
+    try:
+        token = subprocess.check_output(['gcloud', 'auth', 'print-access-token'], text=True, stderr=subprocess.DEVNULL).strip()
+    except (subprocess.SubprocessError, OSError):
+        raise SafeDiagnostic('sesion_gcloud', 'TOKEN_NO_DISPONIBLE') from None
     if not token:
-        raise ValueError('No hay sesión autorizada.')
+        raise SafeDiagnostic('sesion_gcloud', 'TOKEN_VACIO')
     opener = urllib.request.build_opener(NoRedirect())
 
     def read(url):
         parsed = urllib.parse.urlsplit(url)
         if parsed.scheme != 'https' or parsed.hostname not in ['identitytoolkit.googleapis.com', 'firestore.googleapis.com']:
             raise ValueError('Destino no permitido.')
+        stage = 'auth_listar_cuentas' if parsed.hostname == 'identitytoolkit.googleapis.com' else 'firestore_leer_ficha' if '/administradores/' in parsed.path else 'firestore_leer_comunidad'
         req = urllib.request.Request(url, headers={'Authorization': 'Bearer ' + token}, method='GET')
         try:
             with opener.open(req, timeout=30) as response:
-                return json.load(response)
+                try:
+                    return json.load(response)
+                except (ValueError, UnicodeError):
+                    raise SafeDiagnostic(stage, 'RESPUESTA_NO_JSON') from None
         except urllib.error.HTTPError as error:
             # Solo la ausencia de un documento Firestore es una ausencia válida.
             if error.code == 404 and parsed.hostname == 'firestore.googleapis.com':
                 return None
-            raise ValueError('Consulta no completada (HTTP ' + str(error.code) + ').') from None
+            raise SafeDiagnostic(stage, 'HTTP_ERROR', error.code) from None
+        except (urllib.error.URLError, OSError):
+            raise SafeDiagnostic(stage, 'CONEXION_NO_COMPLETADA') from None
 
     result = private_plan(read)
+    if args.diagnostico:
+        print(json.dumps({'soloLectura': True, 'fase': 'completada', 'codigo': 'OK', 'cuentasSinFicha': len(result['cuentasSinFicha'])}))
+        return
     print('REVISIÓN PRIVADA: comprueba cada identidad y su comunidad. Comparte solo los códigos de las cuentas que confirmes autorizadas.')
     print(json.dumps(result, ensure_ascii=False, indent=2))
     print('Este comando no crea fichas ni autoriza automáticamente ninguna reparación.')
 
 
-if __name__ == '__main__':
+def cli():
     try:
         main()
+    except SafeDiagnostic as error:
+        print(json.dumps(error.result), file=sys.stderr)
+        return 1
     except (ValueError, KeyError, TypeError, subprocess.SubprocessError, OSError, urllib.error.URLError):
-        print('No se completó la revisión privada. Comprueba sesión, permisos y proyecto; no se modificó Firebase.', file=sys.stderr)
-        sys.exit(1)
+        print(json.dumps({'soloLectura': True, 'fase': 'validacion_local', 'codigo': 'DATOS_O_ENTORNO_NO_VERIFICABLES'}), file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(cli())

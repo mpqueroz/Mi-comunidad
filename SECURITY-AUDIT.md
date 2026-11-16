@@ -2,6 +2,10 @@
 
 **Estado:** revisión preventiva; no desplegar este PR sin completar las verificaciones.
 
+## Seguimiento — fallo de consulta privada sin causa identificada
+
+La captura enviada por el usuario confirma SHA256 OK del script privado, seguido del error genérico. No permite atribuir la causa a permisos o sesión. Se añade diagnóstico de fase/HTTP con mensajes predefinidos, sin cuerpo externo, token, URL ni identidades, y modo de solo conteos. Ocho casos Python simulados y las 154 pruebas Node de funciones aprobaron localmente; el wrapper sigue siendo un solo caso Node. No se obtuvieron huellas de cuentas ni se ejecutó reparación. La evidencia remota de 392 casos de la revisión anterior sigue abajo; no atribuirla automáticamente a esta nueva revisión. Instrucciones en sección 9 del plan de cierre.
+
 ## Última comprobación — consumidores compartidos y reparación por huella, sin ejecutar
 
 Revisión ejecutable `12a6cee0b32bff896601a74e2e5deacc4b9ff22a`: [Firebase #183 (PR)](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43919443966) aprobó **154 pruebas de funciones + 238 del emulador = 392**, sin fallos ni omitidas. Chromium app/demo y auditorías npm aprobaron, con 0 vulnerabilidades en los árboles auditados. Los cuatro workflows asociados al PR aprobaron. La ejecución manual [Firebase #184](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43920189328) también aprobó esas pruebas, Chromium y auditorías npm. Repitió las mismas 238 pruebas sobre la composición real preservando las otras apps byte por byte y confirmó después que la base publicada no había cambiado. No sumar esa repetición al total. Ambos despliegues, la habilitación de APIs y la reparación quedaron omitidos. Su estado global es failure únicamente por las dos fichas ausentes en el inventario.

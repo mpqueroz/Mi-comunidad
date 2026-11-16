@@ -2,6 +2,10 @@ import importlib.util
 import json
 import pathlib
 import unittest
+import io
+import contextlib
+import urllib.error
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('private_plan', pathlib.Path(__file__).parents[1] / 'scripts/verificar-fichas-privadas.py')
 module = importlib.util.module_from_spec(spec)
@@ -56,6 +60,39 @@ class PrivatePlanTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 module.main()
             token.assert_not_called()
+
+    def test_diagnostic_http_failure_hides_credentials_response_and_identity(self):
+        for url, phase in [('https://identitytoolkit.googleapis.com/private', 'auth_listar_cuentas'),
+                           ('https://firestore.googleapis.com/private/administradores/secret-uid', 'firestore_leer_ficha'),
+                           ('https://firestore.googleapis.com/private', 'firestore_leer_comunidad')]:
+            class Opener:
+                def open(self, req, timeout):
+                    self_test.assertEqual(req.get_method(), 'GET')
+                    raise urllib.error.HTTPError(url, 403, 'SECRET-ERROR', {}, io.BytesIO(b'SECRET-BODY'))
+            self_test = self
+            stderr, stdout = io.StringIO(), io.StringIO()
+            with patch.dict(module.os.environ, {}, clear=True), patch.object(module.sys, 'argv', ['script', '--project', module.PROJECT, '--diagnostico']), patch.object(module.subprocess, 'check_output', return_value='SECRET-TOKEN'), patch.object(module.urllib.request, 'build_opener', return_value=Opener()), patch.object(module, 'private_plan', side_effect=lambda read: read(url)), contextlib.redirect_stderr(stderr), contextlib.redirect_stdout(stdout):
+                self.assertEqual(module.cli(), 1)
+            result = json.loads(stderr.getvalue())
+            self.assertEqual(result, {'soloLectura': True, 'fase': phase, 'codigo': 'HTTP_ERROR', 'http': 403})
+            self.assertEqual(stdout.getvalue(), '')
+            self.assertNotIn('SECRET', stderr.getvalue())
+            self.assertNotIn('secret-uid', stderr.getvalue())
+
+    def test_diagnostic_gcloud_failure_does_not_expose_captured_token(self):
+        stderr = io.StringIO()
+        failure = module.subprocess.CalledProcessError(1, ['gcloud'], output='SECRET-TOKEN', stderr='SECRET-ERROR')
+        with patch.dict(module.os.environ, {}, clear=True), patch.object(module.sys, 'argv', ['script', '--project', module.PROJECT]), patch.object(module.subprocess, 'check_output', side_effect=failure), contextlib.redirect_stderr(stderr):
+            self.assertEqual(module.cli(), 1)
+        self.assertEqual(json.loads(stderr.getvalue()), {'soloLectura': True, 'fase': 'sesion_gcloud', 'codigo': 'TOKEN_NO_DISPONIBLE'})
+
+    def test_successful_diagnostic_prints_count_only(self):
+        read, _ = self.fixture()
+        result = module.private_plan(read)
+        stdout = io.StringIO()
+        with patch.dict(module.os.environ, {}, clear=True), patch.object(module.sys, 'argv', ['script', '--project', module.PROJECT, '--diagnostico']), patch.object(module.subprocess, 'check_output', return_value='SECRET-TOKEN'), patch.object(module, 'private_plan', return_value=result), contextlib.redirect_stdout(stdout):
+            self.assertEqual(module.cli(), 0)
+        self.assertEqual(json.loads(stdout.getvalue()), {'soloLectura': True, 'fase': 'completada', 'codigo': 'OK', 'cuentasSinFicha': 1})
 
 
 if __name__ == '__main__':
