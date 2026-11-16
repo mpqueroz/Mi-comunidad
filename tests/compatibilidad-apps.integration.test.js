@@ -23,6 +23,7 @@ beforeEach(async()=>{
    d.doc('stores/dueno/products/arroz').set({name:'Arroz',price:1500,cost:1000,stock:10}),
    d.doc('stores/dueno/sales/previa').set({total:1500,cost:1000}),
    d.doc('mi_comunidad_comunidades/edificio-compat').set({name:'Edificio ficticio',estado:'Activa'}),
+   d.doc('mi_comunidad_comunidades/edificio-compat/administradores/admin-edificio').set({estado:'Activo'}),
   ]);
  });
 });

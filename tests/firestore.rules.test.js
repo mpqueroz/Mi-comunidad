@@ -34,6 +34,8 @@ beforeEach(async () => {
   await env.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
     await db.doc(BASE).set({nombre: "Edificio 1", estado: "Activa"});
+    await db.doc(`mi_comunidad_licencias/${C}`).set({estado:'active',paidUntil:require('firebase/firestore').Timestamp.fromMillis(4102444800000)});
+    await db.doc(`${BASE}/administradores/adm1`).set({estado:'Activo'});
     await db.doc(`${BASE}/conserjes/con1`).set({nombre: "Conserje", estado: "Activo"});
     await db.doc(`${BASE}/residentes/res1`).set({
       depto: "101", nombre: "Ana", rut: "11111111-1", telefono: "", estado: "Activo",

@@ -4961,7 +4961,7 @@ const configLicenciaVencida = {
 };
 
 function licenciaSinAcceso(snap){
-    if(!snap.exists) return false;
+    if(!snap.exists) return true;
     const d = snap.data();
     const vence = campo => d[campo] && typeof d[campo].toMillis === "function" ? d[campo].toMillis() : 0;
     if(d.estado === "trial") return vence("trialEndsAt") <= Date.now();
@@ -5001,8 +5001,7 @@ async function iniciarSesionComunidad(comunidadId){
 
     // Licencia vencida: administración entra solo a "Mi suscripción" para
     // poder renovar; las reglas siguen negando todo el contenido operativo.
-    // Misma condición que mcEsComunidadActiva() en firestore.rules (sin
-    // documento de licencia = edificio anterior a las licencias, sigue).
+    // Misma condición que mcEsComunidadActiva(): sin licencia no hay acceso operativo.
     licenciaRestringida = false;
     if(currentRole === "admin"){
         pasoLogin = "licencia";

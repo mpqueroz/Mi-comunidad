@@ -20,11 +20,13 @@ function harness(){
  const api=make({firestore},(a,b)=>b||a,HttpsError);
  const base='mi_comunidad_comunidades/edificio';
  rows.set(base,{estado:'Activa',adminNombre:'Administradora'});
+ rows.set('mi_comunidad_licencias/edificio',{estado:'active',paidUntil:Timestamp.fromMillis(4102444800000)});
+ rows.set(base+'/administradores/admin',{estado:'Activo'});
  rows.set(base+'/residentes/residente',{nombre:'Residente',depto:'101',estado:'Activo'});
  rows.set(base+'/conserjes/uno',{nombre:'Conserje Uno',estado:'Activo'});rows.set(base+'/conserjes/dos',{nombre:'Conserje Dos',estado:'Activo'});
  const req=(uid='uno',data={},role='conserje')=>({auth:{uid,token:{app:'mi_comunidad',role,comunidadId:'edificio',depto:'101'}},data:{comunidadId:'edificio',...data}});
  const call=(name,data={},uid='uno',role='conserje')=>api[name](req(uid,data,role));
- return {rows,api,req,call,base,Timestamp};
+ return {rows,api,req,call,base,Timestamp,db};
 }
 test('rechaza cuentas sin autorización y comunidades ajenas',async()=>{const h=harness();await assert.rejects(h.api.gestionarTurnoMiComunidad({data:{}}),{code:'permission-denied'});await assert.rejects(h.api.gestionarTurnoMiComunidad(h.req('uno',{comunidadId:'otra',accion:'iniciar'})),{code:'permission-denied'});await assert.rejects(h.call('gestionarTurnoMiComunidad',{accion:'iniciar'},'residente','residente'),{code:'permission-denied'});});
 test('la suspensión se comprueba también en Cloud Functions',async()=>{const h=harness();h.rows.get(h.base).estado='Suspendida';await assert.rejects(h.call('gestionarTurnoMiComunidad',{accion:'iniciar'}),{code:'failed-precondition'});});
@@ -67,4 +69,28 @@ test('licencia pagada vigente permite operación y no reinicia prueba',async()=>
  const h=harness();h.rows.set('mi_comunidad_licencias/edificio',{estado:'active',paidUntil:Timestamp.fromMillis(4102444800000)});
  await h.call('gestionarTurnoMiComunidad',{accion:'iniciar'});
  assert.equal(h.rows.get('mi_comunidad_licencias/edificio').estado,'active');
+});
+
+test('licencia ausente y ficha admin eliminada rechazan operaciones sin escritura',async()=>{
+ for(const missing of ['mi_comunidad_licencias/edificio','mi_comunidad_comunidades/edificio/administradores/admin']){
+  const h=harness();h.rows.delete(missing);const before=JSON.stringify([...h.rows]);
+  await assert.rejects(h.call('gestionarTurnoMiComunidad',{accion:'iniciar'},'admin','admin'),
+   {code:missing.includes('licencias')?'failed-precondition':'permission-denied'});
+  assert.equal(JSON.stringify([...h.rows]),before);
+ }
+});
+test('desactivación o pérdida de licencia entre la consulta y el commit bloquea la escritura',async()=>{
+ for(const change of ['licencia','ficha','depto']){
+  const h=harness();const transaction=h.db.runTransaction;
+  h.db.runTransaction=function(fn){
+   if(change==='licencia')h.rows.delete('mi_comunidad_licencias/edificio');
+   if(change==='ficha')h.rows.get(h.base+'/conserjes/uno').estado='Inactivo';
+   if(change==='depto')h.rows.get(h.base+'/residentes/residente').depto='202';
+   return transaction(fn);
+  };
+  const role=change==='depto'?'residente':'conserje',uid=change==='depto'?'residente':'uno';
+  const name=change==='depto'?'confirmarAvisoMiComunidad':'gestionarTurnoMiComunidad';
+  await assert.rejects(h.call(name,{accion:'iniciar',id:'aviso'},uid,role),{code:change==='licencia'?'failed-precondition':'permission-denied'});
+  assert.ok(![...h.rows.keys()].some(p=>p.includes('/turnos/')||p.includes('/lecturasAvisos/')||p.includes('/novedades/')));
+ }
 });

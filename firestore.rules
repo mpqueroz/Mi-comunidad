@@ -296,13 +296,12 @@ service cloud.firestore {
 
     // Consultar la ficha en cada solicitud corta el acceso aunque el token
     // de una sesión anterior todavía no haya vencido. No se confía en la UI.
-    // Administración: sin documento en administradores sigue habilitada
-    // (comunidades anteriores a esa colección), pero "Inactivo" la corta.
+    // Toda cuenta requiere ficha existente; migrar fichas heredadas antes de publicar.
     function mcCuentaHabilitada(comunidadId) {
       let residente = /databases/$(database)/documents/mi_comunidad_comunidades/$(comunidadId)/residentes/$(request.auth.uid);
       let conserje = /databases/$(database)/documents/mi_comunidad_comunidades/$(comunidadId)/conserjes/$(request.auth.uid);
       let administrador = /databases/$(database)/documents/mi_comunidad_comunidades/$(comunidadId)/administradores/$(request.auth.uid);
-      return (mcEsAdmin() && (!exists(administrador) || get(administrador).data.get('estado', 'Activo') != 'Inactivo')) ||
+      return (mcEsAdmin() && exists(administrador) && get(administrador).data.get('estado', 'Activo') != 'Inactivo') ||
              (mcEsConserje() && exists(conserje) && get(conserje).data.get('estado', 'Activo') != 'Inactivo') ||
              (mcEsResidente() && exists(residente) && get(residente).data.get('estado', 'Activo') != 'Inactivo' &&
               get(residente).data.get('depto', '') == mcMiDepto());
@@ -321,11 +320,9 @@ service cloud.firestore {
       // la regla completa y bloqueaba TODA la app para ese edificio.
       let comunidad = get(/databases/$(database)/documents/mi_comunidad_comunidades/$(comunidadId)).data;
       let licenciaPath = /databases/$(database)/documents/mi_comunidad_licencias/$(comunidadId);
-      // Compatibilidad: edificios anteriores al sistema de licencias siguen
-      // operando hasta que exista una migración comercial explícita.
-      // Una licencia nueva, en cambio, debe estar vigente en el servidor.
+      // La licencia debe existir y estar vigente. No hay excepción por ausencia.
       return comunidad.get('estado', 'Activa') != "Suspendida" &&
-             (!exists(licenciaPath) ||
+             exists(licenciaPath) && (
               (get(licenciaPath).data.get('estado', '') == 'trial' &&
                get(licenciaPath).data.get('trialEndsAt', timestamp.date(1970, 1, 1)) > request.time) ||
               (get(licenciaPath).data.get('estado', '') in ['active', 'past_due'] &&

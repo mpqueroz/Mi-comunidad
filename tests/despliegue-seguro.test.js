@@ -88,3 +88,12 @@ test('despliegue operativo incluye conciliación transaccional y smoke sin sesi�
   assert.ok(workflow.includes('functions:'+name));assert.ok(smoke.includes("'"+name+"'"));
  }
 });
+
+test('publicación exige inventario limpio antes de desplegar funciones, reglas o hosting',()=>{
+ const workflow=fs.readFileSync(path.join(root,'.github/workflows/firebase.yml'),'utf8');
+ const deploy=workflow.slice(workflow.indexOf('  deploy:\n'),workflow.indexOf('  public-smoke:\n'));
+ const gate=deploy.indexOf('node scripts/auditar-accesos.cjs --project mercado-ciudadano --require-clean');
+ assert.ok(gate>deploy.indexOf('google-github-actions/auth@'));
+ assert.ok(gate<deploy.indexOf('node scripts/preparar-reglas-compartidas.cjs'));
+ assert.ok(gate<deploy.indexOf('node scripts/firebase-cli.cjs deploy'));
+});

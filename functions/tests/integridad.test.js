@@ -6,6 +6,7 @@ const factory=require('../integridad');
 function harness(){
   const docs=new Map([
     ['mi_comunidad_comunidades/a',{estado:'Activa'}],
+    ['mi_comunidad_licencias/a',{estado:'active',paidUntil:new Date('2099-01-01')}],
     ['mi_comunidad_comunidades/a/residentes/res',{estado:'Activo',depto:'101',familiares:[],restringidos:[]}],
     ['mi_comunidad_comunidades/a/administradores/adm',{estado:'Activo'}],
   ]);
@@ -63,7 +64,7 @@ test('cuenta desactivada, rol ajeno, licencia vencida y depto cambiado rechazan 
  await assert.rejects(h.call('registrarPagoOperativoMiComunidad',args,'residente'),{code:'permission-denied'});
  h.docs.get('mi_comunidad_comunidades/a/administradores/adm').estado='Inactivo';await assert.rejects(h.call('registrarPagoOperativoMiComunidad',args),{code:'permission-denied'});
  h.docs.get('mi_comunidad_comunidades/a/administradores/adm').estado='Activo';h.docs.set('mi_comunidad_licencias/a',{estado:'expired'});
- await assert.rejects(h.call('registrarPagoOperativoMiComunidad',args),{code:'failed-precondition'});h.docs.delete('mi_comunidad_licencias/a');
+ await assert.rejects(h.call('registrarPagoOperativoMiComunidad',args),{code:'failed-precondition'});h.docs.set('mi_comunidad_licencias/a',{estado:'active',paidUntil:new Date('2099-01-01')});
  h.docs.get('mi_comunidad_comunidades/a/residentes/res').depto='202';await assert.rejects(h.call('gestionarIntegrantesFichaMiComunidad',{uid:'res',tipo:'familiares',accion:'agregar',persona:{nombre:'Ana'}},'residente'),{code:'permission-denied'});
  assert.equal(h.rows('movimientosContables').length,0);
 });
@@ -129,4 +130,14 @@ test('asiento nuevo de cartola es determinista y valida signo/categoría en serv
  await assert.rejects(h.call('conciliarMovimientoComunidad',{...args,categoria:'Intereses'}),{code:'invalid-argument'});
  const a=await h.call('conciliarMovimientoComunidad',args),b=await h.call('conciliarMovimientoComunidad',args);
  assert.deepEqual(a.contableIds,b.contableIds);assert.equal(h.rows('movimientosContables').length,1);assert.equal(h.rows('movimientosContables')[0][1].tipo,'Egreso');
+});
+
+test('licencia y ficha de administrador deben existir antes de cualquier escritura contable',async()=>{
+ for(const missing of ['mi_comunidad_licencias/a','mi_comunidad_comunidades/a/administradores/adm']){
+  const h=harness();h.docs.delete(missing);h.docs.set('mi_comunidad_comunidades/a/remuneraciones/uno',{estado:'Pendiente',monto:1000});
+  const before=JSON.stringify([...h.docs]);
+  await assert.rejects(h.call('registrarPagoOperativoMiComunidad',{tipo:'remuneracion',id:'uno'}),
+   {code:missing.includes('licencias')?'failed-precondition':'permission-denied'});
+  assert.equal(JSON.stringify([...h.docs]),before);
+ }
 });

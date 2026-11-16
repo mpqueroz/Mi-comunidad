@@ -15,14 +15,24 @@ module.exports = function profesional(admin, onCall, HttpsError) {
     const community = await base.get();
     if(!community.exists || community.data().estado === 'Suspendida')throw new HttpsError('failed-precondition', 'La comunidad no está activa.');
     const license = await db.collection('mi_comunidad_licencias').doc(comunidadId).get();
-    if(license.exists && !evaluateLicense(license.data()).allowed)throw new HttpsError('failed-precondition', 'Licencia no vigente.');
+    if(!license.exists || !evaluateLicense(license.data()).allowed)throw new HttpsError('failed-precondition', 'Licencia no vigente.');
     const person = token.role === 'conserje' ? await base.collection('conserjes').doc(req.auth.uid).get() : token.role === 'residente' ? await base.collection('residentes').doc(req.auth.uid).get() : null;
     if(person && (!person.exists || person.data().estado === 'Inactivo' || (token.role === 'residente' && person.data().depto !== token.depto)))throw new HttpsError('permission-denied', 'La cuenta no está habilitada.');
-    // Administración: sin documento sigue habilitada; "Inactivo" la corta.
+    // Una ficha ausente o desactivada nunca mantiene permisos de administración.
     const adminDoc = token.role === 'admin' ? await base.collection('administradores').doc(req.auth.uid).get() : null;
-    if(adminDoc?.exists && adminDoc.data().estado === 'Inactivo')throw new HttpsError('permission-denied', 'La cuenta de administración fue desactivada.');
+    if(adminDoc && (!adminDoc.exists || adminDoc.data().estado === 'Inactivo'))throw new HttpsError('permission-denied', 'La cuenta de administración fue desactivada.');
     const nombre = person?.data()?.nombre || adminDoc?.data()?.nombre || token.name || community.data().adminNombre || 'Administración';
-    return {base, uid:req.auth.uid, role:token.role, nombre};
+    return {base, uid:req.auth.uid, role:token.role, depto:token.depto, nombre};
+  }
+  async function comprobarAccesoTransaccion(tx, s) {
+    const community = await tx.get(s.base);
+    const license = await tx.get(db.collection('mi_comunidad_licencias').doc(s.base.id));
+    const collection = {admin:'administradores', conserje:'conserjes', residente:'residentes'}[s.role];
+    const person = await tx.get(s.base.collection(collection).doc(s.uid));
+    if (!community.exists || community.data().estado === 'Suspendida' || !license.exists ||
+        !evaluateLicense(license.data()).allowed) throw new HttpsError('failed-precondition', 'La comunidad o licencia no está activa.');
+    if (!person.exists || person.data().estado === 'Inactivo' ||
+        (s.role === 'residente' && person.data().depto !== s.depto)) throw new HttpsError('permission-denied', 'La cuenta no está habilitada.');
   }
   function docId(id) {if(typeof id!=='string'||!id||id.includes('/')||id.length>200)throw new HttpsError('invalid-argument','Identificador inválido.');return id;}
   function log(tx, s, title, meta, turnoId = '') {tx.set(s.base.collection('novedades').doc(), {icon:'clipboard-list',title:text(title),meta:text(meta,500),badgeClass:'',badgeText:'Registro',autorUid:s.uid,autorNombre:s.nombre,turnoId,ts:stamp()});}
@@ -33,6 +43,7 @@ module.exports = function profesional(admin, onCall, HttpsError) {
     const actual = s.base.collection('operacion').doc('turnoActual');
     const nuevo = s.base.collection('turnos').doc();
     return db.runTransaction(async tx => {
+      await comprobarAccesoTransaccion(tx, s);
       const actualSnap = await tx.get(actual);
       const old = actualSnap.exists ? actualSnap.data() : null;
       if(accion === 'iniciar') {
@@ -72,6 +83,7 @@ module.exports = function profesional(admin, onCall, HttpsError) {
     const year=Number(new Intl.DateTimeFormat('en',{timeZone:'America/Santiago',year:'numeric'}).format(new Date()));
     const contador=s.base.collection('contadores').doc('encomiendas_'+year),ref=s.base.collection('encomiendas').doc();
     return db.runTransaction(async tx=>{
+      await comprobarAccesoTransaccion(tx, s);
       const c=await tx.get(contador);const valor=(c.exists?Number(c.data().valor)||0:0)+1;
       const codigo=`PAQ-${year}-${String(valor).padStart(6,'0')}`;
       tx.set(contador,{valor});
@@ -87,6 +99,7 @@ module.exports = function profesional(admin, onCall, HttpsError) {
     const accion=req.data.accion;
     const token=crypto.randomBytes(16).toString('hex');
     return db.runTransaction(async tx=>{
+      await comprobarAccesoTransaccion(tx, s);
       const snap=await tx.get(ref);
       if(!snap.exists)throw new HttpsError('not-found','No se encontró la encomienda.');
       const e=snap.data();
@@ -128,6 +141,7 @@ module.exports = function profesional(admin, onCall, HttpsError) {
     if(d.accion==='salir'){
       const ref=s.base.collection('visitas').doc(docId(d.id));
       return db.runTransaction(async tx=>{
+      await comprobarAccesoTransaccion(tx, s);
         const snap=await tx.get(ref);
         if(!snap.exists)throw new HttpsError('not-found','No se encontró la visita.');
         const v=snap.data();
@@ -141,6 +155,7 @@ module.exports = function profesional(admin, onCall, HttpsError) {
     const programada=d.programadaId?s.base.collection('visitasProgramadas').doc(docId(d.programadaId)):null;
     const nueva=s.base.collection('visitas').doc();
     return db.runTransaction(async tx=>{
+      await comprobarAccesoTransaccion(tx, s);
       let datos=d;
       if(programada){
         const p=await tx.get(programada);
@@ -172,6 +187,7 @@ module.exports = function profesional(admin, onCall, HttpsError) {
     if(!motivo)throw new HttpsError('invalid-argument','Escribe el motivo de la cancelación.');
     const ref=s.base.collection('reservas').doc(docId(req.data.id));
     return db.runTransaction(async tx=>{
+      await comprobarAccesoTransaccion(tx, s);
       const snap=await tx.get(ref);
       if(!snap.exists)throw new HttpsError('not-found','No se encontró la reserva.');
       const r=snap.data();
@@ -210,6 +226,7 @@ module.exports = function profesional(admin, onCall, HttpsError) {
     if(typeof d.activo!=='boolean')throw new HttpsError('invalid-argument','Indica el estado del plan.');
     const ref=s.base.collection('planesMantencion').doc(d.id?docId(d.id):'plan_'+requestKey(d.solicitud));
     return db.runTransaction(async tx=>{
+      await comprobarAccesoTransaccion(tx, s);
       const snap=await tx.get(ref);
       if(!d.id&&snap.exists){if(snap.data().creadoPor===s.uid)return {id:ref.id};throw new HttpsError('already-exists','La solicitud ya fue utilizada.');}
       if(d.id&&!snap.exists)throw new HttpsError('not-found','No se encontró el plan.');
@@ -229,6 +246,7 @@ module.exports = function profesional(admin, onCall, HttpsError) {
     const ref=s.base.collection('planesMantencion').doc(docId(d.id));
     const revision=ref.collection('revisiones').doc(requestKey(d.solicitud));
     return db.runTransaction(async tx=>{
+      await comprobarAccesoTransaccion(tx, s);
       const p=await tx.get(ref),r=await tx.get(revision);
       if(r.exists){if(r.data().autorUid!==s.uid)throw new HttpsError('permission-denied','La solicitud pertenece a otra cuenta.');return {ok:true,proximaFecha:r.data().proximaFecha};}
       if(!p.exists)throw new HttpsError('not-found','El plan ya no existe.');
@@ -248,6 +266,7 @@ module.exports = function profesional(admin, onCall, HttpsError) {
     if(d.accion==='archivar'){
       const ref=s.base.collection('avisos').doc(docId(d.id));
       return db.runTransaction(async tx=>{
+      await comprobarAccesoTransaccion(tx, s);
         const snap=await tx.get(ref);if(!snap.exists)throw new HttpsError('not-found','No se encontró el aviso.');
         if(snap.data().estado==='Archivado')return {ok:true};
         tx.update(ref,{estado:'Archivado',archivadoEn:stamp(),archivadoPor:s.uid});log(tx,s,'Aviso archivado',snap.data().title||'Aviso');return {ok:true};
@@ -258,6 +277,7 @@ module.exports = function profesional(admin, onCall, HttpsError) {
     if(!title||!description||!['General','Importante','Mantención'].includes(d.categoria)||(vence&&(!fechaReal(vence)||vence<hoyChile())))throw new HttpsError('invalid-argument','Revisa título, mensaje, categoría y vigencia.');
     const ref=s.base.collection('avisos').doc('aviso_'+requestKey(d.solicitud));
     return db.runTransaction(async tx=>{
+      await comprobarAccesoTransaccion(tx, s);
       const snap=await tx.get(ref);
       if(snap.exists){if(snap.data().creadoPor!==s.uid)throw new HttpsError('permission-denied','La solicitud pertenece a otra cuenta.');return {id:ref.id};}
       tx.create(ref,{title,description,categoria:d.categoria,vence,fijado:d.fijado===true,confirmacion:d.confirmacion===true,estado:'Publicado',creadoPor:s.uid,date:hoyChile(),meta:s.nombre,ts:Date.now()});
@@ -270,6 +290,7 @@ module.exports = function profesional(admin, onCall, HttpsError) {
     const id=docId(req.data.id);const ref=s.base.collection('avisos').doc(id);
     const lectura=s.base.collection('lecturasAvisos').doc(`${id}_${s.uid}`);
     return db.runTransaction(async tx=>{
+      await comprobarAccesoTransaccion(tx, s);
       const a=await tx.get(ref),l=await tx.get(lectura);
       if(l.exists)return {ok:true};
       if(!a.exists)throw new HttpsError('not-found','No se encontró el aviso.');
@@ -300,12 +321,7 @@ module.exports = function profesional(admin, onCall, HttpsError) {
     for(let offset=0;offset<departamentos.length;offset+=100){
       const lote=departamentos.slice(offset,offset+100);
       const cantidad=await db.runTransaction(async tx=>{
-        const comunidad=await tx.get(s.base);
-        if(!comunidad.exists||comunidad.data().estado==='Suspendida'){
-          throw new HttpsError('failed-precondition','La comunidad no está activa.');
-        }
-        const licencia=await tx.get(db.collection('mi_comunidad_licencias').doc(s.base.id));
-        if(licencia.exists&&!evaluateLicense(licencia.data()).allowed)throw new HttpsError('failed-precondition','Licencia no vigente.');
+      await comprobarAccesoTransaccion(tx, s);
         // También se respetan los cobros antiguos con identificadores aleatorios.
         const anteriores=await tx.get(s.base.collection('gastosComunes').where('periodo','==',periodo));
         const yaCobrados=new Set(anteriores.docs.map(d=>d.data().depto));
@@ -339,7 +355,8 @@ module.exports = function profesional(admin, onCall, HttpsError) {
     const configuracion={metodos:[...new Set(d.metodos)],banco:text(d.banco,150),tipoCuenta:text(d.tipoCuenta,150),titular:text(d.titular,150),rut:text(d.rut,150),numeroCuenta:text(d.numeroCuenta,150),correo:text(d.correo,150),enlace:text(d.enlace,500),instrucciones:text(d.instrucciones,2000)};
     if(configuracion.enlace){let url;try{url=new URL(configuracion.enlace);}catch(_){throw new HttpsError('invalid-argument','El enlace de pago no es válido.');}if(url.protocol!=='https:'||url.username||url.password)throw new HttpsError('invalid-argument','Usa un enlace HTTPS sin credenciales.');}
     if(configuracion.correo&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(configuracion.correo))throw new HttpsError('invalid-argument','El correo de comprobantes no es válido.');
-    return db.runTransaction(async tx=>{const snap=await tx.get(s.base);const version=snap.data().configuracionPago?.version||0;if(version!==(d.version||0))throw new HttpsError('failed-precondition','La configuración cambió. Vuelve a abrirla.');configuracion.version=version+1;tx.update(s.base,{configuracionPago:configuracion,configuracionPagoActualizadaEn:stamp(),configuracionPagoActualizadaPor:s.uid});log(tx,s,'Configuración de pagos actualizada',configuracion.metodos.join(', '));return {configuracion};});
+    return db.runTransaction(async tx=>{
+      await comprobarAccesoTransaccion(tx, s);const snap=await tx.get(s.base);const version=snap.data().configuracionPago?.version||0;if(version!==(d.version||0))throw new HttpsError('failed-precondition','La configuración cambió. Vuelve a abrirla.');configuracion.version=version+1;tx.update(s.base,{configuracionPago:configuracion,configuracionPagoActualizadaEn:stamp(),configuracionPagoActualizadaPor:s.uid});log(tx,s,'Configuración de pagos actualizada',configuracion.metodos.join(', '));return {configuracion};});
   });
   return {generarCobrosMiComunidad,configurarPagosMiComunidad,guardarPlanMantencionMiComunidad,registrarRevisionMantencionMiComunidad,gestionarAvisoMiComunidad,confirmarAvisoMiComunidad,gestionarVisitaMiComunidad,cancelarReservaMiComunidad,registrarEncomiendaMiComunidad,gestionarTurnoMiComunidad,gestionarEncomiendaMiComunidad};
 };

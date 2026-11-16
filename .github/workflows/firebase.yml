@@ -110,6 +110,8 @@ jobs:
       - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - name: Bloquear publicación si faltan licencias o fichas de acceso
+        run: node scripts/auditar-accesos.cjs --project mercado-ciudadano --require-clean
       # Muestra solo el correo de la cuenta de servicio (no la llave), para
       # saber con qué cuenta se autentica el deploy si falla un permiso.
       - name: Cuenta de servicio en uso
