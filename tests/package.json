@@ -20,7 +20,7 @@
     },
     "body-parser": "2.4.0",
     "fast-uri": "3.1.9",
-    "hono": "4.13.11",
+    "hono": "^4.13.16",
     "ip-address": "10.7.4",
     "undici": "8.12.2",
     "rimraf": "6.1.4",
