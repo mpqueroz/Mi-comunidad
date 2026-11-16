@@ -15,7 +15,7 @@ El PR #18 sigue **en borrador y sin autorización de fusión o despliegue**. Las
 - [Firebase #141](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43793310961), commit `6590ffc`: **119 pruebas de funciones y 210 pruebas de emulador aprobadas**, 0 fallos, 0 omitidas; auditorías de dependencias de funciones y herramientas: **0 vulnerabilidades**. Comprobación pública: **success**. Ambos jobs de despliegue: **skipped**.
 - [Firebase #140](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43793082208), commit `8301d0c`, también completó correctamente las pruebas.
 
-### Inventario real preparado, todavía sin ejecutar
+### Inventario real ejecutado y verificado
 
 `scripts/auditar-accesos.cjs` consulta únicamente las colecciones de Mi Comunidad y las cuentas Auth de esta aplicación. Pagina Firestore y Auth; detecta licencias ausentes, fichas ausentes, cuentas sin comunidad, departamentos y estados incoherentes, y fichas de administradores sin una cuenta válida. Tiene seis pruebas con datos ficticios y sin métodos de escritura permitidos.
 
@@ -29,11 +29,23 @@ Por defecto emite solo conteos, sin nombres, correos, RUT, teléfonos ni credenc
 
 - El entorno local no tiene ADC configurado. Se preparó el job `Inventario de accesos (solo lectura)` en el workflow Firebase existente, con autenticación mediante la credencial ya utilizada por CI. Solo puede ejecutarse manualmente desde esta rama y este repositorio. No habilita despliegues en la rama de auditoría.
 - En #141 el job de inventario quedó **skipped**, porque esa ejecución fue disparada por el PR; las pruebas sí pasaron.
-- Se preparó la ejecución manual en GitHub seleccionando la rama correcta. La revisión automática de acciones rechazó iniciarla por considerarla una ejecución adicional con credenciales. Tras verificar que el inventario anterior estaba omitido, el bloqueo se mantuvo. **No se ejecutó el inventario contra datos reales ni se intentó otra vía para eludir el bloqueo.** Está pendiente autorización explícita para esa ejecución adicional.
+- El usuario autorizó explícitamente la ejecución adicional. Se ejecutó [Firebase #143](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43794563008) sobre `acd8dec`, en la rama de auditoría, sin desplegar.
+- El inventario real terminó su lectura el **15 de noviembre de 2026, 23:50 (Chile)**: **4 comunidades**, **9 cuentas de esta aplicación**, **2 administradores sin ficha** y **3 licencias existentes sin acceso vigente**. No se detectaron licencias ausentes ni las otras inconsistencias cubiertas por el inventario. La ausencia de otras categorías se refiere solo a estas comprobaciones, no acredita ausencia absoluta de problemas.
+- `readyForStrictAccess: false`; el job terminó con **código 2**, que indica hallazgos pendientes, no fallo de autenticación ni de lectura. El bloqueo para migrar a acceso estricto son las **2 fichas de administrador ausentes**. Las 3 licencias sin acceso requieren revisar su situación comercial, pero no son automáticamente un error ni deben activarse para hacer pasar la auditoría.
+- En la misma ejecución pasaron **119 pruebas de funciones y 210 del emulador**, sin fallos ni omitidas. Auditorías npm de funciones y herramientas: **0 vulnerabilidades**. Ambos jobs de despliegue: **skipped**. El estado global de #143 es `failure` exclusivamente por la comprobación del inventario.
+- No se modificaron documentos, licencias, cuentas Auth, claims, reglas ni funciones desplegadas. Los logs contienen conteos y no identificadores personales.
+
+### Plan de regularización, pendiente de autorización para cambios reales
+
+1. Identificar las dos cuentas en un entorno privado de consulta; verificar UID, claims `app=mi_comunidad`, rol `admin`, comunidad asignada, estado de Auth y si siguen autorizadas por su comunidad. No publicar nombres, correos, RUT ni credenciales en GitHub.
+2. Preparar únicamente las fichas que correspondan a esas cuentas verificadas. Preservar cuentas deshabilitadas como inactivas. Usar creación con precondición de inexistencia, sin sobrescribir fichas que se hayan creado desde el inventario y sin cambiar claims ni contraseñas.
+3. Revisar las tres licencias con el responsable comercial. Mantener su estado y vigencia; no otorgar meses, reiniciar trials ni reconocer pagos sin evidencia.
+4. Repetir el inventario tras la regularización autorizada. Solo cuando no existan bloqueadores, preparar y probar la denegación por defecto de licencias y fichas ausentes en reglas, funciones e interfaz, incluida la compatibilidad de las otras apps.
+5. Publicar únicamente en una ventana expresamente autorizada. Esta revisión conserva la prohibición de fusionar o desplegar.
 
 ### Pendientes que impiden cerrar la auditoría completa
 
-1. Ejecutar el inventario real autorizado y revisar sus resultados. Migrar fichas y licencias históricas con decisiones comerciales explícitas; después eliminar coordinadamente las excepciones de acceso en reglas, funciones e interfaz. No otorgar meses ni habilitar cuentas a ciegas.
+1. Regularizar las 2 fichas de administrador ausentes y revisar las 3 licencias sin acceso. El inventario real ya se ejecutó; los cambios reales y la posterior eliminación de excepciones todavía están pendientes.
 2. Verificar configuración efectiva de App Check, restricciones de API y versiones desplegadas de reglas/funciones con acceso de consulta.
 3. Completar la revisión de los renderizados de la interfaz y migrar el script y manejadores inline antes de retirar `unsafe-inline` de CSP. La lista de acciones cerrada agrega protección, pero no reemplaza esa migración.
 4. Mantener la comprobación de compatibilidad de las reglas compartidas y preparar una ventana de publicación separada, únicamente cuando se autorice.
@@ -62,9 +74,9 @@ Por defecto emite solo conteos, sin nombres, correos, RUT, teléfonos ni credenc
 
 ## Bloqueadores para declarar blindaje final
 
-- [ ] Inventariar licencias ausentes en todas las comunidades y distinguir clientes históricos de altas nuevas.
+- [x] Inventariar licencias de las comunidades existentes: 4 revisadas, ninguna ausente; 3 sin acceso vigente (situación comercial pendiente de revisión).
 - [ ] Migrar comunidades heredadas y cambiar comprobación a **denegar por defecto** cuando falte licencia, en reglas y funciones, de forma coordinada.
-- [ ] Inventariar administradores sin ficha y eliminar compatibilidad solo después de migración.
+- [ ] Regularizar los 2 administradores sin ficha detectados por el inventario real y eliminar compatibilidad solo después de migración.
 - [x] Ejecutar la suite de emulador de roles, aislamiento, licencias y pagos (210 pruebas; la excepción de licencia ausente sigue pendiente de migración).
 - [x] Ejecutar suite Node y comprobar estado de GitHub Actions (commit `0870edd`; evidencia abajo).
 - [ ] Revisar secretos e historial Git; rotar inmediatamente cualquier secreto real encontrado, sin publicarlo en informes.
