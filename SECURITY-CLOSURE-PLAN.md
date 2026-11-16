@@ -68,3 +68,16 @@ El job `repair-admin-profiles` solo admite workflow_dispatch en la rama y reposi
 Operación propuesta por cuenta: crear únicamente `nombre` verificado, `estado=Activo` y `creadoEn` del servidor si la ficha sigue ausente. Esto permite a esa cuenta superar la comprobación de ficha del acceso estricto cuando también cumpla la licencia. No sobrescribir fichas existentes; una segunda ejecución conserva cualquier ficha que ya exista, incluso inactiva. Las cuentas Auth, roles, claims, licencias y propietarios no se modifican. Excluir cambios administrativos concurrentes durante la intervención: no se ofrece atomicidad conjunta Auth/Firestore ni atomicidad de las dos reparaciones como lote. Si la segunda falla tras la primera, informar los conteos de avance, no ocultar el éxito parcial ni borrar automáticamente la ficha creada.
 
 La verificación privada con datos reales y la aprobación del usuario siguen pendientes. Una cuenta no reconocida no se regulariza ni se da de baja automáticamente. La verificación de credenciales de clientes, App Check y restricciones de claves permanece separada de esta operación; no se autoriza fusión ni despliegue.
+
+## 8. Comando privado reproducible, sin escrituras
+
+En Cloud Shell del titular, descargar la revisión inmutable y comprobarla antes de ejecutarla:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mpqueroz/Mi-comunidad/cb9d5499eca70225ff84fea029a69b217d45b480/scripts/verificar-fichas-privadas.py -o /tmp/verificar-fichas.py
+echo '02e90db402ad06f4a7da23b10d411af4370b78a2a3358316708e26cb686d5e76  /tmp/verificar-fichas.py' | sha256sum -c - && python3 -B /tmp/verificar-fichas.py --project mercado-ciudadano
+```
+
+El segundo comando solo ejecuta el archivo si coincide con la huella revisada. No compartir tokens ni la salida completa. Revisar privadamente comunidad, UID, nombre propuesto y titularidad, especialmente la comunidad sin propietario registrado. Si una cuenta no se reconoce o el nombre propuesto no es correcto, no aprobar su código.
+
+Solicitud concreta, únicamente después de esa revisión: «Autorizo crear únicamente las fichas de estos códigos: …; confirmo sus identidades, comunidades y nombres propuestos, y que no habrá cambios administrativos concurrentes durante la reparación». Esto autoriza la creación puntual descrita en las secciones 5 y 7, no licencias, propietarios, Auth/claims, restricciones, enforcement, fusión o despliegue. La creación habilita la comprobación de ficha y solo permite acceso cuando se cumplan también las demás condiciones de licencia/comunidad. No interpretar la mera ejecución del comando ni un código aislado como autorización.

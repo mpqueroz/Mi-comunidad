@@ -2,7 +2,7 @@
 
 La auditoría sigue abierta. Esta propuesta no autoriza fusión, despliegue, cambios de restricciones o enforcement. Las dos APIs administrativas fueron habilitadas expresamente por el usuario; el resto de la configuración permanece sin modificar.
 
-## Situación observada en #182
+## Situación observada en #184 (`12a6cee`)
 
 | Control | Evidencia | Consecuencia |
 | --- | --- | --- |
@@ -12,7 +12,7 @@ La auditoría sigue abierta. Esta propuesta no autoriza fusión, despliegue, cam
 | Restricción de navegador | Objeto presente, 0 referrers | No acreditar protección por dominio por la mera existencia del objeto; contrastar política efectiva antes de cambiar |
 | Restricción de API | 27 servicios admitidos, con métodos completos dentro de cada servicio; Auth y Secure Token incluidos | No eliminar servicios por intuición; mantener lo que requieran los consumidores compartidos |
 | App Check | Sin modos explícitos en los cuatro servicios consultados; rama sin inicialización de App Check | Habilitar una API no registra proveedores ni incorpora tokens al cliente |
-| Proveedores reCAPTCHA | La lectura del nombre del recurso responde | Un nombre no prueba que haya configuración utilizable; revisar señales de configuración y después probar un intercambio de token |
+| Proveedores reCAPTCHA | Los recursos tienen nombre, pero v3 no acredita secreto establecido ni Enterprise site key pública; ambas señales son false | No hay configuración utilizable acreditada ni prueba de intercambio de token; preparar proveedor antes de exigir tokens |
 | Acceso estricto | Dos cuentas administrativas habilitadas sin ficha; una en comunidad activa/licenciada | Verificar identidades y regularizar solo las fichas aprobadas antes de publicar |
 
 ## 1. Fichas, operación acotada preparada

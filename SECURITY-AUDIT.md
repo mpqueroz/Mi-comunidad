@@ -2,7 +2,29 @@
 
 **Estado:** revisión preventiva; no desplegar este PR sin completar las verificaciones.
 
-## Actualización vigente — inspección explícita y reparación preparada
+## Última comprobación — consumidores compartidos y reparación por huella, sin ejecutar
+
+Revisión ejecutable `12a6cee0b32bff896601a74e2e5deacc4b9ff22a`: [Firebase #183 (PR)](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43919443966) aprobó **154 pruebas de funciones + 238 del emulador = 392**, sin fallos ni omitidas. Chromium app/demo y auditorías npm aprobaron, con 0 vulnerabilidades en los árboles auditados. Los cuatro workflows asociados al PR aprobaron. La ejecución manual [Firebase #184](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43920189328) también aprobó esas pruebas, Chromium y auditorías npm. Repitió las mismas 238 pruebas sobre la composición real preservando las otras apps byte por byte y confirmó después que la base publicada no había cambiado. No sumar esa repetición al total. Ambos despliegues, la habilitación de APIs y la reparación quedaron omitidos. Su estado global es failure únicamente por las dos fichas ausentes en el inventario.
+
+### Configuración real de #184
+
+- `complete=true`: terminaron las consultas incluidas, no certifica producción. Tres apps web registradas comparten una única clave por asociación de identificadores; una es Mi Comunidad. Son asociaciones de registro, no un inventario exhaustivo del tráfico o consumidores externos. Cuatro sitios de Hosting registrados, uno asociado a la app de Mi Comunidad. No se publican identificadores ni dominios particulares de las otras apps.
+- Siete dominios Auth: `mercado-ciudadano.firebaseapp.com` está presente; `mi-comunidad-md.web.app`, `mi-comunidad-md.firebaseapp.com`, `nodar.cl` y `www.nodar.cl` no figuran. No inferir de ello un fallo del acceso por correo/contraseña. Esa lista no sustituye la política de referrers de una clave.
+- La clave conserva objeto de restricción de navegador con **0 referrers listados** y 27 APIs admitidas; Authentication y Secure Token incluidos. No se leyó su valor. La mera presencia del objeto no acredita protección por dominio; antes de cambiarlo se necesitan pruebas del comportamiento efectivo y compatibilidad de los consumidores compartidos.
+- Las consultas de los cuatro servicios App Check continúan sin modos explícitos (`UNSPECIFIED`); 0 políticas de recursos OAuth iOS. Para la app de Mi Comunidad, los GET de reCAPTCHA v3 y Enterprise devuelven un recurso con nombre, pero **ninguna señal de configuración**: `siteSecretSet` no es true y no hay site key pública de Enterprise. Solo se emite presencia booleana; no se consulta el secreto v3 ni se publica una clave. No existe aún una prueba satisfactoria de intercambio de token. Los rótulos anteriores basados solo en el nombre del recurso se sustituyeron por `resourcePresent` y `configurationSignalPresent`; no considerar el nombre prueba de proveedor utilizable.
+- Persisten dos cuentas habilitadas sin ficha, `readyForStrictAccess=false` y 0 bloques de reserva. El inventario sale con código 2 por sus hallazgos; las consultas de configuración aprobaron. No crear ni dar de baja cuentas para obtener un informe verde.
+
+### Operación exacta preparada y aún no autorizada por cuenta
+
+La revisión privada `verificar-fichas-privadas.py` solo usa GET, excluye correo/contraseñas/hashes de Auth y rechaza CI antes de pedir token. Muestra al titular identidades y nombre propuesto; únicamente sus huellas de confirmación se comparten. Cinco casos Python con datos ficticios están incluidos en el caso Node correspondiente; no sumarlos de nuevo al total.
+
+`ejecutar-reparacion-fichas.cjs` y el job manual de regularización están desactivados por defecto. Requieren aprobación expresa de uno o dos códigos y exclusión de cambios administrativos concurrentes. Los códigos ligan proyecto, identidad/claims/estado, comunidad, propietario y nombres; todos se resuelven antes de la primera escritura. La función revalida Auth y crea transaccionalmente solo `nombre`, `estado=Activo` y `creadoEn` si la ficha sigue ausente. No sobrescribe ni reactiva fichas existentes; no cambia Auth, claims, propietarios o licencias. Auth/Firestore y las dos reparaciones no forman una transacción conjunta; informar cualquier avance parcial.
+
+La verificación privada y la autorización concreta por códigos siguen pendientes. La propuesta detallada de App Check/clave compartida está en `SECURITY-CONFIGURATION-PLAN.md`; el comando privado fijado y comprobado por SHA256 está en `SECURITY-CLOSURE-PLAN.md`. La equivalencia del código desplegado sigue pendiente: las pruebas del PR no acreditan que sus cambios estén en producción. La única modificación productiva de configuración autorizada hasta aquí fue la habilitación de las dos APIs por el usuario; no hay otras escrituras, fusión ni despliegue.
+
+Las secciones siguientes son evidencia histórica subordinada a esta actualización.
+
+## Evidencia histórica — inspección explícita y reparación preparada
 
 [Firebase #177 (PR)](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43911337909) y [#178 (manual)](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43911377835), commit `73681e7`: **147 pruebas de funciones + 237 emulador = 384 aprobadas**, 0 fallos y 0 omitidas. Chromium app/demo y auditorías npm aprobaron (0 vulnerabilidades). Los cuatro workflows del PR aprobaron; #178 repitió con éxito las mismas 237 pruebas sobre las reglas compuestas reales, preservando las otras aplicaciones. Ambos despliegues y la habilitación de servicios se omitieron. La repetición no añade casos nuevos al total.
 
