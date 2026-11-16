@@ -1,0 +1,19 @@
+name: Pruebas de deshabilitación privada
+on:
+  pull_request:
+    paths:
+      - "scripts/deshabilitar-pruebas-privado.py"
+      - "scripts/test_deshabilitar_pruebas.py"
+      - ".github/workflows/private-disable-tests.yml"
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Probar límites y fallos parciales con datos ficticios, sin credenciales
+        run: python3 -B -W error::ResourceWarning scripts/test_deshabilitar_pruebas.py
