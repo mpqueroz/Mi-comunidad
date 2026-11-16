@@ -2,9 +2,29 @@
 
 **Estado:** revisión preventiva; no desplegar este PR sin completar las verificaciones.
 
-## Estado vigente — 16 de noviembre de 2026 (UTC)
+## Continuación — interfaz y política de scripts, 16 de noviembre de 2026 (Chile)
 
-El PR #18 permanece en borrador, sin fusión ni despliegue. Esta sección sustituye los estados anteriores; las secciones históricas describen el código y las pruebas de su fecha.
+Commit `42f3d37`, preparado en la rama del PR #18, sin fusión ni despliegue:
+
+- Se migraron **164 manejadores inline** de `public/index.html`: clic, cambio, entrada y teclado. Los argumentos se serializan como JSON escapado en atributos de datos y se ejecutan únicamente mediante una lista explícita de funciones; no se usa `eval`, `Function` ni búsqueda dinámica en `window`.
+- La lógica principal se trasladó a `public/app.js`, conservando el orden de carga y los contratos globales de los módulos. La cabecera de caché del nuevo archivo exige revalidación. El verificador posterior al despliegue consulta ahora ese archivo externo; no se ejecutó ningún despliegue.
+- La app autenticada añade una política CSP en el inicio de `<head>`: `script-src 'self' https://cdn.sheetjs.com; script-src-attr 'none'`. Interseca la cabecera HTTP existente y bloquea los scripts y manejadores inline en esa página. La carga de SheetJS conserva su huella SRI.
+- La cabecera HTTP compartida todavía contiene `unsafe-inline` y la demo conserva 3 scripts inline y 141 manejadores heredados (inventario de código; usa un backend simulado local). No se declara eliminado `unsafe-inline` de todo el sitio ni auditada por completo la demo. Esta política adicional protege la página autenticada; no sustituye la revisión de los destinos `innerHTML` ni el aislamiento del origen compartido.
+- Se conservan las funciones financieras verificadas por hashes de referencia, sin modificar importes ni operaciones de pago. La suite se adaptó para leer el archivo externo real; no se copiaron funciones de producción a los tests.
+- Validación local: **126 pruebas de funciones**, y **57 comprobaciones dirigidas** de interfaz, conciliación y cabeceras aprobadas. Estos grupos tienen tres comprobaciones en común y no deben sumarse como si fueran distintos. Auditoría npm de herramientas: **0 vulnerabilidades**.
+- El entorno local impide iniciar Chromium (`socket: Operation not permitted`). Se incorporó una prueba reproducible en Actions con Playwright fijado a `1.62.1` y Chromium: levanta un servidor local, bloquea la red externa, comprueba clic/Enter/input y que CSP impida scripts y manejadores inyectados. El resultado ejecutado en CI figura a continuación; la validación no se limita a comprobaciones estáticas.
+
+### Resultado verificado en GitHub Actions
+
+[Firebase #152](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43840454942), commit `ff4f53b`: **126 pruebas de funciones y 222 de emulador = 348 aprobadas**, sin fallos ni omitidas. La prueba adicional de Chromium aprobó carga externa, clic/Enter/input, conservación literal de datos hostiles y rechazo por CSP tanto de scripts inline como de manejadores HTML. Auditorías npm de funciones y herramientas: **0 vulnerabilidades**. Comprobación pública y los otros tres workflows aprobados. Ambos jobs de despliegue: **skipped**.
+
+Las ejecuciones #150 y #151 detectaron problemas del montaje de la prueba de navegador: el aviso fijo del emulador interceptaba el control de prueba y los reportes CSP llegan como eventos asíncronos. Se movió el control y se esperaron ambos reportes; no se relajaron los controles ni las aserciones de seguridad. #152 valida el resultado completo. No se afirma cobertura exhaustiva de toda la interfaz por esta prueba.
+
+Los bloqueos reales anteriores (dos fichas ausentes, permisos de consulta 403 y diferencias de reglas compartidas) siguen vigentes. No se modificaron usuarios, claims, licencias, pagos ni recursos de producción.
+
+## Acceso estricto y consulta real — evidencia previa, 16 de noviembre de 2026 (UTC)
+
+El PR #18 permanece en borrador, sin fusión ni despliegue. Esta sección conserva los resultados de acceso estricto y lectura real; la continuación de interfaz figura arriba. Las secciones históricas describen el código y las pruebas de su fecha.
 
 ### Acceso estricto preparado y probado en la rama
 
@@ -35,7 +55,7 @@ El nuevo script `scripts/auditar-configuracion.cjs` usa exclusivamente consultas
 
 1. Verificar privadamente las dos cuentas sin ficha y regularizar únicamente las que correspondan, en una intervención de producción separadamente autorizada; conservar cuentas deshabilitadas. Repetir el inventario antes de publicar. No conceder licencias para hacer pasar el control.
 2. Obtener una consulta autorizada de App Check y restricciones de API, y verificar la equivalencia del código desplegado. Los metadatos de funciones no resuelven estas comprobaciones.
-3. Completar revisión de renderizados y migración de scripts/manejadores inline antes de retirar `unsafe-inline` de CSP.
+3. Completar la revisión de renderizados y la demo. La app autenticada ya migró sus scripts/manejadores y añade una CSP restrictiva propia; la cabecera compartida y la demo mantienen `unsafe-inline` (véase continuación arriba).
 4. Integrar reglas de Mi Comunidad preservando las reglas efectivas de las otras aplicaciones, probar ese resultado y preparar una publicación separada únicamente cuando se autorice.
 
 No se modificaron datos, usuarios, claims, licencias, pagos, precios, reglas, funciones ni hosting de producción. La auditoría completa continúa abierta; las correcciones de acceso están preparadas y probadas en el PR.
