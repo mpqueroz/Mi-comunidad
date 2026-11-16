@@ -4,20 +4,26 @@ const crypto=require('node:crypto'),fs=require('node:fs'),path=require('node:pat
 const {createRequire}=require('node:module');
 const {fingerprint}=require('./ejecutar-reparacion-fichas.cjs');
 const PROJECT='mercado-ciudadano';
+class VerificationError extends Error {constructor(code){super(code);this.safeCode=code;}}
+const reject=code=>{throw new VerificationError(code);};
 const emailHash=email=>crypto.createHash('sha256').update(email.toLowerCase()).digest('hex');
 async function inspectPrincipal({db,auth,emailSha256}){
- if(!/^[a-f0-9]{64}$/.test(emailSha256||'')||db.projectId!==PROJECT||auth.app?.options?.projectId!==PROJECT)throw Error('Alcance no verificable.');
+ if(!/^[a-f0-9]{64}$/.test(emailSha256||'')||db.projectId!==PROJECT||auth.app?.options?.projectId!==PROJECT)reject('INVALID_SCOPE');
  let token;const seen=new Set(),matches=[];
  do{
   const page=await auth.listUsers(1000,token);
   for(const user of page.users)if(typeof user.email==='string'&&emailHash(user.email)===emailSha256)matches.push(user);
   token=page.pageToken;if(token&&seen.has(token))throw Error('Paginación incompleta.');if(token)seen.add(token);
  }while(token);
- if(matches.length!==1)throw Error('Identidad no única.');
+ if(matches.length!==1)reject(matches.length?'PRINCIPAL_NOT_UNIQUE':'PRINCIPAL_NOT_FOUND');
  const user=matches[0],c=user.customClaims||{};
- if(user.disabled||c.app!=='mi_comunidad'||c.role!=='admin'||![user.uid,c.comunidadId].every(v=>typeof v==='string'&&v.length>0&&v.length<=100&&!['.','..'].includes(v)&&!/[\x00-\x1f\x7f/]/.test(v)))throw Error('La cuenta no es administradora habilitada de esta app.');
+ if(user.disabled)reject('PRINCIPAL_DISABLED');
+ if(c.app!=='mi_comunidad')reject('PRINCIPAL_OTHER_APP');
+ if(c.role!=='admin')return {readOnly:true,principalMatchedByEmail:true,authEnabled:true,appMatches:true,
+  role:['superadmin','residente','conserje'].includes(c.role)?c.role:'other',reparable:false,status:'NOT_COMMUNITY_ADMIN'};
+ if(![user.uid,c.comunidadId].every(v=>typeof v==='string'&&v.length>0&&v.length<=100&&!['.','..'].includes(v)&&!/[\x00-\x1f\x7f/]/.test(v)))reject('INVALID_IDENTITY');
  const base=db.collection('mi_comunidad_comunidades').doc(c.comunidadId),community=await base.get();
- if(!community.exists)throw Error('Comunidad no verificable.');
+ if(!community.exists)reject('COMMUNITY_NOT_FOUND');
  const profile=await base.collection('administradores').doc(user.uid).get(),owner=community.get('adminUid')||null;
  const evidence={projectId:PROJECT,expectedAuth:{uid:user.uid,disabled:false,app:'mi_comunidad',role:'admin',comunidadId:c.comunidadId},expectedOwner:owner,
   communityName:community.get('nombre')||'',communityState:community.get('estado')||'',accountDisplayName:user.displayName||'',registeredAdminName:community.get('adminNombre')||'',principalEmail:user.email.toLowerCase()};
@@ -38,4 +44,4 @@ async function main(){
  try{console.log(JSON.stringify(await inspectPrincipal({db:getFirestore(app),auth:getAuth(app),emailSha256})));}finally{await deleteApp(app);}
 }
 module.exports={inspectPrincipal,emailHash};
-if(require.main===module)main().catch(()=>{console.error(JSON.stringify({readOnly:true,event:'principal-verification-not-completed'}));process.exitCode=1;});
+if(require.main===module)main().catch(error=>{console.error(JSON.stringify({readOnly:true,event:'principal-verification-not-completed',code:error instanceof VerificationError?error.safeCode:'READ_FAILED'}));process.exitCode=1;});

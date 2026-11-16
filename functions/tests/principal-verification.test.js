@@ -20,9 +20,10 @@ test('principal: solo lee, selecciona por correo y su huella sirve para la repar
  assert.equal(plan.plannedMissing,1);assert.equal(plan.readOnly,true);
 });
 test('principal: no elude proyecto, unicidad ni estado/rol del administrador',async()=>{
- for(const change of [f=>f.emailSha256='x',f=>f.db.projectId='otro',f=>f.users.push({...f.users[0]}),f=>f.users[0].disabled=true,f=>f.users[0].customClaims.role='residente',f=>f.emailSha256=emailHash('missing@example.invalid')]){
+ for(const change of [f=>f.emailSha256='x',f=>f.db.projectId='otro',f=>f.users.push({...f.users[0]}),f=>f.users[0].disabled=true,f=>f.emailSha256=emailHash('missing@example.invalid')]){
   const f=fixture();change(f);await assert.rejects(inspectPrincipal(f));
  }
  const f=fixture();f.values.adminUid='other';assert.equal((await inspectPrincipal(f)).reparable,false);
  f.values.adminUid='u';f.values.estado='Suspendida';assert.equal((await inspectPrincipal(f)).reparable,false);
+ const g=fixture();g.users[0].customClaims.role='superadmin';assert.deepEqual(await inspectPrincipal(g),{readOnly:true,principalMatchedByEmail:true,authEnabled:true,appMatches:true,role:'superadmin',reparable:false,status:'NOT_COMMUNITY_ADMIN'});
 });
