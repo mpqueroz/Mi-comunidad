@@ -1,6 +1,6 @@
 # Cierre pendiente de la auditoría del PR #18
 
-Estado: PR en borrador. La autorización expresa del usuario permitió únicamente habilitar App Check API y API Keys API en `mercado-ciudadano`; no autoriza cambiar IAM, enforcement, restricciones de claves, fichas ni licencias. Se mantienen prohibidas la fusión y cualquier despliegue a Firebase.
+Estado: PR en borrador. El usuario habilitó App Check API y API Keys API en `mercado-ciudadano` y después creó/registró el proveedor Enterprise de Mi Comunidad; no autoriza cambiar IAM, enforcement, restricciones de claves, fichas ni licencias. Se mantienen prohibidas la fusión y cualquier despliegue a Firebase.
 
 ## 1. Habilitación completada por el usuario; consultas disponibles
 El usuario habilitó las dos APIs autorizadas desde Cloud Shell. [Firebase #173, intento 2](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43906272946/attempts/2) confirmó `complete=true`: ambas consultas ya responden a la credencial de auditoría. No repetir la habilitación ni agregar IAM.
@@ -131,4 +131,17 @@ Queda resuelto el bloqueo de identificación del acceso real. No crear ficha com
 La revisión ejecutable 88402da tiene los cuatro workflows del PR aprobados, con 158 funciones + 239 emulador = 397 pruebas, sin fallos ni omitidas, Chromium y auditorías npm aprobados. Esta actualización es documental y no modifica ejecutables ni producción. Las pruebas reales de composición de #191 siguen siendo la última evidencia de preservación de otras apps y base publicada sin cambios.
 
 Siguen abiertos: tratamiento explícito de cuentas de prueba que mantiene el inventario general no apto, proveedor/cliente App Check y pruebas de tokens, compatibilidad efectiva de la clave compartida y comparación del código desplegado. Mantener PR en borrador, sin fusión ni despliegue. Esta confirmación no autoriza escrituras en Firebase.
+
+
+## 14. Proveedor registrado e integración cliente preparada
+
+El titular creó en Google Cloud la clave Web de Fraud Defense para Mi Comunidad y registró la app en Firebase App Check; la captura confirma proveedor Fraud Defense y estado Registrada. Entregó exclusivamente la clave pública de sitio. Son cambios reales de configuración realizados por el titular, adicionales a las dos APIs habilitadas anteriormente. No se solicitó secreto, se activó enforcement ni se cambió la clave API compartida.
+
+Revisión ejecutable 9c2e9104e45288a3b0ca5c726770055862c85054: [Firebase #197](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43964093979) aprobó **163 funciones + 240 emulador = 403 pruebas**, sin fallos ni omitidas. Chromium aprobó app/demo, bloqueo de scripts/handlers inline y el escenario App Check. Las auditorías npm devolvieron 0 vulnerabilidades en los árboles auditados. Aprobaron los cinco workflows del commit, incluida la verificación de SDK. Despliegues, reparación y habilitación de APIs quedaron omitidos. No se repitieron inventario/composición reales en ese evento de PR; su evidencia anterior no se convierte en verificación de esta configuración recién registrada.
+
+El SDK App Check 10.13.2 se sirve localmente, sin modificación, y CI compara sus bytes con la URL oficial fijada. SHA256: ab1b63a9da4d418fee727518b6487c6021d1404bc2b58eac1499323334e17f83. La inicialización usa ReCaptchaEnterpriseProvider y renovación explícita antes de Auth/Firestore/Functions. CSP solo amplía rutas de reCAPTCHA de Google; no permite scripts inline, eval ni orígenes genéricos de Google. La demo no activa App Check. Los emuladores locales exactos no activan atestación ni habilitan debug de producción.
+
+El diagnóstico mcVerificarAppCheck devuelve solo estado y nunca el token. Chromium cargó el SDK real local, pero simuló reCAPTCHA y el intercambio Enterprise: sus resultados no prueban atestación real, validez de la clave registrada, permisos efectivos de API key, compatibilidad de roles o acceso a producción. La simulación reproduce endpoint y devolución de llamada del SDK fijado. Falta prueba real en origen permitido, distribución autorizada del cliente y observación de métricas antes de enforcement.
+
+El principal del titular ya está verificado como superadmin y no requiere ficha comunitaria. No crear fichas de prueba ni debilitar la barrera de publicación. Siguen pendientes tratamiento de cuentas de prueba, compatibilidad efectiva de clave compartida y comparación con el código desplegado. Se mantiene PR en borrador, sin fusión ni despliegue. Las secciones anteriores de proveedor ausente/integración inexistente son evidencia histórica previa al registro y a este commit.
 
