@@ -333,3 +333,38 @@ test("las notas de soporte quedan fuera del alcance del edificio", async () => {
   await assertFails(notas(adminDb()).get());
   await assertFails(notas(adminDb()).set({notas: "Otra"}));
 });
+
+test('documentos: esquema acotado, solo administración publica y el contenido es inmutable', async()=>{
+ const data={icon:'📄',titulo:'Reglamento',descripcion:'Normas',contenido:'Contenido',ts:Date.now()};
+ const ref=adminDb().collection(`${BASE}/documentos`).doc('schema');
+ await assertSucceeds(ref.set(data));
+ await assertSucceeds(residente().doc(ref.path).get());
+ await assertFails(ref.update({contenido:'Otro'}));
+ await assertFails(residente().collection(`${BASE}/documentos`).add(data));
+ await assertFails(conserje().collection(`${BASE}/documentos`).add(data));
+ for(const patch of [{icon:[]},{icon:'x'.repeat(41)},{titulo:3},{titulo:''},{titulo:'x'.repeat(151)},{descripcion:null},{descripcion:'x'.repeat(2001)},{contenido:''},{contenido:'x'.repeat(50001)},{ts:'hoy'},{extra:true}])
+  await assertFails(adminDb().collection(`${BASE}/documentos`).add({...data,...patch}));
+ const {contenido,...missing}=data;await assertFails(adminDb().collection(`${BASE}/documentos`).add(missing));
+ await assertSucceeds(ref.delete());
+});
+test('bloques: valida altas y actualizaciones, conserva horario y permite activar/desactivar',async()=>{
+ const data={lugar:'Quincho',nombre:'Mañana',horaInicio:'10:00',horaFin:'14:00',activo:true,ts:Date.now()};
+ const ref=adminDb().collection(`${BASE}/bloquesReserva`).doc('schema');
+ await assertSucceeds(ref.set(data));await assertSucceeds(ref.update({activo:false}));
+ await assertSucceeds(residente().doc(ref.path).get());
+ await assertFails(residente().doc(ref.path).update({activo:true}));
+ await assertFails(conserje().collection(`${BASE}/bloquesReserva`).add(data));
+ for(const patch of [{nombre:0},{nombre:''},{nombre:'x'.repeat(101)},{lugar:'Cualquier lugar'},{horaInicio:'25:00'},{horaFin:'12:60'},{activo:'true'},{ts:[]},{extra:true}]){
+  await assertFails(adminDb().collection(`${BASE}/bloquesReserva`).add({...data,...patch}));
+  await assertFails(ref.update(patch));
+ }
+ await assertFails(ref.update({horaInicio:'11:00'}));await assertFails(ref.update({ts:Date.now()+100}));
+ const {horaFin,...missing}=data;await assertFails(adminDb().collection(`${BASE}/bloquesReserva`).add(missing));
+ await assertSucceeds(ref.delete());
+});
+test('ficha laboral: ni administración modifica directamente sueldo, estado o campos arbitrarios',async()=>{
+ for(const data of [{sueldo:1000000},{estado:'Activo'},{nombre:'Otro'},{arbitrario:'x'.repeat(10000)}])
+  await assertFails(adminDb().doc(`${BASE}/conserjes/con1`).update(data));
+ await assertSucceeds(adminDb().doc(`${BASE}/conserjes/con1`).get());
+ await assertSucceeds(conserje().doc(`${BASE}/conserjes/con1`).get());
+});

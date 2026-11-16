@@ -20,23 +20,32 @@ async function enableAuditApis({projectId,apply=false,approved=false,request,wai
  if(projectId!==PROJECT)throw Error('Proyecto no autorizado.');
  if(!apply)return {projectId,apply:false,services:[...SERVICES]};
  if(!approved)throw Error('Falta autorización explícita.');
- const project=await request('GET',`https://firebase.googleapis.com/v1beta1/projects/${PROJECT}?fields=projectId,projectNumber`);
+ // Solo etiquetas constantes; nunca copiar mensajes ni URLs de error al log.
+ async function query(phase,method,url,service){
+  try{return await request(method,url);}catch(error){
+   const failure=new Error('La solicitud autorizada no se completó.');
+   failure.status=error.status;failure.reason=error.reason;failure.phase=phase;
+   if(SERVICES.includes(service))failure.service=service;
+   throw failure;
+  }
+ }
+ const project=await query('verify-project','GET',`https://firebase.googleapis.com/v1beta1/projects/${PROJECT}?fields=projectId,projectNumber`);
  if(project.projectId!==PROJECT||!/^\d+$/.test(String(project.projectNumber||'')))throw Error('Proyecto no coincide.');
  const results=[];
  for(const service of SERVICES){
   const resource=`projects/${project.projectNumber}/services/${service}`;
   const endpoint=`https://serviceusage.googleapis.com/v1/${resource}`;
-  const before=await request('GET',endpoint+'?fields=state');
+  const before=await query('inspect-service','GET',endpoint+'?fields=state',service);
   if(!['ENABLED','DISABLED'].includes(before.state))throw Error('Estado de API no verificable.');
   if(before.state==='DISABLED'){
-   let operation=await request('POST',endpoint+':enable');
+   let operation=await query('enable-service','POST',endpoint+':enable',service);
    for(let attempt=0;!operation.done&&attempt<30;attempt++){
     if(!/^operations\/[A-Za-z0-9_.-]+$/.test(operation.name||''))throw Error('Operación no válida.');
-    await wait();operation=await request('GET',`https://serviceusage.googleapis.com/v1/${operation.name}`);
+    await wait();operation=await query('poll-operation','GET',`https://serviceusage.googleapis.com/v1/${operation.name}`,service);
    }
    if(!operation.done||operation.error)throw Error('No se confirmó la habilitación.');
   }
-  const after=await request('GET',endpoint+'?fields=state');
+  const after=await query('verify-service','GET',endpoint+'?fields=state',service);
   if(after.state!=='ENABLED')throw Error('La API no figura habilitada.');
   const result={service,before:before.state,after:after.state,changed:before.state==='DISABLED'};
   results.push(result);emit(result);
@@ -58,9 +67,14 @@ async function main(){
   return body||{};
  }});
 }
-module.exports={enableAuditApis,argumentsFor,SERVICES};
+function failureSummary(error){
+ return {event:'api-enablement-not-complete',httpStatus:Number.isInteger(error.status)?error.status:null,
+  ...(['verify-project','inspect-service','enable-service','poll-operation','verify-service'].includes(error.phase)?{phase:error.phase}:{}),
+  ...(SERVICES.includes(error.service)?{service:error.service}:{}),
+  ...(['SERVICE_DISABLED','IAM_PERMISSION_DENIED','ACCESS_TOKEN_SCOPE_INSUFFICIENT'].includes(error.reason)?{reason:error.reason}:{})};
+}
+module.exports={enableAuditApis,argumentsFor,SERVICES,failureSummary};
 if(require.main===module)main().catch(error=>{
- console.error(JSON.stringify({event:'api-enablement-not-complete',httpStatus:Number.isInteger(error.status)?error.status:null,
-  ...(['SERVICE_DISABLED','IAM_PERMISSION_DENIED','ACCESS_TOKEN_SCOPE_INSUFFICIENT'].includes(error.reason)?{reason:error.reason}:{})}));
+ console.error(JSON.stringify(failureSummary(error)));
  process.exitCode=1;
 });

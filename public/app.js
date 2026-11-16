@@ -8101,7 +8101,7 @@ const modalFormBuilders = {
 
         <div class="form-group">
             <label>Ícono (un emoji)</label>
-            <input id="mDocumentoIcon"
+            <input id="mDocumentoIcon" maxlength="40"
                    class="form-control"
                    placeholder="📄"
                    value="📄">
@@ -8109,21 +8109,21 @@ const modalFormBuilders = {
 
         <div class="form-group">
             <label>Título</label>
-            <input id="mDocumentoTitulo"
+            <input id="mDocumentoTitulo" maxlength="150"
                    class="form-control"
                    placeholder="Ej: Reglamento de copropiedad">
         </div>
 
         <div class="form-group">
             <label>Descripción corta</label>
-            <input id="mDocumentoDescripcion"
+            <input id="mDocumentoDescripcion" maxlength="2000"
                    class="form-control"
                    placeholder="Ej: Documento oficial de la comunidad">
         </div>
 
         <div class="form-group">
             <label>Contenido</label>
-            <textarea id="mDocumentoContenido"
+            <textarea id="mDocumentoContenido" maxlength="50000"
                       class="form-control"
                       style="min-height:140px"
                       placeholder="Texto completo del documento..."></textarea>
@@ -9206,7 +9206,7 @@ const modalFormBuilders = {
 
         <div class="form-group">
             <label>Nombre del bloque</label>
-            <input id="mBloqueNombre" class="form-control" placeholder="Ej: Mañana">
+            <input id="mBloqueNombre" maxlength="100" class="form-control" placeholder="Ej: Mañana">
         </div>
 
         <div class="form-group">
@@ -11359,6 +11359,10 @@ async function saveModal(){
             return;
         }
 
+        if(icon.length>40||titulo.length>150||descripcion.length>2000||contenido.length>50000){
+            showToast("El documento excede el largo permitido. Revisa sus campos.");
+            return;
+        }
         try {
             await refComunidadActual().collection("documentos").add({
                 icon:icon,
@@ -11579,6 +11583,10 @@ async function saveModal(){
             return;
         }
 
+        if(nombre.length>100){
+            showToast("El nombre del bloque admite hasta 100 caracteres.");
+            return;
+        }
         try {
             await refComunidadActual().collection("bloquesReserva").add({
                 lugar: lugar,

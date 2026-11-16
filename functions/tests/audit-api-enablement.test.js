@@ -40,3 +40,20 @@ test('API: no oculta habilitación parcial ni emite errores o credenciales recib
  f.request=async(method,url)=>{if(method==='POST'&&url.includes('apikeys.googleapis.com'))throw Error('NO-IMPRIMIR');return r(method,url);};
  await assert.rejects(enableAuditApis(f));assert.equal(f.events.length,1);assert.equal(f.events[0].service,SERVICES[0]);assert.ok(!JSON.stringify(f.events).includes('NO-IMPRIMIR'));
 });
+
+test('API: identifica fase y servicio denegados sin divulgar el error remoto',async()=>{
+ const {failureSummary}=require('../../scripts/habilitar-apis-auditoria.cjs');
+ for(const phase of ['inspect-service','enable-service']){
+  const f=fixture(),r=f.request;
+  f.request=async(method,url)=>{
+   if(url.includes('serviceusage.googleapis.com')&&(phase==='inspect-service'||method==='POST'))
+    throw Object.assign(Error('SECRETO-REMOTO'),{status:403,reason:'NO-PUBLICAR'});
+   return r(method,url);
+  };
+  let failure;try{await enableAuditApis(f);}catch(e){failure=e;}
+  assert.deepEqual(failureSummary(failure),{event:'api-enablement-not-complete',httpStatus:403,phase,service:SERVICES[0]});
+  assert.ok(!JSON.stringify(failureSummary(failure)).includes('SECRETO'));
+  if(phase==='inspect-service')assert.ok(!f.calls.some(c=>c.method==='POST'));
+ }
+ assert.deepEqual(failureSummary({status:403,phase:'NO-PUBLICAR',service:'NO-PUBLICAR',reason:'NO-PUBLICAR'}),{event:'api-enablement-not-complete',httpStatus:403});
+});
