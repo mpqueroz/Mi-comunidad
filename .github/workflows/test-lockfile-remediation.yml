@@ -1,0 +1,33 @@
+name: Regenerate test dependency lockfile
+on:
+  pull_request:
+    paths:
+      - 'tests/package.json'
+      - '.github/workflows/test-lockfile-remediation.yml'
+permissions:
+  contents: read
+jobs:
+  regenerate-and-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Regenerate lockfile with npm resolver
+        working-directory: tests
+        run: npm install --package-lock-only --ignore-scripts --no-audit
+      - name: Audit resolved dependencies
+        working-directory: tests
+        run: npm audit --audit-level=moderate
+      - name: Confirm clean installation
+        working-directory: tests
+        run: npm ci --ignore-scripts
+      - name: Upload generated lockfile for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reviewed-tests-package-lock
+          path: tests/package-lock.json
+          if-no-files-found: error
