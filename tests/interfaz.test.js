@@ -74,3 +74,15 @@ test('todas las acciones migradas tienen un destino explícito y argumentos seri
  const payload=`'\"><img src=x onerror=alert(1)> & \\ \n`;
  a.ctx.payload=payload;const attr=a.run('mcEvento("click","navigate",payload)');assert.ok(!attr.includes('<img'));assert.ok(attr.includes('&quot;'));
 });
+
+test('datos de pago y documento tributario conservan texto hostil sin crear etiquetas ni atributos',()=>{
+ const a=app(),payload=`'"><img src=x onerror=alert(1)> & <script>alert(1)</script>`;
+ a.ctx.payload=payload;
+ a.run(`community.configuracionPago={banco:payload,tipoCuenta:payload,titular:payload,rut:payload,numeroCuenta:payload,correo:payload,instrucciones:payload,enlace:'javascript:alert(1)'};`);
+ let html=a.run('mcDatosPagoHtml()');assert.ok(html.includes('&lt;img'));assert.ok(!html.includes('<img'));assert.ok(!html.includes('href='));
+ a.run(`community.configuracionPago.enlace='https://ejemplo.invalid/?dato='+payload;`);
+ html=a.run('mcDatosPagoHtml()');assert.ok(html.includes('rel="noopener noreferrer"'));assert.ok(html.includes('&quot;'));assert.ok(!html.includes('<script'));
+ vm.runInContext(fs.readFileSync(path.join(root,'public/comercial-panel.js'),'utf8'),a.ctx);
+ html=a.run(`detalleDocumentoTributario({estado:'paid',documentoTributario:{tipo:'factura',correo:payload,rut:payload,razonSocial:payload,giro:payload,direccion:payload,comuna:payload}})`);
+ assert.ok(html.includes('Factura electrónica'));assert.ok(html.includes('&lt;img'));assert.ok(!html.includes('<img'));assert.ok(!html.includes('<script'));
+});
