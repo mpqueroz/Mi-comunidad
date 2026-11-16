@@ -20,9 +20,10 @@ async function main(){
  try{
   browser=await chromium.launch({executablePath:process.env.MC_CHROMIUM_PATH || undefined,headless:true,args:['--no-sandbox']});
   const page=await browser.newPage(),errors=[];
-  await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
+  const origin=`http://127.0.0.1:${server.address().port}`;
+  await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
   page.on('pageerror',e=>errors.push(e.message));
-  await page.goto(`http://127.0.0.1:${server.address().port}/`);
+  await page.goto(origin+'/');
   await page.waitForFunction(()=>typeof mcDespacharEvento==='function');
   assert.equal(await page.locator('[onclick],[oninput],[onkeydown]').count(),0);
   await page.evaluate(()=>{
@@ -38,6 +39,8 @@ async function main(){
   const payload=`'\"><img src=x onerror=alert(1)>`;
   await page.evaluate(value=>{
    const zone=document.createElement('div');zone.id='probe-zone';
+   // Controles de prueba lejos del aviso fijo inferior del emulador.
+   zone.style.cssText='position:fixed;top:20px;left:20px;z-index:2147483647;background:white;padding:16px';
    zone.innerHTML=`<button id="probe-action" ${mcEvento('click','navigate',value)}>Acción</button><input id="probe-field" ${mcEvento('input','mcNormalizarIdComunidad')}>`;
    document.body.append(zone);
    const script=document.createElement('script');script.textContent='window.injectedScript=true';document.body.append(script);
