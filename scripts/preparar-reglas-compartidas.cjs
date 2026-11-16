@@ -93,5 +93,5 @@ async function main(){
   fs.writeFileSync(file,merged);
   console.log(JSON.stringify(preparationReport(live,local),null,2));
 }
-module.exports={merge,section,fingerprint,assertUnchanged,preparationReport};
+module.exports={merge,section,fingerprint,assertUnchanged,preparationReport,endBlock};
 if(require.main===module)main().catch(err=>{console.error(err.message);process.exitCode=1;});

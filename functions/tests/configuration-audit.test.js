@@ -74,3 +74,17 @@ test('diagnóstico de 403 distingue causas permitidas sin exponer mensaje, permi
  const unknown=apiFailure(403,{error:{details:[{'@type':'type.googleapis.com/google.rpc.ErrorInfo',reason:'NO-IMPRIMIR'}]}});
  assert.equal(unknown.reason,undefined);assert.equal(unknown.message,'Consulta no completada.');
 });
+
+test('requisitos de Almacén exponen esquema técnico y nunca literales privados del código',()=>{
+ const {storeAccessRequirements}=require('../../scripts/auditar-configuracion.cjs');
+ const fixture=rules.replace('function esDueno(storeId) {',`function licenciaAlmacen(storeId){
+  let doc=get(/databases/$(database)/documents/almacen_licencias/$(storeId));
+  return doc.data.get('estado','') == 'active' && request.auth.token.get('app','') == 'almacen_digital' && 'NO-IMPRIMIR@example.invalid' != '';
+ }
+ function esDueno(storeId) {`)
+ .replace(/function esDueno\(storeId\) \{/,"function esDueno(storeId) {\n // NO-IMPRIMIR\n");
+ // Insert a technical dependency, without relying on its truth in this parser test.
+ const withDependency=fixture.replace('function esDueno(storeId) {','function esDueno(storeId) {\n let valid=licenciaAlmacen(storeId);');
+ const result=storeAccessRequirements(withDependency);
+ const item=result.find(r=>r.helper==='licenciaAlmacen');assert.ok(item);assert.deepEqual(item.collections,['almacen_licencias']);assert.deepEqual(item.dataFields,['estado']);assert.deepEqual(item.claimFields,['app']);assert.ok(!JSON.stringify(result).includes('NO-IMPRIMIR'));
+});
