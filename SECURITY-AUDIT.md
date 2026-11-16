@@ -2,6 +2,14 @@
 
 **Estado:** revisión preventiva; no desplegar este PR sin completar las verificaciones.
 
+## Estado más reciente — 397 pruebas y bloqueo de identidad confirmado
+
+[Firebase #190](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43955834705), revisión b5a6cf8, aprobó 158 pruebas de funciones y 239 emulador = 397, sin fallos ni omitidas; Chromium y auditorías npm aprobaron (0 vulnerabilidades auditadas). Los cuatro workflows aprobaron. [#191](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43956025622) aprobó también las pruebas y composición real; preservó otras apps y la base publicada no cambió. Despliegues, reparación y habilitación de APIs omitidos.
+
+La comprobación por correo encontró la cuenta pero devolvió PRINCIPAL_OTHER_APP: no tiene la etiqueta de Mi Comunidad. No se cambian sus permisos ni se interpreta que sea una de las fichas ausentes. El job se detuvo antes del inventario agregado final; sus últimos conteos completos siguen siendo de #184. #189 había fallado con diagnóstico genérico; no atribuirle una causa específica. La evaluación DOM del formulario ocultaba valores y no permitía concluir que se hubiera enviado una entrada incompleta; esa hipótesis no explica el resultado confirmado de #191.
+
+El código de login usa RUT y correo sintético. Se prepara revisión local con RUT sin eco ni exposición en historial/logs para identificar el acceso correcto. Un superadministrador global verificado no requiere ficha de administrador de una comunidad. La opción y sus 14 casos Python simulados pasaron localmente dentro del wrapper Node, junto a 158 pruebas Node de funciones; no sumar las pruebas Python de nuevo. La cuenta real aún no está vinculada y no hubo escrituras. Ver sección 12 del plan de cierre. Producción sigue sin aprobarse.
+
 ## Seguimiento actual — principal real y verificación por correo sin exposición
 
 El titular confirmó un único administrador real; las demás cuentas son de prueba. Las capturas confirmaron que el script corregido terminó con OK y dos cuentas sin ficha. No confundir una ejecución privada exitosa con autorización de escritura. Se prepara consulta opcional de solo lectura por SHA256 de correo, sin publicar correo ni UID; devuelve una huella de reparación ligada al correo, revalidado antes de la eventual creación. La selección privada puede limitarse también por correo. No se crearon fichas, ni se deshabilitaron cuentas de prueba. El inventario y la barrera de publicación permanecen estrictos. Ver sección 11 de SECURITY-CLOSURE-PLAN.md.

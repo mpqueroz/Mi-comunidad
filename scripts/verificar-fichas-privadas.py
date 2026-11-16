@@ -1,6 +1,7 @@
 """Plan privado de SOLO LECTURA. Nunca ejecutar en Actions ni publicar su salida completa."""
 import argparse
 import hashlib
+import getpass
 import json
 import os
 import subprocess
@@ -49,6 +50,18 @@ def field(document, key):
     return document.get('fields', {}).get(key, {}).get('stringValue', '')
 
 
+def rut_login_email(value):
+    rut = value.strip().replace('.', '').replace('-', '').lower()
+    if len(rut) < 2 or len(rut) > 9 or not rut[:-1].isdigit() or rut[0] == '0' or rut[-1] not in '0123456789k':
+        raise SafeDiagnostic('identificar_acceso', 'RUT_NO_VALIDO')
+    total = sum(int(digit) * (2 + index % 6) for index, digit in enumerate(reversed(rut[:-1])))
+    remainder = 11 - total % 11
+    expected = '0' if remainder == 11 else 'k' if remainder == 10 else str(remainder)
+    if rut[-1] != expected:
+        raise SafeDiagnostic('identificar_acceso', 'RUT_NO_VALIDO')
+    return rut + '@mi-comunidad.app'
+
+
 def private_plan(read, principal_email=None):
     if principal_email is not None:
         if not isinstance(principal_email, str) or len(principal_email) > 254 or principal_email.count('@') != 1 or not all(principal_email.split('@')) or any(c.isspace() for c in principal_email) or any(ord(c) < 32 for c in principal_email):
@@ -75,8 +88,11 @@ def private_plan(read, principal_email=None):
             raise SafeDiagnostic('auth_identificar_principal', 'CUENTA_PRINCIPAL_NO_UNICA')
         selected = accounts[0]
         claims = json.loads(selected.get('customAttributes') or '{}')
-        if not isinstance(claims, dict) or claims.get('app') != 'mi_comunidad' or claims.get('role') != 'admin' or selected.get('disabled', False):
+        if not isinstance(claims, dict) or claims.get('app') != 'mi_comunidad' or claims.get('role') not in ['admin', 'superadmin'] or selected.get('disabled', False):
             raise SafeDiagnostic('auth_identificar_principal', 'CUENTA_PRINCIPAL_NO_HABILITADA_O_NO_ADMIN')
+        if claims.get('role') == 'superadmin':
+            return {'soloLectura': True, 'proyecto': PROJECT, 'principalVerificadoPorCorreo': True,
+                    'tipoPrincipal': 'superadmin', 'fichaComunitariaNecesaria': False, 'cuentasSinFicha': []}
     plans = []
     for user in accounts:
         claims = json.loads(user.get('customAttributes') or '{}')
@@ -122,10 +138,13 @@ def main():
     parser = argparse.ArgumentParser(description='Verificar privadamente fichas administrativas ausentes; no escribe en Firebase.')
     parser.add_argument('--project', required=True, choices=[PROJECT])
     parser.add_argument('--diagnostico', action='store_true', help='Mostrar solo conteos y errores seguros, sin identidades.')
-    parser.add_argument('--correo-principal', help='Verificar y mostrar únicamente la cuenta administrativa que coincida con este correo, sin imprimirlo.')
+    selector = parser.add_mutually_exclusive_group()
+    selector.add_argument('--correo-principal', help='Verificar únicamente la cuenta administrativa de este correo, sin imprimirlo.')
+    selector.add_argument('--rut-principal', action='store_true', help='Pedir privadamente el RUT de acceso sin eco ni historial; no pide contraseña.')
     args = parser.parse_args()
     if os.environ.get('GITHUB_ACTIONS') or os.environ.get('CI'):
         raise ValueError('La revisión de identidades debe ejecutarse fuera de CI.')
+    principal_email = rut_login_email(getpass.getpass('RUT con el que ingresas a Mi Comunidad (no se mostrará): ')) if args.rut_principal else args.correo_principal
     try:
         token = subprocess.check_output(['gcloud', 'auth', 'print-access-token'], text=True, stderr=subprocess.DEVNULL).strip()
     except (subprocess.SubprocessError, OSError):
@@ -157,7 +176,7 @@ def main():
         except (urllib.error.URLError, OSError):
             raise SafeDiagnostic(stage, 'CONEXION_NO_COMPLETADA') from None
 
-    result = private_plan(read, principal_email=args.correo_principal)
+    result = private_plan(read, principal_email=principal_email)
     if args.diagnostico:
         print(json.dumps({'soloLectura': True, 'fase': 'completada', 'codigo': 'OK', 'cuentasSinFicha': len(result['cuentasSinFicha'])}))
         return

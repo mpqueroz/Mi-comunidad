@@ -135,6 +135,27 @@ class PrivatePlanTests(unittest.TestCase):
             with self.assertRaises(module.SafeDiagnostic):
                 module.private_plan(lambda url: {'users': [user]}, 'owner@example.invalid')
 
+    def test_rut_login_alias_validation_and_ci_before_private_prompt(self):
+        self.assertEqual(module.rut_login_email('12.345.678-5'), '123456785@mi-comunidad.app')
+        for value in ['12.345.678-4', 'owner@example.invalid', 'abc', '000-0']:
+            with self.assertRaises(module.SafeDiagnostic):
+                module.rut_login_email(value)
+        with patch.dict(module.os.environ, {'CI': 'true'}), patch.object(module.sys, 'argv', ['script', '--project', module.PROJECT, '--rut-principal']), patch.object(module.getpass, 'getpass') as prompt:
+            with self.assertRaises(ValueError):
+                module.main()
+            prompt.assert_not_called()
+
+    def test_global_superadmin_does_not_receive_a_community_profile(self):
+        calls = []
+        def read(url):
+            calls.append(url)
+            return {'users': [{'email': 'owner@example.invalid', 'customAttributes': json.dumps({'app': 'mi_comunidad', 'role': 'superadmin'})}]}
+        result = module.private_plan(read, 'owner@example.invalid')
+        self.assertEqual(result['tipoPrincipal'], 'superadmin')
+        self.assertFalse(result['fichaComunitariaNecesaria'])
+        self.assertEqual(result['cuentasSinFicha'], [])
+        self.assertEqual(len(calls), 1)
+
 
 if __name__ == '__main__':
     unittest.main()
