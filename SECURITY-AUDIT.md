@@ -2,6 +2,26 @@
 
 **Estado:** revisión preventiva; no desplegar este PR sin completar las verificaciones.
 
+## Actualización vigente — inspección explícita y reparación preparada
+
+[Firebase #177 (PR)](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43911337909) y [#178 (manual)](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43911377835), commit `73681e7`: **147 pruebas de funciones + 237 emulador = 384 aprobadas**, 0 fallos y 0 omitidas. Chromium app/demo y auditorías npm aprobaron (0 vulnerabilidades). Los cuatro workflows del PR aprobaron; #178 repitió con éxito las mismas 237 pruebas sobre las reglas compuestas reales, preservando las otras aplicaciones. Ambos despliegues y la habilitación de servicios se omitieron. La repetición no añade casos nuevos al total.
+
+### Resultado de las consultas ampliadas
+
+- `complete=true` significa que las consultas incluidas terminaron, no aprobación de producción. Las consultas GET individuales de Authentication, Firestore, Storage y Realtime Database respondieron sin `enforcementMode` ni `replayProtection`; la herramienta representa esa ausencia como `UNSPECIFIED`. No es una respuesta explícita `ENFORCED`. El listado general continúa vacío y la consulta de políticas de recursos OAuth iOS devolvió 0. La API documenta actualmente políticas por recurso para OAuth iOS, por eso no se inventaron consultas de overrides de Firestore.
+- [La documentación de EnforcementMode](https://firebase.google.com/docs/reference/appcheck/rest/v1/EnforcementMode) indica OFF para protección sin configurar. Interpretar la ausencia observada como protección no configurada es una inferencia apoyada en ese valor predeterminado, no una prueba de tráfico real. No se encontró inicialización `firebase.appCheck`/`initializeAppCheck` ni `enforceAppCheck` en el código de aplicación/funciones revisado de la rama. No activar enforcement antes de integrar proveedor, probar clientes y preparar su transición; el proyecto es compartido.
+- La clave consultada presenta `browserKeyRestrictions` pero **0 referrers listados**. El conteo anterior de 1 clave con restricción solo acreditaba la presencia del objeto, no una política efectiva por dominio. No describirla como restringida a los dominios de Nodar ni asumir sin otra prueba si el objeto vacío permite o deniega tráfico. No se solicitaron valores de claves ni se publicaron identificadores de claves o patrones.
+- La misma clave permite **27 APIs**, todas sin límites por método dentro de cada API. Authentication y Secure Token figuran en la lista. Este número por sí solo no demuestra un exceso explotable; inventariar los clientes y dependencias del proyecto compartido antes de reducirla. Esta consulta no vincula por identificador la clave con cada app cliente ni prueba llamadas reales por origen.
+- Las dos fichas ausentes siguen presentes en el inventario como hallazgo y `readyForStrictAccess=false`; continúa sin haber bloques de reserva guardados. El failure de #178 es el inventario con hallazgos, no las pruebas o las consultas.
+
+### Regularización preparada, aún sin ejecutar
+
+`scripts/regularizar-ficha-admin.cjs` contiene una función importable; no tiene CLI ni workflow que la ejecute contra Firebase. Su modo predeterminado solo lee. La aplicación exige aprobación booleana explícita, exclusión de cambios administrativos concurrentes, nombre verificado, identidad esperada y propietario esperado, además del proyecto exacto tanto en argumento como en SDK de Firestore y Auth. Una comunidad sin propietario registrado requiere verificación privada adicional. Se relee Auth y se usa creación transaccional de Firestore; nunca se sobrescribe una ficha existente ni se modifican cuentas, claims, contraseñas, licencias o propietarios.
+
+Las pruebas de esta utilidad usan SDK simulado y datos ficticios; no acreditan una reparación real ni una transacción atómica entre Auth y Firestore. Antes de ejecutarla faltan la identificación privada y verificación de las dos cuentas y autorización para las escrituras puntuales. Para completar la revisión de claves/App Check faltan decisiones de configuración, compatibilidad de clientes y autorización independiente; la equivalencia del código desplegado también sigue pendiente. Se mantiene la prohibición de fusión y despliegue.
+
+La nueva utilidad clasifica presencia y amplitud de patrones sin emitirlos; no ofrece una certificación integral de la política de claves. Las secciones siguientes son evidencia histórica y quedan subordinadas a esta actualización.
+
 ## Actualización vigente — APIs habilitadas y consultas desbloqueadas
 El usuario ejecutó en Cloud Shell la habilitación expresamente autorizada de `firebaseappcheck.googleapis.com` y `apikeys.googleapis.com` en `mercado-ciudadano`; su captura mostró la operación completada. La repetición de solo el job de inventario de [Firebase #173, intento 2](https://github.com/mpqueroz/Mi-comunidad/actions/runs/43906272946/attempts/2) confirmó ambas consultas exitosas el 16 de noviembre a las 13:26 (Chile). Es un cambio real y limitado de servicios habilitados, realizado por el usuario; las APIs ya no están bloqueadas.
 

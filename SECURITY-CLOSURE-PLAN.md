@@ -49,3 +49,10 @@ La aplicación exige simultáneamente proyecto `mercado-ciudadano` en argumento,
 Antes de ejecutar se requiere revisión privada de ambas identidades y autorización específica para crear esas fichas. El nombre no debe adivinarse ni extraerse de un log público. La intervención debe excluir cambios administrativos concurrentes: Auth y Firestore no comparten una transacción atómica; la segunda lectura reduce la ventana pero no la elimina. No se cambian Auth, claims, contraseñas, licencias ni el propietario de comunidad. No se adjuntan datos privados o el plan por cuenta al repositorio público.
 
 Ninguna prueba, aprobación del PR ni continuación de la auditoría ejecuta esta reparación. Mantener el PR en borrador y sin despliegue hasta cerrar la verificación y el inventario.
+
+## 6. Decisiones pendientes tras la consulta ampliada de #178
+
+- App Check: los cuatro servicios web consultados devolvieron configuración sin modos explícitos. Preparar proveedor y despliegue de cliente en entorno de pruebas, medir compatibilidad y solo entonces decidir enforcement por servicio. No activarlo dentro de esta auditoría sin autorización separada.
+- Clave: objeto de restricción de navegador sin referrers listados; no dar por acreditada una limitación por dominio. Hay 27 APIs permitidas. Inventariar consumidores del proyecto compartido, confirmar el comportamiento efectivo de la política vacía y preparar una lista de orígenes/APIs que conserve las otras aplicaciones. No recortar la clave basándose únicamente en Mi Comunidad ni rotarla sin un plan de transición aprobado.
+- Fichas: confirmar privadamente comunidad y personas que conservan administración, contrastar sus identidades reales y aplicar únicamente la reparación por cuenta autorizada. La función está preparada y probada con datos ficticios; no existe ejecución automática y no se crearon perfiles en producción.
+- La autorización de habilitar las dos APIs no autoriza enforcement, cambios de restricciones, nuevas credenciales ni regularización de fichas. Las restricciones de no fusionar/no desplegar siguen vigentes.
