@@ -2,6 +2,10 @@
 
 **Estado:** revisión preventiva; no desplegar este PR sin completar las verificaciones.
 
+## Seguimiento actual — principal real y verificación por correo sin exposición
+
+El titular confirmó un único administrador real; las demás cuentas son de prueba. Las capturas confirmaron que el script corregido terminó con OK y dos cuentas sin ficha. No confundir una ejecución privada exitosa con autorización de escritura. Se prepara consulta opcional de solo lectura por SHA256 de correo, sin publicar correo ni UID; devuelve una huella de reparación ligada al correo, revalidado antes de la eventual creación. La selección privada puede limitarse también por correo. No se crearon fichas, ni se deshabilitaron cuentas de prueba. El inventario y la barrera de publicación permanecen estrictos. Ver sección 11 de SECURITY-CLOSURE-PLAN.md.
+
 ## Seguimiento más reciente — 403 Auth, cuota y cierre de respuestas
 
 La captura confirma 403 en `auth_listar_cuentas`; no identifica aún el motivo. Se añade cabecera explícita de cuota limitada a mercado-ciudadano para las consultas REST, sin cambiar configuración, IAM o datos. La recomendación oficial de cuotas con credenciales personales no demuestra que fuera esta la causa concreta. Un ErrorInfo fallido puede emitir exclusivamente un motivo de lista cerrada, nunca mensaje, metadata o cuerpo. La sesión y las identidades siguen sin compartirse; no se autorizaron ni crearon fichas.

@@ -72,7 +72,7 @@ class PrivatePlanTests(unittest.TestCase):
                     raise urllib.error.HTTPError(url, 403, 'SECRET-ERROR', {}, io.BytesIO(b'SECRET-BODY'))
             self_test = self
             stderr, stdout = io.StringIO(), io.StringIO()
-            with patch.dict(module.os.environ, {}, clear=True), patch.object(module.sys, 'argv', ['script', '--project', module.PROJECT, '--diagnostico']), patch.object(module.subprocess, 'check_output', return_value='SECRET-TOKEN'), patch.object(module.urllib.request, 'build_opener', return_value=Opener()), patch.object(module, 'private_plan', side_effect=lambda read: read(url)), contextlib.redirect_stderr(stderr), contextlib.redirect_stdout(stdout):
+            with patch.dict(module.os.environ, {}, clear=True), patch.object(module.sys, 'argv', ['script', '--project', module.PROJECT, '--diagnostico']), patch.object(module.subprocess, 'check_output', return_value='SECRET-TOKEN'), patch.object(module.urllib.request, 'build_opener', return_value=Opener()), patch.object(module, 'private_plan', side_effect=lambda read, **kwargs: read(url)), contextlib.redirect_stderr(stderr), contextlib.redirect_stdout(stdout):
                 self.assertEqual(module.cli(), 1)
             result = json.loads(stderr.getvalue())
             self.assertEqual(result, {'soloLectura': True, 'fase': phase, 'codigo': 'HTTP_ERROR', 'http': 403})
@@ -101,6 +101,39 @@ class PrivatePlanTests(unittest.TestCase):
             body = {'error': {'message': 'SECRET-MESSAGE', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': reason, 'metadata': {'consumer': 'SECRET-PROJECT'}}]}}
             with urllib.error.HTTPError('https://identitytoolkit.googleapis.com/private', 403, 'SECRET', {}, io.BytesIO(json.dumps(body).encode())) as error:
                 self.assertEqual(module.safe_http_reason(error), expected)
+
+    def test_principal_selection_excludes_other_accounts_and_keeps_email_private(self):
+        original, calls = self.fixture()
+        def read(url):
+            result = original(url)
+            if 'accounts:batchGet' in url:
+                result['users'][0]['email'] = 'owner@example.invalid'
+                result['users'].append({**result['users'][0], 'localId': 'test-user', 'email': 'test@example.invalid'})
+            return result
+        result = module.private_plan(read, 'OWNER@example.invalid')
+        self.assertTrue(result['principalVerificadoPorCorreo'])
+        self.assertEqual([p['uid'] for p in result['cuentasSinFicha']], ['u'])
+        self.assertNotIn('owner@example.invalid', json.dumps(result))
+        self.assertNotIn('test-user', json.dumps(result))
+        self.assertNotEqual(result['cuentasSinFicha'][0]['codigoConfirmacion'], module.private_plan(self.fixture()[0])['cuentasSinFicha'][0]['codigoConfirmacion'])
+        self.assertIn('email', calls[0])
+        self.assertTrue(all('owner' not in url and 'example.invalid' not in url for url in calls))
+
+    def test_missing_or_duplicate_principal_aborts_before_firestore(self):
+        for users in [[], [{'email': 'owner@example.invalid'}, {'email': 'OWNER@example.invalid'}]]:
+            calls = []
+            def read(url):
+                calls.append(url)
+                return {'users': users}
+            with self.assertRaises(module.SafeDiagnostic):
+                module.private_plan(read, 'owner@example.invalid')
+            self.assertEqual(len(calls), 1)
+
+    def test_principal_must_be_enabled_admin_in_this_app(self):
+        for patch in [{'disabled': True}, {'customAttributes': json.dumps({'app': 'otra', 'role': 'admin'})}, {'customAttributes': json.dumps({'app': 'mi_comunidad', 'role': 'residente'})}]:
+            user = {'email': 'owner@example.invalid', 'customAttributes': json.dumps({'app': 'mi_comunidad', 'role': 'admin'}), **patch}
+            with self.assertRaises(module.SafeDiagnostic):
+                module.private_plan(lambda url: {'users': [user]}, 'owner@example.invalid')
 
 
 if __name__ == '__main__':

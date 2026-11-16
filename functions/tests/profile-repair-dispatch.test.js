@@ -27,3 +27,11 @@ test('reparación: identidad cambiada y aprobación incompleta impiden toda escr
  const events=[];const r=await runRepairs({...f,apply:true,approved:true,paused:true,repair:async opts=>{assert.equal(opts.uid,'u');assert.equal(opts.nombre,'Nombre privado');assert.equal(opts.expectedOwner,'u');return {created:true};},emit:e=>events.push(e)});
  assert.equal(r.created,1);assert.ok(!JSON.stringify(events).includes('Nombre privado'));assert.ok(!JSON.stringify(events).includes('comunidadId'));
 });
+test('reparación: huella ligada a correo selecciona solo esa identidad y rechaza correo cambiado',async()=>{
+ const f=fixture();let email='owner@example.invalid';
+ f.auth.listUsers=async()=>({users:[{uid:'u',email,displayName:'Nombre privado',customClaims:{app:'mi_comunidad',role:'admin',comunidadId:'c'}}]});
+ f.codes=[fingerprint({...evidence,principalEmail:email})];let calls=0;
+ const repair=async opts=>{calls++;assert.equal(opts.expectedEmail,'owner@example.invalid');return {created:true};};
+ assert.equal((await runRepairs({...f,apply:true,approved:true,paused:true,repair})).created,1);
+ email='test@example.invalid';await assert.rejects(runRepairs({...f,apply:true,approved:true,paused:true,repair}));assert.equal(calls,1);
+});

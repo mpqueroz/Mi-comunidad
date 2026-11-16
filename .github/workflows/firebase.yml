@@ -30,6 +30,11 @@ on:
       - ".github/workflows/firebase.yml"
   workflow_dispatch:
     inputs:
+      principal_email_sha256:
+        description: 'Verificar SOLO LECTURA al administrador principal mediante SHA256 de correo normalizado'
+        type: string
+        required: false
+        default: ''
       enable_audit_apis:
         description: 'Habilitar SOLO App Check API y API Keys API (autorización expresa)'
         type: boolean
@@ -237,6 +242,11 @@ jobs:
       - name: Consultar configuración efectiva sin claves ni cambios
         continue-on-error: true
         run: node scripts/auditar-configuracion.cjs --project mercado-ciudadano
+      - name: Verificar solo el administrador principal sin publicar identidades
+        if: inputs.principal_email_sha256 != ''
+        env:
+          PRINCIPAL_EMAIL_SHA256: ${{ inputs.principal_email_sha256 }}
+        run: node scripts/verificar-admin-principal.cjs --project mercado-ciudadano
       - name: Inventariar licencias y fichas sin modificar Firebase
         run: node scripts/auditar-accesos.cjs --project mercado-ciudadano --require-clean
 

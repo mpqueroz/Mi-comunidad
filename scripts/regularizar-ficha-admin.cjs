@@ -9,12 +9,13 @@ function authState(user){
 }
 function sameAuth(a,b){return ['uid','disabled','app','role','comunidadId'].every(k=>a[k]===b[k]);}
 async function repairAdminProfile({projectId,db,auth,uid,comunidadId,nombre,apply=false,approved=false,
- expectedAuth,expectedOwner,ownershipVerified=false,administrativeChangesPaused=false,serverTimestamp}){
+ expectedAuth,expectedOwner,expectedEmail,ownershipVerified=false,administrativeChangesPaused=false,serverTimestamp}){
  if(projectId!==PROJECT||db?.projectId!==PROJECT||auth?.app?.options?.projectId!==PROJECT||!identifier(uid,128)||!identifier(comunidadId,100))throw Error('Alcance no autorizado.');
  // Un plan nunca utiliza nombre ni autorización de escritura.
  if(apply&&(approved!==true||administrativeChangesPaused!==true||typeof serverTimestamp!=='function'))throw Error('Falta autorización o exclusión de cambios administrativos concurrentes.');
  if(apply&&(typeof nombre!=='string'||!nombre.trim()||nombre.length>150))throw Error('Falta nombre verificado.');
  const user=await auth.getUser(uid),identity=authState(user);
+ if(expectedEmail!==undefined&&(typeof expectedEmail!=='string'||!expectedEmail||typeof user.email!=='string'||user.email.toLowerCase()!==expectedEmail))throw Error('El correo aprobado cambió.');
  if(user.uid!==uid||identity.disabled||identity.app!=='mi_comunidad'||identity.role!=='admin'||identity.comunidadId!==comunidadId)
   throw Error('La cuenta no conserva la autorización esperada.');
  const base=db.collection('mi_comunidad_comunidades').doc(comunidadId),profile=base.collection('administradores').doc(uid);
@@ -30,7 +31,8 @@ async function repairAdminProfile({projectId,db,auth,uid,comunidadId,nombre,appl
     (requiresPrivateOwnershipVerification&&ownershipVerified!==true))throw Error('La verificación privada o el estado aprobado no coinciden.');
  // Auth y Firestore no comparten transacción: el operador debe excluir cambios
  // administrativos concurrentes durante esta intervención. No se ofrece atomicidad entre ambos sistemas.
- const fresh=authState(await auth.getUser(uid));
+ const freshUser=await auth.getUser(uid),fresh=authState(freshUser);
+ if(expectedEmail!==undefined&&(typeof freshUser.email!=='string'||freshUser.email.toLowerCase()!==expectedEmail))throw Error('El correo aprobado cambió.');
  if(!sameAuth(identity,fresh))throw Error('La cuenta cambió desde la verificación.');
  return db.runTransaction(async tx=>{
   const currentCommunity=await tx.get(base),currentProfile=await tx.get(profile);

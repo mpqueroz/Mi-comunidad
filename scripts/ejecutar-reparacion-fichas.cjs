@@ -26,11 +26,14 @@ async function selectRepairs(db,auth,codes){
    const state={uid:user.uid,disabled:false,app:'mi_comunidad',role:'admin',comunidadId:c.comunidadId};
    const evidence={projectId:PROJECT,expectedAuth:state,expectedOwner:owner,communityName:community.get('nombre')||'',
     communityState:community.get('estado')||'',accountDisplayName:user.displayName||'',registeredAdminName:community.get('adminNombre')||''};
-   const code=fingerprint(evidence);if(!codes.includes(code))continue;
+   const email=typeof user.email==='string'?user.email.toLowerCase():'';
+   const emailCode=email?fingerprint({...evidence,principalEmail:email}):null;
+   const code=codes.find(code=>code===fingerprint(evidence)||code===emailCode);if(!code)continue;
    if(matches.has(code)||community.get('estado')==='Suspendida'||(owner&&owner!==user.uid))throw Error('La cuenta aprobada no es reparable.');
    const nombre=(evidence.accountDisplayName||evidence.registeredAdminName).trim();
    if(!nombre||nombre.length>150)throw Error('Falta nombre verificado.');
-   matches.set(code,{uid:user.uid,comunidadId:c.comunidadId,nombre,expectedAuth:state,expectedOwner:owner,ownershipVerified:owner===null});
+   matches.set(code,{uid:user.uid,comunidadId:c.comunidadId,nombre,expectedAuth:state,expectedOwner:owner,ownershipVerified:owner===null,
+    ...(code===emailCode?{expectedEmail:email}:{})});
   }
   token=page.pageToken;if(token&&seen.has(token))throw Error('Paginación incompleta.');if(token)seen.add(token);
  }while(token);

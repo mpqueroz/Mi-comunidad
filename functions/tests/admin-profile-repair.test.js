@@ -56,3 +56,10 @@ test('ficha: SDK de otro proyecto o aprobación textual no autorizan escrituras'
   await assert.rejects(repairAdminProfile({...f,apply:true,...patch}));
  assert.equal(f.writes.length,0);
 });
+test('ficha: correo seleccionado se revalida antes de crear y cualquier cambio aborta',async()=>{
+ const f=fixture();f.setUser({uid:'u',email:'owner@example.invalid',disabled:false,customClaims:{app:'mi_comunidad',role:'admin',comunidadId:'c'}});
+ await assert.rejects(repairAdminProfile({...f,apply:true,expectedEmail:'test@example.invalid'}));assert.equal(f.writes.length,0);
+ const get=f.auth.getUser;let reads=0;f.auth.getUser=async()=>{const u=await get();if(++reads===2)u.email='other@example.invalid';return u;};
+ await assert.rejects(repairAdminProfile({...f,apply:true,expectedEmail:'owner@example.invalid'}));assert.equal(f.writes.length,0);
+ f.auth.getUser=get;assert.equal((await repairAdminProfile({...f,apply:true,expectedEmail:'owner@example.invalid'})).created,true);
+});

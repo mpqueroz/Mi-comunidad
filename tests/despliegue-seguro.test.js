@@ -122,3 +122,16 @@ test('reparación de fichas requiere rama exacta, pruebas, aprobación, códigos
  assert.ok(job.includes('node scripts/auditar-accesos.cjs --project mercado-ciudadano --require-clean'));
  assert.ok(!job.includes('firebase deploy'));
 });
+
+test('verificación del principal solo usa inventario de lectura y huella por variable de entorno',()=>{
+ const workflow=fs.readFileSync(path.join(root,'.github/workflows/firebase.yml'),'utf8');
+ const job=workflow.split('  audit-access:')[1].split('  audit-shared-rules:')[0];
+ assert.ok(job.includes("github.event_name == 'workflow_dispatch'"));
+ assert.ok(job.includes("github.ref == 'refs/heads/security/auditoria-blindaje-2026-11'"));
+ assert.ok(job.includes("if: inputs.principal_email_sha256 != ''"));
+ assert.ok(job.includes('PRINCIPAL_EMAIL_SHA256: ${{ inputs.principal_email_sha256 }}'));
+ assert.ok(job.includes('run: node scripts/verificar-admin-principal.cjs --project mercado-ciudadano'));
+ assert.ok(!job.includes(' deploy '));assert.ok(!job.includes('--apply'));
+ const verifier=fs.readFileSync(path.join(root,'scripts/verificar-admin-principal.cjs'),'utf8');
+ for(const forbidden of ['updateUser(', 'setCustomUserClaims(', 'runTransaction(', '.create(', '.set(', '.delete('])assert.ok(!verifier.includes(forbidden));
+});

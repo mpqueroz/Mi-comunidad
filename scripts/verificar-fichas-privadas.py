@@ -49,10 +49,16 @@ def field(document, key):
     return document.get('fields', {}).get(key, {}).get('stringValue', '')
 
 
-def private_plan(read):
+def private_plan(read, principal_email=None):
+    if principal_email is not None:
+        if not isinstance(principal_email, str) or len(principal_email) > 254 or principal_email.count('@') != 1 or not all(principal_email.split('@')) or any(c.isspace() for c in principal_email) or any(ord(c) < 32 for c in principal_email):
+            raise SafeDiagnostic('auth_identificar_principal', 'CORREO_NO_VALIDO')
+        principal_email = principal_email.lower()
     accounts, seen, token = [], set(), None
     while True:
         query = {'maxResults': 1000, 'fields': 'users(localId,displayName,disabled,customAttributes),nextPageToken'}
+        if principal_email is not None:
+            query['fields'] = 'users(localId,displayName,email,disabled,customAttributes),nextPageToken'
         if token:
             query['nextPageToken'] = token
         data = read('https://identitytoolkit.googleapis.com/v1/projects/' + PROJECT + '/accounts:batchGet?' + urllib.parse.urlencode(query))
@@ -63,6 +69,14 @@ def private_plan(read):
         if token in seen:
             raise ValueError('Paginación incompleta.')
         seen.add(token)
+    if principal_email is not None:
+        accounts = [u for u in accounts if isinstance(u.get('email'), str) and u['email'].lower() == principal_email]
+        if len(accounts) != 1:
+            raise SafeDiagnostic('auth_identificar_principal', 'CUENTA_PRINCIPAL_NO_UNICA')
+        selected = accounts[0]
+        claims = json.loads(selected.get('customAttributes') or '{}')
+        if not isinstance(claims, dict) or claims.get('app') != 'mi_comunidad' or claims.get('role') != 'admin' or selected.get('disabled', False):
+            raise SafeDiagnostic('auth_identificar_principal', 'CUENTA_PRINCIPAL_NO_HABILITADA_O_NO_ADMIN')
     plans = []
     for user in accounts:
         claims = json.loads(user.get('customAttributes') or '{}')
@@ -86,6 +100,8 @@ def private_plan(read):
         evidence = {'projectId': PROJECT, 'expectedAuth': state, 'expectedOwner': owner,
                     'communityName': field(community, 'nombre'), 'communityState': field(community, 'estado'),
                     'accountDisplayName': user.get('displayName') or '', 'registeredAdminName': field(community, 'adminNombre')}
+        if principal_email is not None:
+            evidence['principalEmail'] = principal_email
         digest = hashlib.sha256(json.dumps(evidence, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
         blocked = (owner is not None and owner != uid) or field(community, 'estado') == 'Suspendida'
         plans.append({'comunidad': evidence['communityName'], 'comunidadId': community_id, 'uid': uid,
@@ -93,7 +109,8 @@ def private_plan(read):
                       'nombrePropuestoFicha': (evidence['accountDisplayName'] or evidence['registeredAdminName']).strip(),
                       'titularidad': 'coincide' if owner == uid else 'sin propietario registrado' if owner is None else 'propietario distinto',
                       'bloqueada': blocked, 'codigoConfirmacion': digest})
-    return {'soloLectura': True, 'proyecto': PROJECT, 'cuentasSinFicha': plans}
+    return {'soloLectura': True, 'proyecto': PROJECT, 'cuentasSinFicha': plans,
+            **({'principalVerificadoPorCorreo': True} if principal_email is not None else {})}
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -105,6 +122,7 @@ def main():
     parser = argparse.ArgumentParser(description='Verificar privadamente fichas administrativas ausentes; no escribe en Firebase.')
     parser.add_argument('--project', required=True, choices=[PROJECT])
     parser.add_argument('--diagnostico', action='store_true', help='Mostrar solo conteos y errores seguros, sin identidades.')
+    parser.add_argument('--correo-principal', help='Verificar y mostrar únicamente la cuenta administrativa que coincida con este correo, sin imprimirlo.')
     args = parser.parse_args()
     if os.environ.get('GITHUB_ACTIONS') or os.environ.get('CI'):
         raise ValueError('La revisión de identidades debe ejecutarse fuera de CI.')
@@ -139,7 +157,7 @@ def main():
         except (urllib.error.URLError, OSError):
             raise SafeDiagnostic(stage, 'CONEXION_NO_COMPLETADA') from None
 
-    result = private_plan(read)
+    result = private_plan(read, principal_email=args.correo_principal)
     if args.diagnostico:
         print(json.dumps({'soloLectura': True, 'fase': 'completada', 'codigo': 'OK', 'cuentasSinFicha': len(result['cuentasSinFicha'])}))
         return
