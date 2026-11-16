@@ -34,6 +34,8 @@ async function paged(collection, visit) {
 async function inventory(db, auth, {now = new Date(), details = false} = {}) {
   const communities = new Map();
   const issues = [];
+  const missingAdminProfiles = {authEnabled: 0, authDisabled: 0, matchesCommunityOwner: 0,
+    ownerNotRecorded: 0, differentCommunityOwner: 0, currentlyLicensedAndActive: 0};
   const issueCounts = Object.create(null);
   function issue(kind, comunidadId, uid) {
     issueCounts[kind] = (issueCounts[kind] || 0) + 1;
@@ -41,7 +43,7 @@ async function inventory(db, auth, {now = new Date(), details = false} = {}) {
   }
   await paged(db.collection('mi_comunidad_comunidades'), async doc => {
     const license = await db.collection('mi_comunidad_licencias').doc(doc.id).get();
-    const state = {admins: new Map()};
+    const state = {admins: new Map(), owner: doc.get('adminUid'), active: doc.get('estado') !== 'Suspendida', licensed: license.exists && evaluateLicense(license.data(), now).allowed};
     communities.set(doc.id, state);
     if (!license.exists) issue('licencia_ausente', doc.id);
     else {
@@ -71,7 +73,15 @@ async function inventory(db, auth, {now = new Date(), details = false} = {}) {
       const collection = {admin: 'administradores', conserje: 'conserjes', residente: 'residentes'}[claims.role];
       const account = await db.collection('mi_comunidad_comunidades').doc(id).collection(collection).doc(user.uid).get();
       if (claims.role === 'admin' && community.admins.has(user.uid)) community.admins.get(user.uid).seen = true;
-      if (!account.exists) { issue('ficha_ausente_' + claims.role, id, user.uid); continue; }
+      if (!account.exists) {
+        issue('ficha_ausente_' + claims.role, id, user.uid);
+        if(claims.role === 'admin'){
+          missingAdminProfiles[user.disabled ? 'authDisabled' : 'authEnabled']++;
+          missingAdminProfiles[!community.owner ? 'ownerNotRecorded' : community.owner === user.uid ? 'matchesCommunityOwner' : 'differentCommunityOwner']++;
+          if(community.active && community.licensed && !user.disabled) missingAdminProfiles.currentlyLicensedAndActive++;
+        }
+        continue;
+      }
       const enabled = account.get('estado') !== 'Inactivo';
       if (enabled === !!user.disabled) issue('estado_auth_ficha_inconsistente', id, user.uid);
       if (claims.role === 'residente' && account.get('depto') !== claims.depto) issue('departamento_inconsistente', id, user.uid);
@@ -89,7 +99,7 @@ async function inventory(db, auth, {now = new Date(), details = false} = {}) {
     'rol_desconocido', 'estado_auth_ficha_inconsistente', 'departamento_inconsistente', 'ficha_admin_sin_cuenta_valida',
     'ficha_ausente_conserje', 'ficha_ausente_residente'];
   return {readOnly: true, scannedAt: now.toISOString(), communities: communities.size, appAccounts,
-    issueCounts, readyForStrictAccess: migrationBlockers.every(kind => !issueCounts[kind]),
+    issueCounts, missingAdminProfiles, readyForStrictAccess: migrationBlockers.every(kind => !issueCounts[kind]),
     ...(details ? {issues} : {})};
 }
 

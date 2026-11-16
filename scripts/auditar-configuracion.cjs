@@ -11,6 +11,16 @@ const {section} = require('./preparar-reglas-compartidas.cjs');
 const {options} = require('./auditar-accesos.cjs');
 const digest = value => crypto.createHash('sha256').update(value).digest('hex');
 
+function apiFailure(status, body){
+  const error = Object.assign(Error('Consulta no completada.'), {status});
+  const allowed = ['SERVICE_DISABLED', 'IAM_PERMISSION_DENIED', 'ACCESS_TOKEN_SCOPE_INSUFFICIENT',
+    'API_KEY_SERVICE_BLOCKED', 'SERVICE_NOT_ACTIVATED', 'SECURITY_POLICY_VIOLATED'];
+  const details = Array.isArray(body?.error?.details) ? body.error.details : [];
+  const reason = details.find(item => item?.['@type'] === 'type.googleapis.com/google.rpc.ErrorInfo' && allowed.includes(item.reason))?.reason;
+  if(reason) error.reason = reason;
+  return error;
+}
+
 async function configuration({projectId, localRules, getRules, read}) {
   if (!/^[a-z][a-z0-9-]{4,61}[a-z0-9]$/.test(projectId)) throw Error('Proyecto inválido.');
   const report = {readOnly: true, projectId, complete: true};
@@ -18,7 +28,8 @@ async function configuration({projectId, localRules, getRules, read}) {
     try { report[name] = {verified: true, ...await action()}; }
     catch (error) {
       report.complete = false;
-      report[name] = {verified: false, httpStatus: Number.isInteger(error.status) ? error.status : null};
+      report[name] = {verified: false, httpStatus: Number.isInteger(error.status) ? error.status : null,
+        ...(['SERVICE_DISABLED', 'IAM_PERMISSION_DENIED', 'ACCESS_TOKEN_SCOPE_INSUFFICIENT', 'API_KEY_SERVICE_BLOCKED', 'SERVICE_NOT_ACTIVATED', 'SECURITY_POLICY_VIOLATED'].includes(error.reason) ? {reason: error.reason} : {})};
     }
   }
   await check('firestoreRules', async () => {
@@ -78,12 +89,15 @@ async function main() {
       getRules: () => getSecurityRules(app).getFirestoreRuleset(), read: async url => {
         const {access_token: token} = await credential.getAccessToken();
         const response = await fetch(url, {method: 'GET', redirect: 'error', headers: {Authorization: `Bearer ${token}`}, signal: AbortSignal.timeout(30000)});
-        if (!response.ok) { const error = Error('Consulta no completada.'); error.status = response.status; throw error; }
+        if (!response.ok) {
+          let body; try { body = await response.json(); } catch (_) {}
+          throw apiFailure(response.status, body);
+        }
         return response.json();
       }});
     console.log(JSON.stringify(report, null, 2));
     if (!report.complete) process.exitCode = 2;
   } finally { await deleteApp(app); }
 }
-module.exports = {configuration};
+module.exports = {configuration, apiFailure};
 if (require.main === module) main().catch(() => {console.error('No se completó la consulta de configuración; no se modificó Firebase.'); process.exitCode = 1;});

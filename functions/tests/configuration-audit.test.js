@@ -60,3 +60,17 @@ test('proyecto diferente impide consultar restricciones o App Check de otro proy
   assert.equal(report.appCheck.verified, false);
   assert.ok(!f.urls.some(url => url.includes('firebaseappcheck') || url.includes('apikeys')));
 });
+
+test('diagnóstico de 403 distingue causas permitidas sin exponer mensaje, permiso ni metadatos',async()=>{
+ const {apiFailure}=require('../../scripts/auditar-configuracion.cjs');
+ for(const reason of ['SERVICE_DISABLED','IAM_PERMISSION_DENIED','ACCESS_TOKEN_SCOPE_INSUFFICIENT']){
+  const f=fixture(),original=f.read;
+  f.read=async url=>{
+   if(url.startsWith('https://firebaseappcheck.googleapis.com/'))throw apiFailure(403,{error:{message:'NO-IMPRIMIR',details:[{'@type':'type.googleapis.com/google.rpc.ErrorInfo',reason,metadata:{permission:'NO-IMPRIMIR',service:'NO-IMPRIMIR'}}]}});
+   return original(url);
+  };
+  const result=await configuration(f);assert.equal(result.appCheck.reason,reason);assert.equal(result.appCheck.httpStatus,403);assert.equal(result.complete,false);assert.ok(!JSON.stringify(result).includes('NO-IMPRIMIR'));
+ }
+ const unknown=apiFailure(403,{error:{details:[{'@type':'type.googleapis.com/google.rpc.ErrorInfo',reason:'NO-IMPRIMIR'}]}});
+ assert.equal(unknown.reason,undefined);assert.equal(unknown.message,'Consulta no completada.');
+});

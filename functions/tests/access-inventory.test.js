@@ -103,3 +103,11 @@ test('paginación Firestore continúa después de 500 documentos, sin omitir el 
   assert.equal(visited.length, 501);
   assert.equal(new Set(visited).size, 501);
 });
+
+test('inventario clasifica administradores sin ficha sin identificadores y sin cambiar los bloqueos',async()=>{
+ const f=fixtures({[base]:{estado:'Activa',adminUid:'NO-IMPRIMIR-owner'},'mi_comunidad_licencias/torre':validLicense},
+ [[user('NO-IMPRIMIR-owner','admin'),{...user('NO-IMPRIMIR-old','admin'),disabled:true}]]);
+ const result=await inventory(f.db,f.auth);
+ assert.deepEqual(result.missingAdminProfiles,{authEnabled:1,authDisabled:1,matchesCommunityOwner:1,ownerNotRecorded:0,differentCommunityOwner:1,currentlyLicensedAndActive:1});
+ assert.equal(result.readyForStrictAccess,false);assert.equal(result.issueCounts.ficha_ausente_admin,2);assert.ok(!JSON.stringify(result).includes('NO-IMPRIMIR'));
+});

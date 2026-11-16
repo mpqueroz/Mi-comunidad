@@ -54,6 +54,15 @@ function merge(live,local){
   const a=section(live),b=section(local);
   return live.slice(0,a.start)+local.slice(b.start,b.end)+live.slice(a.end);
 }
+function preparationReport(live,local){
+  const prepared=merge(live,local), a=section(live), b=section(prepared), c=section(local);
+  const otherApplicationsPreserved=live.slice(0,a.start)===prepared.slice(0,b.start) && live.slice(a.end)===prepared.slice(b.end);
+  const miComunidadMatchesRepository=prepared.slice(b.start,b.end)===local.slice(c.start,c.end);
+  if(!otherApplicationsPreserved||!miComunidadMatchesRepository)throw Error('Composición de reglas inválida.');
+  const hash=value=>crypto.createHash('sha256').update(value).digest('hex');
+  return {remoteReadOnly:true,otherApplicationsPreserved,miComunidadMatchesRepository,
+    deployedSha256:hash(live),preparedSha256:hash(prepared),repositorySha256:hash(local)};
+}
 async function main(){
   const root=path.join(__dirname,'..');
   const sdk=createRequire(path.join(root,'functions/package.json'));
@@ -82,7 +91,7 @@ async function main(){
   fs.writeFileSync(backup,live,{mode:0o600});
   fs.writeFileSync(stateFile,JSON.stringify(fingerprint(current)),{mode:0o600});
   fs.writeFileSync(file,merged);
-  console.log('Preparadas únicamente las reglas de Mi Comunidad sobre las reglas vigentes.');
+  console.log(JSON.stringify(preparationReport(live,local),null,2));
 }
-module.exports={merge,section,fingerprint,assertUnchanged};
+module.exports={merge,section,fingerprint,assertUnchanged,preparationReport};
 if(require.main===module)main().catch(err=>{console.error(err.message);process.exitCode=1;});

@@ -218,3 +218,55 @@ jobs:
         run: node scripts/auditar-configuracion.cjs --project mercado-ciudadano
       - name: Inventariar licencias y fichas sin modificar Firebase
         run: node scripts/auditar-accesos.cjs --project mercado-ciudadano --require-clean
+
+  audit-shared-rules:
+    name: Reglas publicadas combinadas (sin despliegue)
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/security/auditoria-blindaje-2026-11' && github.repository == 'mpqueroz/Mi-comunidad'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - name: Instalar SDK antes de disponer de ADC
+        working-directory: functions
+        run: npm ci --ignore-scripts
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Instalar herramientas antes de disponer de ADC
+        working-directory: tests
+        run: npm ci --ignore-scripts
+      - name: Verificar proyecto esperado antes de consultar
+        run: node -e 'if(JSON.parse(require("node:fs").readFileSync(".firebaserc","utf8")).projects.default !== "mercado-ciudadano") throw Error("Proyecto inesperado")'
+      - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - name: Leer reglas publicadas y componer únicamente el archivo temporal del runner
+        run: node scripts/preparar-reglas-compartidas.cjs
+      - name: Retirar credencial antes de ejecutar pruebas de emulador
+        run: |
+          test -n "$GOOGLE_APPLICATION_CREDENTIALS"
+          rm -- "$GOOGLE_APPLICATION_CREDENTIALS"
+          test ! -e "$GOOGLE_APPLICATION_CREDENTIALS"
+      - name: Probar composición real con datos ficticios y sin ADC
+        working-directory: tests
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ''
+          CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: ''
+          GOOGLE_GHA_CREDS_PATH: ''
+        run: npm test
+      - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - name: Confirmar que las reglas publicadas no cambiaron durante la prueba
+        run: node scripts/preparar-reglas-compartidas.cjs --assert-unchanged

@@ -97,3 +97,17 @@ test('publicación exige inventario limpio antes de desplegar funciones, reglas 
  assert.ok(gate<deploy.indexOf('node scripts/preparar-reglas-compartidas.cjs'));
  assert.ok(gate<deploy.indexOf('node scripts/firebase-cli.cjs deploy'));
 });
+
+test('auditoría de reglas reales nunca despliega y retira ADC antes del emulador',()=>{
+ const workflow=fs.readFileSync(path.join(root,'.github/workflows/firebase.yml'),'utf8');
+ const job=workflow.split('  audit-shared-rules:')[1];assert.ok(job);
+ assert.ok(job.includes("github.event_name == 'workflow_dispatch'"));assert.ok(job.includes("github.ref == 'refs/heads/security/auditoria-blindaje-2026-11'"));
+ assert.ok(!job.includes(' deploy '));
+ const prepare=job.indexOf('run: node scripts/preparar-reglas-compartidas.cjs');
+ const remove=job.indexOf('rm -- "$GOOGLE_APPLICATION_CREDENTIALS"');
+ const tests=job.indexOf('run: npm test');
+ const confirm=job.indexOf('--assert-unchanged');
+ assert.ok(prepare<remove&&remove<tests&&tests<confirm);
+ assert.ok(job.includes("GOOGLE_APPLICATION_CREDENTIALS: ''"));
+ assert.ok(!job.includes('upload-artifact'));
+});
