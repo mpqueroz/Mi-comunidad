@@ -310,6 +310,8 @@ test('licencia solo es consultable por su admin o superadmin y nadie la modifica
 test('regresión compartida: anuncios públicos y almacén propio mantienen acceso aislado',async()=>{
  await env.withSecurityRulesDisabled(async ctx=>{
   await ctx.firestore().doc('anuncios/publico').set({aprobado:true,autorUid:'vendedor'});
+  // El dueño ficticio también debe tener acceso comercial vigente en el espejo.
+  await ctx.firestore().doc('almacen_commercial_access/dueno').set({version:1,storeId:'dueno',status:'active',expiresAt:new Date('2099-01-01')});
   await ctx.firestore().doc('stores/dueno/products/p1').set({nombre:'Producto',stock:1});
  });
  await assertSucceeds(env.unauthenticatedContext().firestore().doc('anuncios/publico').get());

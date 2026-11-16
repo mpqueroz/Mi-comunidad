@@ -17,6 +17,8 @@ beforeEach(async()=>{
   await Promise.all([
    d.doc('admins/moderador').set({activo:true}),
    d.doc('usuarios/autor').set({nombre:'Autor',correo:'privado@example.invalid'}),
+   // Espejo comercial ficticio exigido por las reglas publicadas de Almacén.
+   d.doc('almacen_commercial_access/dueno').set({version:1,storeId:'dueno',status:'active',expiresAt:new Date('2099-01-01')}),
    d.doc('stores/dueno').set({nombre:'Negocio ficticio'}),
    d.doc('stores/dueno/team/cajero').set({role:'vendedor'}),
    d.doc('stores/dueno/settings/general').set({name:'Negocio ficticio',currentCashierName:'Inicial'}),
