@@ -1,6 +1,6 @@
 # Cambios de configuración pendientes de aprobación
 
-La auditoría sigue abierta. Esta propuesta no autoriza fusión, despliegue, cambios de restricciones o enforcement. Las dos APIs administrativas fueron habilitadas expresamente por el usuario; el resto de la configuración permanece sin modificar.
+La auditoría sigue abierta. Esta propuesta no autoriza fusión, despliegue, cambios de restricciones o enforcement. El titular habilitó las dos APIs administrativas y creó/registró el proveedor Enterprise de Mi Comunidad. No se modificaron enforcement ni restricciones de la clave compartida.
 
 ## Situación observada en #184 (`12a6cee`)
 
