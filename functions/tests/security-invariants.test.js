@@ -34,3 +34,19 @@ test("el despliegue apunta al hosting de Mi Comunidad, no a otras apps", () => {
   assert.equal(hosting.hosting.site, "mi-comunidad-md");
   assert.equal(hosting.firestore.rules, "firestore.rules");
 });
+
+test("el acceso a comunidades exige claims de la aplicación y comunidad", () => {
+  assert.match(rules, /request\.auth\.token\.get\("app", ""\) == "mi_comunidad"/);
+  assert.match(rules, /mcComunidadIdToken\(\) == comunidadId/);
+  assert.match(rules, /mcEsDeEstaComunidadActiva\(comunidadId\)/);
+});
+
+test("los secretos de recuperación de residentes no son legibles desde el cliente", () => {
+  assert.match(rules, /match \/secretos\/\{uid\} \{\s*allow read, write: if false;/);
+});
+
+test("las altas de residentes no se hacen directamente desde Firestore", () => {
+  const block = rules.match(/match \/residentes\/\{uid\} \{([\s\S]*?)\n      \}/);
+  assert.ok(block);
+  assert.match(block[1], /allow create, delete: if false;/);
+});
