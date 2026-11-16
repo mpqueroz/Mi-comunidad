@@ -1,0 +1,62 @@
+'use strict';
+const {test} = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const {configuration} = require('../../scripts/auditar-configuracion.cjs');
+const rules = fs.readFileSync(path.join(__dirname, '../../firestore.rules'), 'utf8');
+
+function fixture() {
+  const urls = [];
+  return {urls, projectId: 'demo-mi-comunidad', localRules: rules, getRules: async () => ({source: [{content: rules}]}),
+    read: async url => {
+      urls.push(url);
+      if (url.startsWith('https://firebase.googleapis.com/')) return {projectId: 'demo-mi-comunidad', projectNumber: '123456'};
+      if (url.startsWith('https://firebaseappcheck.googleapis.com/')) return {services: [{name: 'projects/123456/services/firestore.googleapis.com', enforcementMode: 'UNENFORCED'}]};
+      if (url.startsWith('https://apikeys.googleapis.com/')) return {keys: [{keyString: 'NO-IMPRIMIR', displayName: 'NO-IMPRIMIR', restrictions: {browserKeyRestrictions: {}, apiTargets: [{}]}}, {}]};
+      return {functions: [{name: 'projects/demo/locations/region/functions/crearCuentaMiComunidad', state: 'ACTIVE', buildConfig: {runtime: 'nodejs22'}, serviceConfig: {environmentVariables: {SECRET: 'NO-IMPRIMIR'}}},
+        {name: 'projects/demo/locations/region/functions/otraAplicacion', buildConfig: {runtime: 'nodejs24'}}]};
+    }};
+}
+
+test('configuración devuelve solo modos, conteos y metadatos; nunca claves o variables', async () => {
+  const f = fixture(), report = await configuration(f);
+  assert.equal(report.complete, true);
+  assert.equal(report.firestoreRules.sameMiComunidad, true);
+  assert.equal(report.firestoreRules.sameOtherApps, true);
+  assert.equal(report.appCheck.services[0].enforcementMode, 'UNENFORCED');
+  assert.equal(report.apiKeyRestrictions.keysCount, 2);
+  assert.equal(report.apiKeyRestrictions.withApplicationRestriction, 1);
+  assert.equal(report.functionsMetadata.functions.length, 1);
+  assert.ok(!JSON.stringify(report).includes('NO-IMPRIMIR'));
+  assert.ok(f.urls.every(url => new URL(url).searchParams.has('fields')));
+});
+
+test('reglas locales sin publicar se distinguen de cambios en las otras aplicaciones', async () => {
+  const f = fixture(); f.localRules = rules.replace('function mcEsComunidadActiva(comunidadId) {', 'function mcEsComunidadActiva(comunidadId) {\n // nueva revisión');
+  const report = await configuration(f);
+  assert.equal(report.firestoreRules.sameMiComunidad, false);
+  assert.equal(report.firestoreRules.sameOtherApps, true);
+});
+
+test('permiso denegado y respuestas parciales no se presentan como verificación completa', async () => {
+  const f = fixture(), original = f.read;
+  f.getRules = async () => { throw Object.assign(Error('NO-IMPRIMIR'), {status: 403}); };
+  f.read = async url => url.startsWith('https://apikeys.googleapis.com/') ? {keys: [], nextPageToken: 'NO-IMPRIMIR'} : original(url);
+  const report = await configuration(f);
+  assert.equal(report.complete, false);
+  assert.equal(report.firestoreRules.verified, false);
+  assert.equal(report.firestoreRules.httpStatus, 403);
+  assert.equal(report.apiKeyRestrictions.verified, false);
+  assert.ok(!JSON.stringify(report).includes('NO-IMPRIMIR'));
+});
+
+test('proyecto diferente impide consultar restricciones o App Check de otro proyecto', async () => {
+  const f = fixture(), original = f.read;
+  f.read = async url => url.startsWith('https://firebase.googleapis.com/') ? {projectId: 'otro-proyecto', projectNumber: '999999'} : original(url);
+  const report = await configuration(f);
+  assert.equal(report.complete, false);
+  assert.equal(report.project.verified, false);
+  assert.equal(report.appCheck.verified, false);
+  assert.ok(!f.urls.some(url => url.includes('firebaseappcheck') || url.includes('apikeys')));
+});

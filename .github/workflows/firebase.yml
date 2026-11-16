@@ -207,5 +207,8 @@ jobs:
       - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - name: Consultar configuración efectiva sin claves ni cambios
+        continue-on-error: true
+        run: node scripts/auditar-configuracion.cjs --project mercado-ciudadano
       - name: Inventariar licencias y fichas sin modificar Firebase
         run: node scripts/auditar-accesos.cjs --project mercado-ciudadano --require-clean
