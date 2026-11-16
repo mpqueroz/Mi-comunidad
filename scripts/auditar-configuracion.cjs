@@ -53,6 +53,29 @@ function storeAccessRequirements(source){
   return out;
 }
 
+function keyRestrictionDetails(keys){
+  return keys.map(key=>{
+    const r=key.restrictions||{},refs=r.browserKeyRestrictions?.allowedReferrers||[],targets=r.apiTargets||[];
+    if(!Array.isArray(refs)||!Array.isArray(targets))throw Error('Restricciones no comparables.');
+    let allHosts=0,wildcardHosts=0,unclassified=0;
+    for(const pattern of refs){
+      if(typeof pattern!=='string'){unclassified++;continue;}
+      if(['*','http://*/*','https://*/*','*://*/*'].includes(pattern)){allHosts++;continue;}
+      try{
+        const u=new URL(pattern);
+        if(!['http:','https:'].includes(u.protocol)||u.username||u.password||u.search||u.hash)throw Error();
+        if(u.hostname.includes('*'))wildcardHosts++;
+      }catch(_){unclassified++;}
+    }
+    const unrestricted=targets.length===0;
+    const permits=service=>unrestricted||targets.some(t=>t.service===service);
+    return {restrictionTypes:['browserKeyRestrictions','serverKeyRestrictions','androidKeyRestrictions','iosKeyRestrictions'].filter(k=>!!r[k]),
+      browserReferrerCount:refs.length,allHostsPatternCount:allHosts,wildcardHostPatternCount:wildcardHosts,unclassifiedReferrerCount:unclassified,
+      apiTargetCount:targets.length,apiTargetsWithoutMethodLimits:targets.filter(t=>!t.methods?.length).length,
+      authApiInAllowlist:permits('identitytoolkit.googleapis.com'),tokenApiInAllowlist:permits('securetoken.googleapis.com')};
+  });
+}
+
 async function configuration({projectId, localRules, getRules, read}) {
   if (!/^[a-z][a-z0-9-]{4,61}[a-z0-9]$/.test(projectId)) throw Error('Proyecto inválido.');
   const report = {readOnly: true, projectId, complete: true};
@@ -87,6 +110,23 @@ async function configuration({projectId, localRules, getRules, read}) {
       return {scope: 'service-baseline-only', services: (data.services || []).map(service => ({
         service: String(service.name || '').split('/').at(-1), enforcementMode: service.enforcementMode || 'UNSPECIFIED'}))};
     });
+    // Consultar explícitamente los servicios web usados, aunque services.list sea vacío.
+    for(const [label,service] of Object.entries({appCheckAuth:'identitytoolkit.googleapis.com',appCheckFirestore:'firestore.googleapis.com',
+      appCheckStorage:'firebasestorage.googleapis.com',appCheckDatabase:'firebasedatabase.googleapis.com'})){
+      await check(label,async()=>{
+        const value=await read(`https://firebaseappcheck.googleapis.com/v1/projects/${number}/services/${service}?fields=enforcementMode,replayProtection`);
+        const mode=v=>{if(v===undefined)return 'UNSPECIFIED';if(!['OFF','UNENFORCED','ENFORCED'].includes(v))throw Error('Modo no verificable.');return v;};
+        return {service,enforcementMode:mode(value.enforcementMode),replayProtection:mode(value.replayProtection),scope:'explicit-service-get'};
+      });
+    }
+    // La API resourcePolicies solo admite OAuth de iOS actualmente; no inventar overrides de Firestore.
+    await check('appCheckResourcePolicies',async()=>{
+      const data=await read(`https://firebaseappcheck.googleapis.com/v1/projects/${number}/services/oauth2.googleapis.com/resourcePolicies?pageSize=100&fields=resourcePolicies(enforcementMode),nextPageToken`);
+      if(data.nextPageToken)throw Error('Listado parcial de políticas.');
+      const modes={OFF:0,UNENFORCED:0,ENFORCED:0,UNSPECIFIED:0};
+      for(const p of data.resourcePolicies||[]){const mode=p.enforcementMode||'UNSPECIFIED';if(!Object.hasOwn(modes,mode))throw Error('Modo no verificable.');modes[mode]++;}
+      return {scope:'oauth-ios-resource-policies-only',count:Object.values(modes).reduce((a,b)=>a+b,0),modes};
+    });
     await check('apiKeyRestrictions', async () => {
       const data = await read(`https://apikeys.googleapis.com/v2/projects/${number}/locations/global/keys?pageSize=300&fields=keys(restrictions),nextPageToken`);
       if (data.nextPageToken) throw Error('Listado parcial de restricciones.');
@@ -94,7 +134,8 @@ async function configuration({projectId, localRules, getRules, read}) {
       const appRestricted = key => !!(key.restrictions?.browserKeyRestrictions || key.restrictions?.serverKeyRestrictions ||
         key.restrictions?.androidKeyRestrictions || key.restrictions?.iosKeyRestrictions);
       return {keysCount: keys.length, withApplicationRestriction: keys.filter(appRestricted).length,
-        withApiRestriction: keys.filter(key => key.restrictions?.apiTargets?.length).length};
+        withApiRestriction: keys.filter(key => key.restrictions?.apiTargets?.length).length,
+        scope:'presence-and-breadth-not-client-key-binding',details:keyRestrictionDetails(keys)};
     });
   } else {
     report.appCheck = report.apiKeyRestrictions = {verified: false, reason: 'project-number-unavailable'};
@@ -132,5 +173,5 @@ async function main() {
     if (!report.complete) process.exitCode = 2;
   } finally { await deleteApp(app); }
 }
-module.exports = {configuration, apiFailure, storeAccessRequirements};
+module.exports = {configuration, apiFailure, storeAccessRequirements, keyRestrictionDetails};
 if (require.main === module) main().catch(() => {console.error('No se completó la consulta de configuración; no se modificó Firebase.'); process.exitCode = 1;});

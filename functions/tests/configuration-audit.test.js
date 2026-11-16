@@ -12,6 +12,8 @@ function fixture() {
     read: async url => {
       urls.push(url);
       if (url.startsWith('https://firebase.googleapis.com/')) return {projectId: 'demo-mi-comunidad', projectNumber: '123456'};
+      if(url.includes('/resourcePolicies?'))return {resourcePolicies:[]};
+      if(/\/services\/[^?]+\?/.test(url))return {enforcementMode:'OFF',replayProtection:'OFF'};
       if (url.startsWith('https://firebaseappcheck.googleapis.com/')) return {services: [{name: 'projects/123456/services/firestore.googleapis.com', enforcementMode: 'UNENFORCED'}]};
       if (url.startsWith('https://apikeys.googleapis.com/')) return {keys: [{keyString: 'NO-IMPRIMIR', displayName: 'NO-IMPRIMIR', restrictions: {browserKeyRestrictions: {}, apiTargets: [{}]}}, {}]};
       return {functions: [{name: 'projects/demo/locations/region/functions/crearCuentaMiComunidad', state: 'ACTIVE', buildConfig: {runtime: 'nodejs22'}, serviceConfig: {environmentVariables: {SECRET: 'NO-IMPRIMIR'}}},
@@ -88,4 +90,27 @@ test('requisitos de Almacén exponen esquema técnico y nunca literales privados
  const withDependency=fixture.replace('function esDueno(storeId) {','function esDueno(storeId) {\n let valid=licenciaAlmacen(storeId);');
  const result=storeAccessRequirements(withDependency);
  const item=result.find(r=>r.helper==='licenciaAlmacen');assert.ok(item);assert.deepEqual(item.collections,['almacen_licencias']);assert.deepEqual(item.dataFields,['estado','validUntil']);assert.deepEqual(item.claimFields,['app']);assert.ok(!JSON.stringify(result).includes('NO-IMPRIMIR'));
+});
+
+test('App Check vacío no omite consultas individuales; un fallo puntual no oculta los otros modos',async()=>{
+ const f=fixture(),read=f.read;f.read=async url=>{
+  if(url.includes('/services?'))return {services:[]};
+  if(url.includes('/services/firestore.googleapis.com?'))throw Object.assign(Error('NO-IMPRIMIR'),{status:403});
+  return read(url);
+ };
+ const r=await configuration(f);
+ assert.equal(r.appCheck.services.length,0);assert.equal(r.appCheckAuth.enforcementMode,'OFF');
+ assert.equal(r.appCheckFirestore.verified,false);assert.equal(r.appCheckStorage.verified,true);assert.equal(r.complete,false);
+ assert.equal(r.appCheckResourcePolicies.count,0);assert.ok(!JSON.stringify(r).includes('NO-IMPRIMIR'));
+});
+test('políticas parciales y modos desconocidos no se presentan como ausencia de protección',async()=>{
+ const f=fixture(),read=f.read;f.read=async url=>url.includes('/resourcePolicies?')?{resourcePolicies:[],nextPageToken:'NO-IMPRIMIR'}:url.includes('/services/firestore.googleapis.com?')?{enforcementMode:'NO-IMPRIMIR'}:read(url);
+ const r=await configuration(f);assert.equal(r.appCheckResourcePolicies.verified,false);assert.equal(r.appCheckFirestore.verified,false);assert.equal(r.complete,false);assert.ok(!JSON.stringify(r).includes('NO-IMPRIMIR'));
+});
+test('restricciones distinguen lista vacía, todos los hosts y wildcard sin emitir patrones privados',()=>{
+ const {keyRestrictionDetails:details}=require('../../scripts/auditar-configuracion.cjs');
+ const [r]=details([{keyString:'NO-IMPRIMIR',restrictions:{browserKeyRestrictions:{allowedReferrers:['*','https://*.example.test/*','https://NO-IMPRIMIR.example.test/*','https://example.test/?NO-IMPRIMIR']},apiTargets:[{service:'identitytoolkit.googleapis.com'}]}}]);
+ assert.equal(r.browserReferrerCount,4);assert.equal(r.allHostsPatternCount,1);assert.equal(r.wildcardHostPatternCount,1);assert.equal(r.unclassifiedReferrerCount,1);
+ assert.equal(r.authApiInAllowlist,true);assert.equal(r.tokenApiInAllowlist,false);assert.ok(!JSON.stringify(r).includes('NO-IMPRIMIR'));
+ assert.equal(details([{}])[0].apiTargetCount,0);assert.equal(details([{}])[0].authApiInAllowlist,true);
 });

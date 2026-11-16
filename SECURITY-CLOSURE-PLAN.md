@@ -39,3 +39,13 @@ Ni el éxito del emulador ni la autorización para consultar/habilitar APIs auto
 Los casos administrativos de documentos, bloques y fichas laborales señalados en la evaluación se corrigieron en `cfe0f96`. Los validadores de bloques exigen el esquema completo también al actualizar; un bloque histórico sin campos requeridos o con tipos/tamaños fuera del contrato puede necesitar regularización antes de poder activar/desactivar. No se debe ampliar las reglas para aceptar datos arbitrarios ni modificar esos registros reales automáticamente. Completar un inventario agregado de compatibilidad y revisar cualquier migración por separado.
 
 Resultado de la comprobación agregada en #173 (`5f1bb74`): cuatro comunidades, 0 bloques guardados y 0 incompatibles. No existe una migración de bloques pendiente con esa instantánea. La utilidad paginada de solo lectura se incorpora a la barrera de publicación para detectar incompatibilidades futuras.
+
+## 5. Reparación puntual preparada, sin ejecución real
+
+`scripts/regularizar-ficha-admin.cjs` exporta `repairAdminProfile`; no se agregó CLI ni workflow de escritura. El plan predeterminado solo lee y devuelve estado y necesidad de verificar titularidad, sin identificadores personales. Las pruebas usan datos ficticios y SDK simulado.
+
+La aplicación exige simultáneamente proyecto `mercado-ciudadano` en argumento, Firestore y Auth; UID/comunidad verificados privadamente; nombre verificado; `approved=true`; `administrativeChangesPaused=true`; estado Auth esperado completo y propietario esperado. Si la comunidad no registra propietario, exige además `ownershipVerified=true`. Un propietario distinto, cuenta deshabilitada, otra app/rol/comunidad o comunidad suspendida abortan. Se relee Auth y después se usa una transacción Firestore con precondición de creación: no sobrescribe ni reactiva una ficha existente, incluso si aparece concurrentemente. Solo crea `nombre`, `estado=Activo` y `creadoEn` de servidor en la ficha puntual.
+
+Antes de ejecutar se requiere revisión privada de ambas identidades y autorización específica para crear esas fichas. El nombre no debe adivinarse ni extraerse de un log público. La intervención debe excluir cambios administrativos concurrentes: Auth y Firestore no comparten una transacción atómica; la segunda lectura reduce la ventana pero no la elimina. No se cambian Auth, claims, contraseñas, licencias ni el propietario de comunidad. No se adjuntan datos privados o el plan por cuenta al repositorio público.
+
+Ninguna prueba, aprobación del PR ni continuación de la auditoría ejecuta esta reparación. Mantener el PR en borrador y sin despliegue hasta cerrar la verificación y el inventario.
