@@ -80,10 +80,10 @@ async function comprobarAppCheck(browser){
    return route.fulfill({status:200,contentType:'application/javascript',body:
     "window.grecaptcha={enterprise:{ready:function(fn){fn();},render:function(id,options){window.mcTestSiteKey=options.sitekey;return 17;},execute:function(){return Promise.resolve('SIMULATED_ATTESTATION_FOR_TESTS');}}};"});
   }
-  if(url.hostname==='firebaseappcheck.googleapis.com'&&url.pathname.endsWith(':exchangeRecaptchaEnterpriseToken')){
+  if(url.hostname==='content-firebaseappcheck.googleapis.com'&&url.pathname.endsWith(':exchangeRecaptchaEnterpriseToken')){
    if(request.method()==='OPTIONS')return route.fulfill({status:204,headers:{'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Methods':'POST, OPTIONS','Access-Control-Allow-Headers':'*'}});
    const data=request.postDataJSON();exchanges.push(data);
-   assert.equal(data.recaptchaEnterpriseToken,'SIMULATED_ATTESTATION_FOR_TESTS');
+   assert.equal(data.recaptcha_enterprise_token,'SIMULATED_ATTESTATION_FOR_TESTS');
    return route.fulfill({status:200,headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':origin},
     body:JSON.stringify({token:'SIMULATED_APP_CHECK_TOKEN_FOR_TESTS',ttl:'3600s'})});
   }
