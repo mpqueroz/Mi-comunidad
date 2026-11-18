@@ -47,18 +47,19 @@ service cloud.firestore {
   match /admins/{uid} { allow read: if owner(uid); allow write: if false; }
   match /anuncios/{id} {
    allow read: if resource.data.aprobado == true || admin() || owner(resource.data.autorUid);
-   allow create: if login() && request.resource.data.keys().hasOnly(['autorUid','autorNombre','autorVerificado','tipo','categoria','titulo','descripcion','region','comuna','contacto','correo','metodoContacto','precio','marca','modelo','anio','tipoInmueble','m2Terreno','m2Construidos','habitaciones','banos','truequeCambio','aprobado','ratingPromedio','ratingCount','ratingSuma','fechaCreacion','fotos','estado'])
-    && request.resource.data.autorUid == request.auth.uid
-    && request.resource.data.aprobado == false && validAd(request.resource.data)
-    && request.resource.data.ratingCount == 0 && request.resource.data.ratingSuma == 0 && request.resource.data.ratingPromedio == 0
-    && request.resource.data.autorVerificado == request.auth.token.email_verified
-    && request.resource.data.fechaCreacion == request.time;
-   allow update: if admin() || (owner(resource.data.autorUid) && (
-     (only(['tipo','categoria','titulo','descripcion','region','comuna','contacto','correo','metodoContacto','precio','marca','modelo','anio','tipoInmueble','m2Terreno','m2Construidos','habitaciones','banos','truequeCambio','aprobado','fechaEdicion','fotos']) && request.resource.data.aprobado == false && validAd(request.resource.data) && request.resource.data.fechaEdicion == request.time)
-     || (only(['fechaRenovacion']) && request.resource.data.fechaRenovacion == request.time && (!('fechaRenovacion' in resource.data) || request.time > resource.data.fechaRenovacion + duration.value(24,'h')))
+   // Las publicaciones y ediciones de contenido pasan por guardarAnuncioMC.
+   allow create: if false;
+   allow update: if (admin() && !request.resource.data.keys().hasAny(['contacto','correo','metodoContacto'])) || (owner(resource.data.autorUid) && (
+     (only(['fechaRenovacion']) && request.resource.data.fechaRenovacion == request.time && (!('fechaRenovacion' in resource.data) || request.time > resource.data.fechaRenovacion + duration.value(24,'h')))
      || (only(['estado','fechaEstado']) && request.resource.data.estado in ['disponible','pausado','vendido','intercambiado','finalizado'] && request.resource.data.fechaEstado == request.time)
    ));
    allow delete: if admin() || owner(resource.data.autorUid);
+   match /privado/contacto {
+    allow get: if admin() || owner(get(/databases/$(database)/documents/anuncios/$(id)).data.get('autorUid',''))
+     || (get(/databases/$(database)/documents/anuncios/$(id)).data.aprobado == true
+      && get(/databases/$(database)/documents/anuncios/$(id)).data.get('estado','disponible') == 'disponible');
+    allow list, write: if false;
+   }
    match /reportes/{rid} {
     allow create: if owner(rid) && get(/databases/$(database)/documents/anuncios/$(id)).data.autorUid != request.auth.uid && request.resource.data.keys().hasOnly(['motivo','comentario','autorUid','autorNombre','fecha']) && request.resource.data.autorUid == request.auth.uid && request.resource.data.motivo is string && request.resource.data.comentario is string && request.resource.data.comentario.size() <= 2000 && request.resource.data.fecha == request.time && get(/databases/$(database)/documents/anuncios/$(id)).data.aprobado == true;
     allow read, update, delete: if admin();
