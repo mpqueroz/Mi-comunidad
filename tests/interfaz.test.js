@@ -99,3 +99,39 @@ test('invitados: un fallo del servidor conserva la lista y la revisión visibles
  assert.equal(received.comunidadId,'edificio');assert.equal(received.id,'r');assert.equal(received.revision,3);
  assert.equal(a.run('reservas[0].invitados.length'),0);assert.equal(a.run('reservas[0].revisionInvitados'),4);
 });
+
+test('Guardar conserje valida, envía una sola alta y espera la confirmación', async () => {
+  const a = app();
+  a.run("modalMode = 'conserje'; community.id = 'ensayo';");
+  const messages = [];
+  a.ctx.showToast = message => messages.push(message);
+  a.ctx.renderAdmin = () => {};
+  const button = a.el('modalSaveBtn');
+  button.dataset = {mcClick: JSON.stringify(['saveModal'])};
+  const click = () => a.listeners.click({target: {closest: () => button}});
+  await click();
+  assert.match(messages.pop() || '', /teléfono/);
+  for (const [key, value] of Object.entries({
+    Nombre: 'Ensayo', Rut: '00.000.002-7', Clave: 'ClaveFicticiaDeTest',
+    Telefono: '000000000', Turno: 'Ensayo', Estado: 'En turno', Sueldo: '480000'
+  })) a.el('mConserje' + key).value = value;
+
+  const calls = [];
+  let confirm;
+  a.run('functions').httpsCallable = name => data => {
+    calls.push({name, data});
+    return new Promise(resolve => { confirm = resolve; });
+  };
+  const first = click();
+  await click();
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].name, 'crearCuentaMiComunidad');
+  assert.equal(calls[0].data.rol, 'conserje');
+  assert.equal(button.disabled, true);
+  assert.equal(a.run('modalMode'), 'conserje');
+  confirm({data: {ok: true}});
+  await first;
+  assert.equal(button.disabled, false);
+  assert.equal(a.run('modalMode'), null);
+  assert.match(messages.pop(), /Conserje agregado correctamente/);
+});

@@ -277,7 +277,8 @@ async function mcDespacharEvento(event, tipo){
   } catch (_) { showToast('Esta acción no está disponible.'); return; }
   const [fn, ...args] = action;
   // No deshabilitar inputs durante input/change: preserva foco y selección de archivos.
-  const bloquear = tipo === 'click';
+  // saveModal bloquea su botón al entrar y lo libera al terminar.
+  const bloquear = tipo === 'click' && fn !== 'saveModal';
   if(bloquear){ mcEventosEnCurso.add(b); b.disabled = true; }
   try { await mcAccionesPermitidas[fn](b, event, ...args); }
   catch(e){ console.error(e); showToast(e.message || 'No se pudo completar la acción. Revisa tu conexión.'); }
