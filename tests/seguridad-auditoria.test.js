@@ -14,6 +14,8 @@ beforeEach(async()=>{
   await env.withSecurityRulesDisabled(async ctx=>{
     const db=ctx.firestore();
     await db.doc(base).set({estado:'Activa',nombre:'Datos ficticios'});
+    await db.doc('mi_comunidad_licencias/auditoria').set({estado:'active',paidUntil:require('firebase/firestore').Timestamp.fromMillis(4102444800000)});
+    await db.doc(`${base}/administradores/adm`).set({estado:'Activo'});
     await db.doc(`${base}/residentes/r1`).set({estado:'Activo',depto:'101',nombre:'Prueba'});
     await db.doc(`${base}/conserjes/c1`).set({estado:'Activo',nombre:'Prueba'});
     await db.doc(`${base}/avisos/a1`).set({titulo:'Prueba'});
@@ -89,4 +91,21 @@ test('seguridad: cambio de departamento bloquea token anterior y permite el actu
 });
 test('seguridad: superadmin mantiene acceso al panel de comunidades',async()=>{
  await assertSucceeds(cuenta('super','superadmin',{comunidadId:''}).doc(base).get());
+});
+
+test('seguridad: licencia eliminada bloquea lectura y escritura de todos los roles',async()=>{
+ await env.withSecurityRulesDisabled(ctx=>ctx.firestore().doc('mi_comunidad_licencias/auditoria').delete());
+ for(const [uid,role] of [['adm','admin'],['c1','conserje'],['r1','residente']]){
+  const db=cuenta(uid,role);
+  await assertFails(db.doc(`${base}/avisos/a1`).get());
+  await assertFails(db.collection(`${base}/notificaciones`).add({titulo:'No permitido',depto:'101',paraTodos:false,leidaPor:[],ts:1}));
+ }
+});
+test('seguridad: administrador sin ficha pierde acceso con un token todavía vigente',async()=>{
+ const db=cuenta('adm','admin');
+ await assertSucceeds(db.doc(`${base}/avisos/a1`).get());
+ await env.withSecurityRulesDisabled(ctx=>ctx.firestore().doc(`${base}/administradores/adm`).delete());
+ await assertFails(db.doc(base).get());
+ await assertFails(db.doc(`${base}/avisos/a1`).get());
+ await assertFails(db.collection(`${base}/notificaciones`).add({titulo:'No permitido',depto:null,paraTodos:true,leidaPor:[],ts:1}));
 });

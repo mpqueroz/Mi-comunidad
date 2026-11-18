@@ -8,13 +8,14 @@ const read = p => fs.readFileSync(path.join(__dirname, p), "utf8");
 test("HTML principal íntegro", () => {
   const html = read("../../public/index.html");
   assert.equal(html.split("</html>").length - 1, 1);
-  assert.equal(html.split("function renderComunidades(){").length - 1, 1);
+  assert.ok(html.includes('src="app.js"'));
+  assert.equal(read("../../public/app.js").split("function renderComunidades(){").length - 1, 1);
 });
 
 test("panel comercial conectado", () => {
   const html = read("../../public/index.html");
   const panel = read("../../public/comercial-panel.js");
-  assert.ok(html.includes("comercial: renderPanelComercial"));
+  assert.ok(read("../../public/app.js").includes("comercial: renderPanelComercial"));
   assert.ok(html.includes('src="comercial-panel.js"'));
   assert.ok(panel.includes("async function renderPanelComercial()"));
   assert.ok(panel.includes("historialPagosMiComunidad"));

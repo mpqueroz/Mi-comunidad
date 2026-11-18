@@ -1,6 +1,6 @@
 // Tests de la lectura de cartolas y de la búsqueda de coincidencias de la
 // conciliación bancaria. Toma el bloque de funciones puras directo de
-// index.html (entre los marcadores CONCILIACION-PURAS), así se prueba el
+// app.js (entre los marcadores CONCILIACION-PURAS), así se prueba el
 // mismo código que corre en la app.
 
 const {test} = require("node:test");
@@ -8,7 +8,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const html = fs.readFileSync(path.join(__dirname, "..", "public", "index.html"), "utf8");
+const html = fs.readFileSync(path.join(__dirname, "..", "public", "app.js"), "utf8");
 const bloque = html.split("/* CONCILIACION-PURAS:INICIO */")[1].split("/* CONCILIACION-PURAS:FIN */")[0];
 const C = new Function(bloque + `; return {parsearMontoConc, parsearFechaConc, parsearCSVConc,
   detectarColumnasCartola, interpretarCartola, idMovimientoBancario, deptosEnDescripcion,

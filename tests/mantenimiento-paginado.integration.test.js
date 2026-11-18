@@ -60,3 +60,15 @@ test('vencimientos pagina sin saltarse registros y respeta pagos concurrentes',{
   await actualizarVencimientos(db,'2027-06-01',{log(){},error(){}});
   assert.equal((await suspended.collection('gastosComunes').doc('no-tocar').get()).get('estado'),'Pendiente');
 });
+
+test('vencimientos no procesa una comunidad sin licencia y sí procesa una vigente',{skip:!enabled},async()=>{
+ for(const id of ['ven-sin-licencia','ven-con-licencia']){
+  const base=db.collection('mi_comunidad_comunidades').doc(id);await base.set({estado:'Activa'});
+  await base.collection('gastosComunes').doc('gasto').set({estado:'Pendiente',vencimiento:'2020-01-01'});
+ }
+ await db.collection('mi_comunidad_licencias').doc('ven-con-licencia').set({estado:'active',paidUntil:new Date('2099-01-01')});
+ await actualizarVencimientos(db,'2027-06-01',{log(){},error(){}});
+ const state=async id=>(await db.collection('mi_comunidad_comunidades').doc(id).collection('gastosComunes').doc('gasto').get()).get('estado');
+ assert.equal(await state('ven-sin-licencia'),'Pendiente');
+ assert.equal(await state('ven-con-licencia'),'Atrasado');
+});

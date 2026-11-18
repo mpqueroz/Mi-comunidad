@@ -10,7 +10,10 @@ before(()=>{
  assert.equal(getApp().options.projectId,projectId);db=getFirestore();
 });
 let seq=0;
-async function fixture(){const id='prueba-'+Date.now()+'-'+(++seq);const base=db.collection('mi_comunidad_comunidades').doc(id);await base.set({estado:'Activa',adminNombre:'Administración'});await Promise.all([base.collection('residentes').doc('r1').set({nombre:'Ana',depto:'101',estado:'Activo',restringidos:[]}),base.collection('conserjes').doc('c1').set({nombre:'Conserje Uno',estado:'Activo'}),base.collection('conserjes').doc('c2').set({nombre:'Conserje Dos',estado:'Activo'})]);const call=(name,data,uid='c1',role='conserje')=>api[name].run({auth:{uid,token:{app:'mi_comunidad',role,comunidadId:id,depto:'101'}},data:{comunidadId:id,...data}});return {id,base,call};}
+async function fixture(){const id='prueba-'+Date.now()+'-'+(++seq);const base=db.collection('mi_comunidad_comunidades').doc(id);await base.set({estado:'Activa',adminNombre:'Administración'});
+ await db.collection('mi_comunidad_licencias').doc(id).set({estado:'active',paidUntil:new Date('2099-01-01')});
+ for(const uid of ['adm','adm1','adm2']) await base.collection('administradores').doc(uid).set({estado:'Activo'});
+ await Promise.all([base.collection('residentes').doc('r1').set({nombre:'Ana',depto:'101',estado:'Activo',restringidos:[]}),base.collection('conserjes').doc('c1').set({nombre:'Conserje Uno',estado:'Activo'}),base.collection('conserjes').doc('c2').set({nombre:'Conserje Dos',estado:'Activo'})]);const call=(name,data,uid='c1',role='conserje')=>api[name].run({auth:{uid,token:{app:'mi_comunidad',role,comunidadId:id,depto:'101'}},data:{comunidadId:id,...data}});return {id,base,call};}
 test('Firestore real: dos operadores no toman la misma encomienda',{skip:!enabled},async()=>{const h=await fixture();const p=await h.call('registrarEncomiendaMiComunidad',{titulo:'Caja',depto:'101',ubicacion:'B2'});const r=await Promise.allSettled([h.call('gestionarEncomiendaMiComunidad',{accion:'iniciar',id:p.id}),h.call('gestionarEncomiendaMiComunidad',{accion:'iniciar',id:p.id},'c2')]);assert.equal(r.filter(x=>x.status==='fulfilled').length,1);const ganador=r[0].status==='fulfilled'?'c1':'c2';const token=r.find(x=>x.status==='fulfilled').value.token;await h.call('gestionarEncomiendaMiComunidad',{accion:'confirmar',id:p.id,token,retiradoPor:{nombre:'Ana',relacion:'Titular'}},ganador);assert.equal((await h.base.collection('encomiendas').doc(p.id).get()).data().estado,'Entregado');});
 test('Firestore real: recepción cierra turno anterior y abre otro',{skip:!enabled},async()=>{const h=await fixture();const t=await h.call('gestionarTurnoMiComunidad',{accion:'iniciar'});await h.call('gestionarTurnoMiComunidad',{accion:'entregar',turnoId:t.id,resumen:'Se entrega edificio sin pendientes.'});const n=await h.call('gestionarTurnoMiComunidad',{accion:'recibir',turnoId:t.id},'c2');assert.equal((await h.base.collection('turnos').doc(t.id).get()).data().estado,'Cerrado');assert.equal((await h.base.collection('operacion').doc('turnoActual').get()).data().id,n.id);});
 test('Firestore real: cancelar conserva reserva y elimina su marcador',{skip:!enabled},async()=>{const h=await fixture();await h.base.collection('reservas').doc('r').set({depto:'101',fecha:'2099-01-01',lugar:'Quincho',bloqueId:'b',estado:'Confirmada'});await h.base.collection('bloquesOcupados').doc('2099-01-01_b').set({reservaId:'r'});await h.call('cancelarReservaMiComunidad',{id:'r',motivo:'Cambio de planes'},'r1','residente');assert.equal((await h.base.collection('reservas').doc('r').get()).data().estado,'Cancelada');assert.equal((await h.base.collection('bloquesOcupados').doc('2099-01-01_b').get()).exists,false);});
@@ -95,4 +98,18 @@ test('Firestore real: identidad de residente activo sigue funcionando con SDK mo
  const secreto=await h.base.collection('secretos').doc('r1').get();assert.equal(secreto.exists,true);assert.ok(secreto.get('hash'));
  assert.equal((await h.base.collection('residentes').doc('r1').get()).get('respuestaSecreta'),undefined);
  await h.call('verificarPreguntaSecretaMiComunidad',{uid:'r1',respuesta:'Azul'});
+});
+
+test('Firestore real: invitados concurrentes conservan una lista validada y rechazan una revisión vieja',{skip:!enabled},async()=>{
+ const h=await fixture(),ref=h.base.collection('reservas').doc('invitados');
+ await ref.set({depto:'101',estado:'Confirmada',invitados:[],lugar:'Quincho'});
+ const results=await Promise.allSettled(['Ana','Luis'].map(nombre=>h.call('guardarInvitadosReservaMiComunidad',{id:ref.id,revision:0,invitados:[{nombre,rut:''}]},'r1','residente')));
+ assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
+ assert.equal(results.find(r=>r.status==='rejected').reason.code,'failed-precondition');
+ const saved=(await ref.get()).data();assert.equal(saved.revisionInvitados,1);assert.equal(saved.invitados.length,1);assert.equal(saved.lugar,'Quincho');
+ await assert.rejects(h.call('guardarInvitadosReservaMiComunidad',{id:ref.id,revision:1,invitados:[null]},'r1','residente'),{code:'invalid-argument'});
+ await assert.rejects(h.call('guardarInvitadosReservaMiComunidad',{id:ref.id,revision:1,invitados:[]},'adm','admin'),{code:'permission-denied'});
+ await ref.update({depto:'999'});
+ await assert.rejects(h.call('guardarInvitadosReservaMiComunidad',{id:ref.id,revision:1,invitados:[]},'r1','residente'),{code:'permission-denied'});
+ assert.deepEqual((await ref.get()).data().invitados,saved.invitados);
 });

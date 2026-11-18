@@ -14,6 +14,8 @@ before(async()=>{
   for(const c of ['torre-a','torre-b']){
    const store=ctx.firestore();
    await store.doc(base(c)).set({estado:'Activa',name:c});
+   await store.doc(`mi_comunidad_licencias/${c}`).set({estado:'active',paidUntil:require('firebase/firestore').Timestamp.fromMillis(4102444800000)});
+   await store.doc(`${base(c)}/administradores/${c}-admin`).set({estado:'Activo'});
    await store.doc(`${base(c)}/residentes/${c}-residente`).set({estado:'Activo',depto:'101'});
    await store.doc(`${base(c)}/conserjes/${c}-conserje`).set({estado:'Activo',sueldo:700000});
    for(const m of modules)await store.doc(`${base(c)}/${m}/igual-id`).set({depto:'101',periodo:'2026-10',estado:'Pendiente',edificio:c,monto:1000});

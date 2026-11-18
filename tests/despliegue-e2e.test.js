@@ -42,8 +42,9 @@ test('E2E: handlers checkout y webhook del candidato mutan solo el namespace de 
 test('E2E: claims productivos, entorno productivo, importe y webhook ajenos se rechazan antes del POST',async()=>{
  for(const change of [h=>h.auth.token.app='mi_comunidad',h=>h.secrets.MC_MP_ENVIRONMENT_E2E='production',h=>h.secrets.MC_PLAN_ANUAL_CLP_E2E='800000',h=>h.secrets.MC_MP_WEBHOOK_URL_E2E=WEBHOOK.replace('MiComunidadE2E','MiComunidad')]){
   const h=isolatedHarness();change(h);
+  const before=JSON.stringify([...h.docs]);
   await assert.rejects(h.create());assert.equal(h.state.postCount,0);
-  assert.equal(h.docs.size,2);
+  assert.equal(JSON.stringify([...h.docs]),before);
  }
 });
 test('E2E: webhook no consulta API si el entorno secreto dejó de ser test',async()=>{

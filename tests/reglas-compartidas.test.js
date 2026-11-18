@@ -18,3 +18,11 @@ test('despliegue: bloquea estructuras desconocidas en lugar de sobrescribir otra
  assert.throws(()=>merge(local.replace('function mcRol()', 'function funcionAjena()'),local));
  assert.equal(merge(local,local),local);
 });
+
+test('auditoría: manifiesto demuestra conservación de reglas ajenas sin imprimir su contenido',()=>{
+ const {preparationReport}=require('../scripts/preparar-reglas-compartidas.cjs');
+ const live=local.replace('match /anuncios/{id} {','match /anuncios/{id} {\n // NO-IMPRIMIR\n').replace('function mcRol()','function mcRol()');
+ const result=preparationReport(live,local);
+ assert.equal(result.remoteReadOnly,true);assert.equal(result.otherApplicationsPreserved,true);assert.equal(result.miComunidadMatchesRepository,true);
+ assert.equal(result.deployedSha256,result.preparedSha256);assert.notEqual(result.repositorySha256,result.preparedSha256);assert.ok(!JSON.stringify(result).includes('NO-IMPRIMIR'));
+});

@@ -88,3 +88,50 @@ test('despliegue operativo incluye conciliación transaccional y smoke sin sesi�
   assert.ok(workflow.includes('functions:'+name));assert.ok(smoke.includes("'"+name+"'"));
  }
 });
+
+test('publicación exige inventario limpio antes de desplegar funciones, reglas o hosting',()=>{
+ const workflow=fs.readFileSync(path.join(root,'.github/workflows/firebase.yml'),'utf8');
+ const deploy=workflow.slice(workflow.indexOf('  deploy:\n'),workflow.indexOf('  public-smoke:\n'));
+ const gate=deploy.indexOf('node scripts/auditar-accesos.cjs --project mercado-ciudadano --require-clean');
+ assert.ok(gate>deploy.indexOf('google-github-actions/auth@'));
+ assert.ok(gate<deploy.indexOf('node scripts/preparar-reglas-compartidas.cjs'));
+ assert.ok(gate<deploy.indexOf('node scripts/firebase-cli.cjs deploy'));
+});
+
+test('auditoría de reglas reales nunca despliega y retira ADC antes del emulador',()=>{
+ const workflow=fs.readFileSync(path.join(root,'.github/workflows/firebase.yml'),'utf8');
+ const job=workflow.split('  audit-shared-rules:')[1];assert.ok(job);
+ assert.ok(job.includes("github.event_name == 'workflow_dispatch'"));assert.ok(job.includes("github.ref == 'refs/heads/security/auditoria-blindaje-2026-11'"));
+ assert.ok(!job.includes(' deploy '));
+ const prepare=job.indexOf('run: node scripts/preparar-reglas-compartidas.cjs');
+ const remove=job.indexOf('rm -- "$GOOGLE_APPLICATION_CREDENTIALS"');
+ const tests=job.indexOf('run: npm test');
+ const confirm=job.indexOf('--assert-unchanged');
+ assert.ok(prepare<remove&&remove<tests&&tests<confirm);
+ assert.ok(job.includes("GOOGLE_APPLICATION_CREDENTIALS: ''"));
+ assert.ok(!job.includes('upload-artifact'));
+});
+
+test('reparación de fichas requiere rama exacta, pruebas, aprobación, códigos y pausa de cambios',()=>{
+ const source=require('node:fs').readFileSync(require('node:path').join(__dirname,'../.github/workflows/firebase.yml'),'utf8');
+ const job=source.slice(source.indexOf('  repair-admin-profiles:'),source.indexOf('  enable-audit-apis:'));
+ for(const guard of ["github.event_name == 'workflow_dispatch'","github.ref == 'refs/heads/security/auditoria-blindaje-2026-11'","github.repository == 'mpqueroz/Mi-comunidad'",'inputs.repair_admin_profiles == true','inputs.admin_changes_paused == true',"inputs.profile_repair_codes != ''",'needs: tests'])assert.ok(job.includes(guard),guard);
+ assert.ok(job.indexOf('npm ci --ignore-scripts')<job.indexOf('credentials_json:'));
+ assert.ok(job.includes('PROFILE_REPAIR_CODES: ${{ inputs.profile_repair_codes }}'));
+ assert.ok(!job.match(/run:.*\$\{\{.*profile_repair_codes/));
+ assert.ok(job.includes('node scripts/auditar-accesos.cjs --project mercado-ciudadano --require-clean'));
+ assert.ok(!job.includes('firebase deploy'));
+});
+
+test('verificación del principal solo usa inventario de lectura y huella por variable de entorno',()=>{
+ const workflow=fs.readFileSync(path.join(root,'.github/workflows/firebase.yml'),'utf8');
+ const job=workflow.split('  audit-access:')[1].split('  audit-shared-rules:')[0];
+ assert.ok(job.includes("github.event_name == 'workflow_dispatch'"));
+ assert.ok(job.includes("github.ref == 'refs/heads/security/auditoria-blindaje-2026-11'"));
+ assert.ok(job.includes("if: inputs.principal_email_sha256 != ''"));
+ assert.ok(job.includes('PRINCIPAL_EMAIL_SHA256: ${{ inputs.principal_email_sha256 }}'));
+ assert.ok(job.includes('run: node scripts/verificar-admin-principal.cjs --project mercado-ciudadano'));
+ assert.ok(!job.includes(' deploy '));assert.ok(!job.includes('--apply'));
+ const verifier=fs.readFileSync(path.join(root,'scripts/verificar-admin-principal.cjs'),'utf8');
+ for(const forbidden of ['updateUser(', 'setCustomUserClaims(', 'runTransaction(', '.create(', '.set(', '.delete('])assert.ok(!verifier.includes(forbidden));
+});

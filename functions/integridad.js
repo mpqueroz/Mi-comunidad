@@ -48,8 +48,8 @@ module.exports = function integridad(admin, onCall, HttpsError) {
     const community = await tx.get(base);
     const license = await tx.get(db.collection('mi_comunidad_licencias').doc(comunidadId));
     const account = await tx.get(base.collection(token.role === 'admin' ? 'administradores' : 'residentes').doc(req.auth.uid));
-    if (!community.exists || community.get('estado') === 'Suspendida' || (license.exists && !evaluateLicense(license.data()).allowed)) fail('failed-precondition','La comunidad o licencia no está activa.');
-    if ((token.role !== 'admin' && !account.exists) || (account.exists && account.get('estado') === 'Inactivo') || (token.role === 'residente' && account.get('depto') !== token.depto)) fail('permission-denied','La cuenta no está habilitada.');
+    if (!community.exists || community.get('estado') === 'Suspendida' || (!license.exists || !evaluateLicense(license.data()).allowed)) fail('failed-precondition','La comunidad o licencia no está activa.');
+    if (!account.exists || (account.exists && account.get('estado') === 'Inactivo') || (token.role === 'residente' && account.get('depto') !== token.depto)) fail('permission-denied','La cuenta no está habilitada.');
     return {base,token,uid:req.auth.uid};
   }
   function ledgerId(direction, tipo, entityId) {

@@ -10,7 +10,12 @@ async function main() {
   assert.match(hosting.headers.get('content-type') || '', /text\/html/);
   console.log('Hosting: HTTP 200');
   if(process.argv.includes('--release')){
-    assert.match(await hosting.text(), /httpsCallable\("generarCobrosMiComunidad"\)/,
+    const html = await hosting.text();
+    assert.match(html, /<script src="app[.]js"><\/script>/, 'Hosting debe cargar la app externa');
+    const app = await fetch('https://mi-comunidad-md.web.app/app.js', {signal: AbortSignal.timeout(30000)});
+    assert.equal(app.status, 200, 'App externa debe responder');
+    assert.match(app.headers.get('content-type') || '', /(?:java|ecma)script/);
+    assert.match(await app.text(), /httpsCallable\("generarCobrosMiComunidad"\)/,
         'Hosting debe servir la nueva generación de cobros');
     assert.match(hosting.headers.get('cache-control') || '', /no-cache/,
         'La portada debe permitir recuperar las actualizaciones');

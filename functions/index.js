@@ -56,6 +56,13 @@ exports.consultarLicenciaMiComunidad = onCall(async (request) => {
   if (!canReadLicense(token, comunidadId)) {
     throw new HttpsError("permission-denied", "No autorizado para consultar esta licencia.");
   }
+  if (token.role === "admin") {
+    const ficha = await getFirestore().collection(COMUNIDADES_COLLECTION).doc(comunidadId)
+        .collection("administradores").doc(request.auth.uid).get();
+    if (!ficha.exists || ficha.get("estado") === "Inactivo") {
+      throw new HttpsError("permission-denied", "La cuenta de administración no está habilitada.");
+    }
+  }
   const licenciaSnap = await getFirestore().collection(LICENCIAS_COLLECTION).doc(comunidadId).get();
   if (!licenciaSnap.exists) return {comunidadId, estado: "sin_licencia", acceso: false};
   const licencia = licenciaSnap.data();
@@ -210,11 +217,9 @@ exports.crearCuentaMiComunidad = onCall(async (request) => {
   await exigirCuentaActiva(request, comunidadId);
 
   const licencia = await db.collection(LICENCIAS_COLLECTION).doc(comunidadId).get();
-  if (licencia.exists) {
-    const {evaluateLicense} = require("./licencias");
-    if (!evaluateLicense(licencia.data()).allowed) {
-      throw new HttpsError("failed-precondition", "Licencia no vigente.");
-    }
+  const {evaluateLicense} = require("./licencias");
+  if (!licencia.exists || !evaluateLicense(licencia.data()).allowed) {
+    throw new HttpsError("failed-precondition", "Licencia no vigente.");
   }
 
   const email = rutToEmail(rut);
@@ -820,15 +825,13 @@ async function exigirCuentaActiva(request, comunidadId) {
     throw new HttpsError("failed-precondition", "Esta comunidad no está activa.");
   }
   const licencia = await getFirestore().collection(LICENCIAS_COLLECTION).doc(comunidadId).get();
-  if (licencia.exists && !require("./licencias").evaluateLicense(licencia.data()).allowed) {
+  if (!licencia.exists || !require("./licencias").evaluateLicense(licencia.data()).allowed) {
     throw new HttpsError("failed-precondition", "Licencia no vigente.");
   }
   if (token.role === "admin") {
-    // Lista de bajas: una cuenta de administración sin documento sigue
-    // habilitada (comunidades creadas antes de que existiera), pero una
-    // marcada "Inactivo" por el superadmin queda cortada al instante.
+    // La ficha debe existir: borrar o perder la ficha no conserva permisos.
     const adminDoc = await comunidadRef.collection("administradores").doc(request.auth.uid).get();
-    if (adminDoc.exists && adminDoc.get("estado") === "Inactivo") {
+    if (!adminDoc.exists || adminDoc.get("estado") === "Inactivo") {
       throw new HttpsError("permission-denied", "La cuenta de administración fue desactivada.");
     }
     return;

@@ -10,7 +10,10 @@ before(()=>{
 });
 async function fixture(){
  const id='integridad-'+Date.now()+'-'+(++seq),base=db.collection('mi_comunidad_comunidades').doc(id);
- await base.set({estado:'Activa'});await base.collection('residentes').doc('res').set({estado:'Activo',depto:'101',familiares:[],restringidos:[]});
+ await base.set({estado:'Activa'});
+ await db.collection('mi_comunidad_licencias').doc(id).set({estado:'active',paidUntil:new Date('2099-01-01')});
+ for(const uid of ['adm','adm1','adm2']) await base.collection('administradores').doc(uid).set({estado:'Activo'});
+ await base.collection('residentes').doc('res').set({estado:'Activo',depto:'101',familiares:[],restringidos:[]});
  const call=(name,data,uid='adm',role='admin')=>api[name].run({auth:{uid,token:{app:'mi_comunidad',role,comunidadId:id,depto:'101'}},data:{comunidadId:id,...data}});
  return {base,call};
 }

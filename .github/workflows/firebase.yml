@@ -29,6 +29,32 @@ on:
       - "scripts/**"
       - ".github/workflows/firebase.yml"
   workflow_dispatch:
+    inputs:
+      principal_email_sha256:
+        description: 'Verificar SOLO LECTURA al administrador principal mediante SHA256 de correo normalizado'
+        type: string
+        required: false
+        default: ''
+      enable_audit_apis:
+        description: 'Habilitar SOLO App Check API y API Keys API (autorización expresa)'
+        type: boolean
+        required: false
+        default: false
+      repair_admin_profiles:
+        description: 'Crear SOLO fichas ausentes de cuentas verificadas y autorizadas'
+        type: boolean
+        required: false
+        default: false
+      profile_repair_codes:
+        description: 'Uno o dos códigos SHA256 de la revisión privada (sin nombres ni UID)'
+        type: string
+        required: false
+        default: ''
+      admin_changes_paused:
+        description: 'Confirmo que no se cambiarán cuentas desde otros paneles durante la reparación'
+        type: boolean
+        required: false
+        default: false
 
 # Mínimo privilegio para el token de GitHub: solo leer el repositorio.
 permissions:
@@ -42,6 +68,7 @@ concurrency:
 jobs:
   tests:
     name: Tests de reglas
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -49,7 +76,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 22
+          node-version: 24
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
@@ -57,16 +84,35 @@ jobs:
       - name: Instalar dependencias
         working-directory: tests
         run: npm ci
+      - name: Usar el runtime de Cloud Functions para sus pruebas
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
       - name: Revisar que las functions cargan
         working-directory: functions
         run: |
           npm ci
           node -e 'require("./index.js")'
           npm test
-          npm audit --omit=dev --audit-level=moderate
+          npm audit --omit=dev --audit-level=low
+      - name: Volver al runtime compatible con las herramientas de emulador
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
       - name: Correr tests en el emulador
         working-directory: tests
         run: npm test
+      - name: Comprobar acceso con cuentas de ensayo y licencia vencida
+        run: >-
+          node scripts/firebase-cli.cjs emulators:exec --only firestore,auth
+          --project demo-mi-comunidad --config firebase.test.json
+          "node qa/acceso-con-cuentas.cjs"
+      - name: Instalar Chromium para comprobar CSP en navegador aislado
+        working-directory: tests
+        run: npx --no-install playwright install --with-deps --only-shell chromium
+      - name: Probar interfaz y bloqueo de scripts inline sin Firebase
+        working-directory: tests
+        run: npm run test:browser
       - name: Auditar herramientas sin excepciones de severidad
         working-directory: tests
         run: npm audit --audit-level=moderate
@@ -83,7 +129,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 22
+          node-version: 24
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
@@ -101,6 +147,8 @@ jobs:
       - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - name: Bloquear publicación si faltan licencias o fichas de acceso
+        run: node scripts/auditar-accesos.cjs --project mercado-ciudadano --require-clean
       # Muestra solo el correo de la cuenta de servicio (no la llave), para
       # saber con qué cuenta se autentica el deploy si falla un permiso.
       - name: Cuenta de servicio en uso
@@ -122,7 +170,7 @@ jobs:
       - name: Desplegar funciones de Mi Comunidad
         run: >
           node scripts/firebase-cli.cjs deploy --non-interactive
-          --only "functions:generarCobrosMiComunidad,functions:crearCuentaMiComunidad,functions:cambiarEstadoCuentaMiComunidad,functions:registrarPagoOperativoMiComunidad,functions:gestionarIntegrantesFichaMiComunidad,functions:confirmarIngresoComunidad,functions:conciliarMovimientoComunidad,functions:desvincularConciliacionComunidad,functions:restablecerClaveMiComunidad,functions:crearComunidadMiComunidad,functions:crearReservaMiComunidad,functions:directorioConserjeriaMiComunidad,functions:cambiarEstadoAdminMiComunidad,functions:crearAdministradorMiComunidad,functions:definirPreguntaSecretaMiComunidad,functions:verificarPreguntaSecretaMiComunidad,functions:migrarRespuestasSecretasMiComunidad,functions:actualizarVencimientosMiComunidad,functions:depurarRegistrosMiComunidad,functions:resumenComercialMiComunidad,functions:historialPagosMiComunidad,functions:rehabilitarLicenciaMiComunidad,functions:configurarPagosMiComunidad,functions:guardarPlanMantencionMiComunidad,functions:registrarRevisionMantencionMiComunidad,functions:gestionarAvisoMiComunidad,functions:confirmarAvisoMiComunidad,functions:gestionarVisitaMiComunidad,functions:cancelarReservaMiComunidad,functions:registrarEncomiendaMiComunidad,functions:gestionarTurnoMiComunidad,functions:gestionarEncomiendaMiComunidad,functions:verificarFichaMiComunidad"
+          --only "functions:generarCobrosMiComunidad,functions:crearCuentaMiComunidad,functions:cambiarEstadoCuentaMiComunidad,functions:registrarPagoOperativoMiComunidad,functions:gestionarIntegrantesFichaMiComunidad,functions:confirmarIngresoComunidad,functions:conciliarMovimientoComunidad,functions:desvincularConciliacionComunidad,functions:restablecerClaveMiComunidad,functions:crearComunidadMiComunidad,functions:crearReservaMiComunidad,functions:directorioConserjeriaMiComunidad,functions:cambiarEstadoAdminMiComunidad,functions:crearAdministradorMiComunidad,functions:definirPreguntaSecretaMiComunidad,functions:verificarPreguntaSecretaMiComunidad,functions:migrarRespuestasSecretasMiComunidad,functions:actualizarVencimientosMiComunidad,functions:depurarRegistrosMiComunidad,functions:resumenComercialMiComunidad,functions:historialPagosMiComunidad,functions:rehabilitarLicenciaMiComunidad,functions:configurarPagosMiComunidad,functions:guardarPlanMantencionMiComunidad,functions:registrarRevisionMantencionMiComunidad,functions:gestionarAvisoMiComunidad,functions:confirmarAvisoMiComunidad,functions:gestionarVisitaMiComunidad,functions:cancelarReservaMiComunidad,functions:guardarInvitadosReservaMiComunidad,functions:registrarEncomiendaMiComunidad,functions:gestionarTurnoMiComunidad,functions:gestionarEncomiendaMiComunidad,functions:verificarFichaMiComunidad"
       # Firebase no ofrece CAS: coordinar ventana exclusiva entre repositorios.
       - name: Detectar cambios concurrentes de reglas
         run: node scripts/preparar-reglas-compartidas.cjs --assert-unchanged
@@ -153,7 +201,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 22
+          node-version: 24
       - name: Comprobar servicio publicado y solicitudes sin sesión
         run: node scripts/comprobar-despliegue.cjs
 
@@ -169,9 +217,165 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: 22
+          node-version: 24
       - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
       - name: Publicar siete funciones con secretos exclusivos de producción
         run: bash scripts/habilitar-produccion.sh
+
+  audit-access:
+    name: Inventario de accesos (solo lectura)
+    if: >-
+      github.repository == 'mpqueroz/Mi-comunidad' &&
+      ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/security/auditoria-blindaje-2026-11') ||
+       (github.event_name == 'pull_request' && github.event.pull_request.number == 18 &&
+        github.event.pull_request.head.repo.full_name == 'mpqueroz/Mi-comunidad' &&
+        github.event.pull_request.head.ref == 'security/auditoria-blindaje-2026-11'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Instalar SDK sin ejecutar scripts de paquetes
+        working-directory: functions
+        run: npm ci --ignore-scripts
+      - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - name: Consultar configuración efectiva sin claves ni cambios
+        continue-on-error: true
+        run: node scripts/auditar-configuracion.cjs --project mercado-ciudadano
+      - name: Verificar solo el administrador principal sin publicar identidades
+        if: inputs.principal_email_sha256 != ''
+        env:
+          PRINCIPAL_EMAIL_SHA256: ${{ inputs.principal_email_sha256 }}
+        run: node scripts/verificar-admin-principal.cjs --project mercado-ciudadano
+      - name: Inventariar licencias y fichas sin modificar Firebase
+        run: node scripts/auditar-accesos.cjs --project mercado-ciudadano --require-clean
+
+  audit-shared-rules:
+    name: Reglas publicadas combinadas (sin despliegue)
+    if: >-
+      github.repository == 'mpqueroz/Mi-comunidad' &&
+      ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/security/auditoria-blindaje-2026-11') ||
+       (github.event_name == 'pull_request' && github.event.pull_request.number == 18 &&
+        github.event.pull_request.head.repo.full_name == 'mpqueroz/Mi-comunidad' &&
+        github.event.pull_request.head.ref == 'security/auditoria-blindaje-2026-11'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - name: Instalar SDK antes de disponer de ADC
+        working-directory: functions
+        run: npm ci --ignore-scripts
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Instalar herramientas antes de disponer de ADC
+        working-directory: tests
+        run: npm ci --ignore-scripts
+      - name: Verificar proyecto esperado antes de consultar
+        run: node -e 'if(JSON.parse(require("node:fs").readFileSync(".firebaserc","utf8")).projects.default !== "mercado-ciudadano") throw Error("Proyecto inesperado")'
+      - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - name: Leer reglas publicadas y componer únicamente el archivo temporal del runner
+        run: node scripts/preparar-reglas-compartidas.cjs
+      - name: Retirar credencial antes de ejecutar pruebas de emulador
+        run: |
+          test -n "$GOOGLE_APPLICATION_CREDENTIALS"
+          rm -- "$GOOGLE_APPLICATION_CREDENTIALS"
+          test ! -e "$GOOGLE_APPLICATION_CREDENTIALS"
+      - name: Probar composición real con datos ficticios y sin ADC
+        working-directory: tests
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ''
+          CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: ''
+          GOOGLE_GHA_CREDS_PATH: ''
+        run: npm test
+      - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - name: Confirmar que las reglas publicadas no cambiaron durante la prueba
+        run: node scripts/preparar-reglas-compartidas.cjs --assert-unchanged
+
+  repair-admin-profiles:
+    name: Regularizar únicamente fichas verificadas y aprobadas
+    needs: tests
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/security/auditoria-blindaje-2026-11' &&
+      github.repository == 'mpqueroz/Mi-comunidad' &&
+      inputs.repair_admin_profiles == true && inputs.admin_changes_paused == true &&
+      inputs.profile_repair_codes != ''
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - name: Instalar SDK antes de disponer de credenciales
+        working-directory: functions
+        run: npm ci --ignore-scripts
+      - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+        with:
+          credentials_json: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
+      - name: Crear solo fichas ausentes de las identidades aprobadas
+        env:
+          APPROVE_PROFILE_REPAIR: 'true'
+          ADMIN_CHANGES_PAUSED: 'true'
+          PROFILE_REPAIR_CODES: ${{ inputs.profile_repair_codes }}
+        run: node scripts/ejecutar-reparacion-fichas.cjs --project mercado-ciudadano --apply
+      - name: Repetir inventario después del intento de regularización
+        if: always()
+        run: node scripts/auditar-accesos.cjs --project mercado-ciudadano --require-clean
+
+  enable-audit-apis:
+    name: Habilitar dos APIs autorizadas y consultar
+    needs: tests
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/security/auditoria-blindaje-2026-11' && github.repository == 'mpqueroz/Mi-comunidad' && inputs.enable_audit_apis == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - name: Instalar SDK antes de autenticar
+        working-directory: functions
+        run: npm ci --ignore-scripts
+      - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - name: Habilitar exclusivamente las dos APIs aprobadas
+        env:
+          ENABLE_AUDIT_APIS_APPROVED: 'true'
+        run: node scripts/habilitar-apis-auditoria.cjs --project mercado-ciudadano --apply
+      - name: Consultar configuración después del intento de habilitación
+        if: always()
+        run: node scripts/auditar-configuracion.cjs --project mercado-ciudadano

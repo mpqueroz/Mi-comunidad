@@ -1,0 +1,201 @@
+"""Plan privado de SOLO LECTURA. Nunca ejecutar en Actions ni publicar su salida completa."""
+import argparse
+import hashlib
+import getpass
+import json
+import os
+import subprocess
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+
+PROJECT = 'mercado-ciudadano'
+
+
+class SafeDiagnostic(Exception):
+    """Solo códigos predefinidos, nunca mensajes/cuerpos de servicios externos."""
+    def __init__(self, stage, code, http_status=None, reason=None):
+        self.result = {'soloLectura': True, 'fase': stage, 'codigo': code}
+        if http_status is not None:
+            self.result['http'] = http_status
+        if reason is not None:
+            self.result['motivo'] = reason
+        super().__init__(code)
+
+
+def safe_http_reason(error):
+    # Solo códigos conocidos de ErrorInfo; nunca su mensaje, metadata o cuerpo.
+    allowed = {'USER_PROJECT_DENIED', 'USER_PROJECT_MISSING', 'SERVICE_DISABLED',
+               'ACCESS_TOKEN_SCOPE_INSUFFICIENT', 'IAM_PERMISSION_DENIED',
+               'QUOTA_EXCEEDED', 'BILLING_DISABLED', 'CONSUMER_INVALID',
+               'CREDENTIALS_MISSING', 'SECURITY_POLICY_VIOLATED'}
+    try:
+        data = json.loads(error.read(65536))
+        details = data.get('error', {}).get('details', [])
+        if isinstance(details, list):
+            for detail in details:
+                if isinstance(detail, dict) and detail.get('@type') == 'type.googleapis.com/google.rpc.ErrorInfo' and detail.get('reason') in allowed:
+                    return detail['reason']
+    except (ValueError, TypeError, AttributeError, OSError):
+        pass
+    return None
+
+
+def identifier(value):
+    return isinstance(value, str) and 0 < len(value) <= 128 and value not in ['.', '..'] and '/' not in value and not any(ord(c) < 32 or ord(c) == 127 for c in value)
+
+
+def field(document, key):
+    return document.get('fields', {}).get(key, {}).get('stringValue', '')
+
+
+def rut_login_email(value):
+    rut = value.strip().replace('.', '').replace('-', '').lower()
+    if len(rut) < 2 or len(rut) > 9 or not rut[:-1].isdigit() or rut[0] == '0' or rut[-1] not in '0123456789k':
+        raise SafeDiagnostic('identificar_acceso', 'RUT_NO_VALIDO')
+    total = sum(int(digit) * (2 + index % 6) for index, digit in enumerate(reversed(rut[:-1])))
+    remainder = 11 - total % 11
+    expected = '0' if remainder == 11 else 'k' if remainder == 10 else str(remainder)
+    if rut[-1] != expected:
+        raise SafeDiagnostic('identificar_acceso', 'RUT_NO_VALIDO')
+    return rut + '@mi-comunidad.app'
+
+
+def private_plan(read, principal_email=None):
+    if principal_email is not None:
+        if not isinstance(principal_email, str) or len(principal_email) > 254 or principal_email.count('@') != 1 or not all(principal_email.split('@')) or any(c.isspace() for c in principal_email) or any(ord(c) < 32 for c in principal_email):
+            raise SafeDiagnostic('auth_identificar_principal', 'CORREO_NO_VALIDO')
+        principal_email = principal_email.lower()
+    accounts, seen, token = [], set(), None
+    while True:
+        query = {'maxResults': 1000, 'fields': 'users(localId,displayName,disabled,customAttributes),nextPageToken'}
+        if principal_email is not None:
+            query['fields'] = 'users(localId,displayName,email,disabled,customAttributes),nextPageToken'
+        if token:
+            query['nextPageToken'] = token
+        data = read('https://identitytoolkit.googleapis.com/v1/projects/' + PROJECT + '/accounts:batchGet?' + urllib.parse.urlencode(query))
+        accounts.extend(data.get('users', []))
+        token = data.get('nextPageToken')
+        if not token:
+            break
+        if token in seen:
+            raise ValueError('Paginación incompleta.')
+        seen.add(token)
+    if principal_email is not None:
+        accounts = [u for u in accounts if isinstance(u.get('email'), str) and u['email'].lower() == principal_email]
+        if len(accounts) != 1:
+            raise SafeDiagnostic('auth_identificar_principal', 'CUENTA_PRINCIPAL_NO_UNICA')
+        selected = accounts[0]
+        claims = json.loads(selected.get('customAttributes') or '{}')
+        if not isinstance(claims, dict) or claims.get('app') != 'mi_comunidad' or claims.get('role') not in ['admin', 'superadmin'] or selected.get('disabled', False):
+            raise SafeDiagnostic('auth_identificar_principal', 'CUENTA_PRINCIPAL_NO_HABILITADA_O_NO_ADMIN')
+        if claims.get('role') == 'superadmin':
+            return {'soloLectura': True, 'proyecto': PROJECT, 'principalVerificadoPorCorreo': True,
+                    'tipoPrincipal': 'superadmin', 'fichaComunitariaNecesaria': False, 'cuentasSinFicha': []}
+    plans = []
+    for user in accounts:
+        claims = json.loads(user.get('customAttributes') or '{}')
+        if not isinstance(claims, dict):
+            raise ValueError('Claims no verificables.')
+        if claims.get('app') != 'mi_comunidad' or claims.get('role') != 'admin' or user.get('disabled', False):
+            continue
+        uid, community_id = user.get('localId'), claims.get('comunidadId')
+        if not identifier(uid) or not identifier(community_id):
+            raise ValueError('Identidad no verificable.')
+        base = 'https://firestore.googleapis.com/v1/projects/' + PROJECT + '/databases/(default)/documents/mi_comunidad_comunidades/' + urllib.parse.quote(community_id, safe='')
+        profile = read(base + '/administradores/' + urllib.parse.quote(uid, safe='') + '?mask.fieldPaths=estado')
+        if profile is not None:
+            continue
+        query = urllib.parse.urlencode({'mask.fieldPaths': ['nombre', 'adminNombre', 'adminUid', 'estado']}, doseq=True)
+        community = read(base + '?' + query)
+        if community is None:
+            raise ValueError('Comunidad ausente.')
+        owner = field(community, 'adminUid') or None
+        state = {'uid': uid, 'disabled': False, 'app': 'mi_comunidad', 'role': 'admin', 'comunidadId': community_id}
+        evidence = {'projectId': PROJECT, 'expectedAuth': state, 'expectedOwner': owner,
+                    'communityName': field(community, 'nombre'), 'communityState': field(community, 'estado'),
+                    'accountDisplayName': user.get('displayName') or '', 'registeredAdminName': field(community, 'adminNombre')}
+        if principal_email is not None:
+            evidence['principalEmail'] = principal_email
+        digest = hashlib.sha256(json.dumps(evidence, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
+        blocked = (owner is not None and owner != uid) or field(community, 'estado') == 'Suspendida'
+        plans.append({'comunidad': evidence['communityName'], 'comunidadId': community_id, 'uid': uid,
+                      'nombreEnAuth': evidence['accountDisplayName'], 'nombreAdministracionRegistrado': evidence['registeredAdminName'],
+                      'nombrePropuestoFicha': (evidence['accountDisplayName'] or evidence['registeredAdminName']).strip(),
+                      'titularidad': 'coincide' if owner == uid else 'sin propietario registrado' if owner is None else 'propietario distinto',
+                      'bloqueada': blocked, 'codigoConfirmacion': digest})
+    return {'soloLectura': True, 'proyecto': PROJECT, 'cuentasSinFicha': plans,
+            **({'principalVerificadoPorCorreo': True} if principal_email is not None else {})}
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Verificar privadamente fichas administrativas ausentes; no escribe en Firebase.')
+    parser.add_argument('--project', required=True, choices=[PROJECT])
+    parser.add_argument('--diagnostico', action='store_true', help='Mostrar solo conteos y errores seguros, sin identidades.')
+    selector = parser.add_mutually_exclusive_group()
+    selector.add_argument('--correo-principal', help='Verificar únicamente la cuenta administrativa de este correo, sin imprimirlo.')
+    selector.add_argument('--rut-principal', action='store_true', help='Pedir privadamente el RUT de acceso sin eco ni historial; no pide contraseña.')
+    args = parser.parse_args()
+    if os.environ.get('GITHUB_ACTIONS') or os.environ.get('CI'):
+        raise ValueError('La revisión de identidades debe ejecutarse fuera de CI.')
+    principal_email = rut_login_email(getpass.getpass('RUT con el que ingresas a Mi Comunidad (no se mostrará): ')) if args.rut_principal else args.correo_principal
+    try:
+        token = subprocess.check_output(['gcloud', 'auth', 'print-access-token'], text=True, stderr=subprocess.DEVNULL).strip()
+    except (subprocess.SubprocessError, OSError):
+        raise SafeDiagnostic('sesion_gcloud', 'TOKEN_NO_DISPONIBLE') from None
+    if not token:
+        raise SafeDiagnostic('sesion_gcloud', 'TOKEN_VACIO')
+    opener = urllib.request.build_opener(NoRedirect())
+
+    def read(url):
+        parsed = urllib.parse.urlsplit(url)
+        if parsed.scheme != 'https' or parsed.hostname not in ['identitytoolkit.googleapis.com', 'firestore.googleapis.com']:
+            raise ValueError('Destino no permitido.')
+        stage = 'auth_listar_cuentas' if parsed.hostname == 'identitytoolkit.googleapis.com' else 'firestore_leer_ficha' if '/administradores/' in parsed.path else 'firestore_leer_comunidad'
+        req = urllib.request.Request(url, headers={'Authorization': 'Bearer ' + token, 'x-goog-user-project': PROJECT}, method='GET')
+        try:
+            with opener.open(req, timeout=30) as response:
+                try:
+                    return json.load(response)
+                except (ValueError, UnicodeError):
+                    raise SafeDiagnostic(stage, 'RESPUESTA_NO_JSON') from None
+        except urllib.error.HTTPError as error:
+            try:
+                # Solo la ausencia de un documento Firestore es una ausencia válida.
+                if error.code == 404 and parsed.hostname == 'firestore.googleapis.com':
+                    return None
+                raise SafeDiagnostic(stage, 'HTTP_ERROR', error.code, safe_http_reason(error)) from None
+            finally:
+                error.close()
+        except (urllib.error.URLError, OSError):
+            raise SafeDiagnostic(stage, 'CONEXION_NO_COMPLETADA') from None
+
+    result = private_plan(read, principal_email=principal_email)
+    if args.diagnostico:
+        print(json.dumps({'soloLectura': True, 'fase': 'completada', 'codigo': 'OK', 'cuentasSinFicha': len(result['cuentasSinFicha'])}))
+        return
+    print('REVISIÓN PRIVADA: comprueba cada identidad y su comunidad. Comparte solo los códigos de las cuentas que confirmes autorizadas.')
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    print('Este comando no crea fichas ni autoriza automáticamente ninguna reparación.')
+
+
+def cli():
+    try:
+        main()
+    except SafeDiagnostic as error:
+        print(json.dumps(error.result), file=sys.stderr)
+        return 1
+    except (ValueError, KeyError, TypeError, subprocess.SubprocessError, OSError, urllib.error.URLError):
+        print(json.dumps({'soloLectura': True, 'fase': 'validacion_local', 'codigo': 'DATOS_O_ENTORNO_NO_VERIFICABLES'}), file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(cli())

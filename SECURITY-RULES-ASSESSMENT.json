@@ -1,0 +1,12 @@
+{
+  "score": 4,
+  "summary": "Revisión acotada del PR #18, sin aprobación de producción. Los casos de invitados y los tres casos administrativos originalmente señalados se corrigieron y validaron en cfe0f96: 372 pruebas aprobadas y repetición de 237 sobre la composición con reglas publicadas, preservando las otras apps. El resultado no certifica ausencia de vulnerabilidades, equivalencia del código desplegado ni compatibilidad de todos los registros históricos. El inventario adicional de #173 encontró 0 bloques existentes y 0 incompatibles en las cuatro comunidades. Se mantiene 4/5 por el riesgo de acceso de cuentas legítimas pendiente de resolver antes de publicar; no es una puntuación de la seguridad actual de producción.",
+  "findings": [
+    {
+      "check": "Business Logic vs. Rules / Migration compatibility",
+      "severity": "minor",
+      "issue": "Dos cuentas administrativas habilitadas no tienen ficha y una está en una comunidad activa/licenciada. El acceso estricto propuesto la rechazaría; readyForStrictAccess=false impide publicar sin resolverlo. Los casos de validación de invitados, documentos, bloques y escrituras directas de fichas laborales quedaron corregidos en el PR; el inventario de bloques no halló registros existentes que migrar.",
+      "recommendation": "Verificar las cuentas privadamente y crear solo las fichas autorizadas con permiso de escritura, sin modificar licencias ni reactivar cuentas. Repetir el inventario y la composición antes de una publicación autorizada por separado."
+    }
+  ]
+}

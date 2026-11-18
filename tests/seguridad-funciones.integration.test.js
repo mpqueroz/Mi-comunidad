@@ -18,6 +18,9 @@ async function fixture() {
   const id = 'seg-' + Date.now() + '-' + (++seq);
   const base = db.collection('mi_comunidad_comunidades').doc(id);
   await base.set({estado: 'Activa', adminNombre: 'Administración'});
+ await db.collection('mi_comunidad_licencias').doc(id).set({estado:'active',paidUntil:new Date('2099-01-01')});
+ for(const uid of ['adm','adm1','adm2']) await base.collection('administradores').doc(uid).set({estado:'Activo'});
+
   await base.collection('residentes').doc('r1').set({nombre: 'Ana', depto: '101', estado: 'Activo', rut: '111111111', telefono: '+56911111111',
     nombreDueno: 'Dueña', familiares: [{nombre: 'Luis', parentesco: 'Hijo', rut: '222222222'}], restringidos: [{nombre: 'Pedro', rut: '333333333', motivo: 'Orden judicial'}]});
   await base.collection('residentes').doc('r2').set({nombre: 'Berta', depto: '102', estado: 'Activo', rut: '444444444', familiares: [], restringidos: []});
@@ -184,4 +187,14 @@ test('la ficha tolera elementos nulos en sus listas', {skip: !enabled}, async ()
 test('las reservas tienen ventana máxima de 90 días', {skip: !enabled}, async () => {
   const h = await fixture();
   await assert.rejects(h.call('crearReservaMiComunidad', {lugar: 'Quincho', fecha: '2099-01-01', bloqueId: 'b'}, 'r1', 'residente', {depto: '101'}), {code: 'invalid-argument'});
+});
+
+test('identidad: licencia ausente y administrador sin ficha quedan bloqueados en servidor',{skip:!enabled},async()=>{
+ const h=await fixture();const license=db.collection('mi_comunidad_licencias').doc(h.id);
+ await license.delete();
+ await assert.rejects(h.call('directorioConserjeriaMiComunidad',{}),{code:'failed-precondition'});
+ await license.set({estado:'active',paidUntil:new Date('2099-01-01')});
+ await h.base.collection('administradores').doc('adm').delete();
+ await assert.rejects(h.call('verificarFichaMiComunidad',{uid:'r1',motivo:'Verificación de prueba'},'adm','admin'),{code:'permission-denied'});
+ await assert.rejects(h.call('consultarLicenciaMiComunidad',{},'adm','admin'),{code:'permission-denied'});
 });

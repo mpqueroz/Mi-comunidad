@@ -44,7 +44,7 @@ async function actualizarVencimientos(db, hoy, logger = console) {
       try {
         if (c.get("estado") === "Suspendida") continue;
         const license = await db.collection("mi_comunidad_licencias").doc(c.id).get();
-        if (license.exists && !evaluateLicense(license.data()).allowed) continue;
+        if (!license.exists || !evaluateLicense(license.data()).allowed) continue;
         gastos += await marcarVencidos(db, c.ref.collection("gastosComunes").where("estado", "==", "Pendiente"),
             "vencimiento", hoy, "Atrasado", "Pendiente");
         mantenciones += await marcarVencidos(db, c.ref.collection("mantenciones").where("estado", "==", "Programada"),

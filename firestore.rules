@@ -47,18 +47,19 @@ service cloud.firestore {
   match /admins/{uid} { allow read: if owner(uid); allow write: if false; }
   match /anuncios/{id} {
    allow read: if resource.data.aprobado == true || admin() || owner(resource.data.autorUid);
-   allow create: if login() && request.resource.data.keys().hasOnly(['autorUid','autorNombre','autorVerificado','tipo','categoria','titulo','descripcion','region','comuna','contacto','correo','metodoContacto','precio','marca','modelo','anio','tipoInmueble','m2Terreno','m2Construidos','habitaciones','banos','truequeCambio','aprobado','ratingPromedio','ratingCount','ratingSuma','fechaCreacion','fotos','estado'])
-    && request.resource.data.autorUid == request.auth.uid
-    && request.resource.data.aprobado == false && validAd(request.resource.data)
-    && request.resource.data.ratingCount == 0 && request.resource.data.ratingSuma == 0 && request.resource.data.ratingPromedio == 0
-    && request.resource.data.autorVerificado == request.auth.token.email_verified
-    && request.resource.data.fechaCreacion == request.time;
-   allow update: if admin() || (owner(resource.data.autorUid) && (
-     (only(['tipo','categoria','titulo','descripcion','region','comuna','contacto','correo','metodoContacto','precio','marca','modelo','anio','tipoInmueble','m2Terreno','m2Construidos','habitaciones','banos','truequeCambio','aprobado','fechaEdicion','fotos']) && request.resource.data.aprobado == false && validAd(request.resource.data) && request.resource.data.fechaEdicion == request.time)
-     || (only(['fechaRenovacion']) && request.resource.data.fechaRenovacion == request.time && (!('fechaRenovacion' in resource.data) || request.time > resource.data.fechaRenovacion + duration.value(24,'h')))
+   // Las publicaciones y ediciones de contenido pasan por guardarAnuncioMC.
+   allow create: if false;
+   allow update: if (admin() && !request.resource.data.keys().hasAny(['contacto','correo','metodoContacto'])) || (owner(resource.data.autorUid) && (
+     (only(['fechaRenovacion']) && request.resource.data.fechaRenovacion == request.time && (!('fechaRenovacion' in resource.data) || request.time > resource.data.fechaRenovacion + duration.value(24,'h')))
      || (only(['estado','fechaEstado']) && request.resource.data.estado in ['disponible','pausado','vendido','intercambiado','finalizado'] && request.resource.data.fechaEstado == request.time)
    ));
    allow delete: if admin() || owner(resource.data.autorUid);
+   match /privado/contacto {
+    allow get: if admin() || owner(get(/databases/$(database)/documents/anuncios/$(id)).data.get('autorUid',''))
+     || (get(/databases/$(database)/documents/anuncios/$(id)).data.aprobado == true
+      && get(/databases/$(database)/documents/anuncios/$(id)).data.get('estado','disponible') == 'disponible');
+    allow list, write: if false;
+   }
    match /reportes/{rid} {
     allow create: if owner(rid) && get(/databases/$(database)/documents/anuncios/$(id)).data.autorUid != request.auth.uid && request.resource.data.keys().hasOnly(['motivo','comentario','autorUid','autorNombre','fecha']) && request.resource.data.autorUid == request.auth.uid && request.resource.data.motivo is string && request.resource.data.comentario is string && request.resource.data.comentario.size() <= 2000 && request.resource.data.fecha == request.time && get(/databases/$(database)/documents/anuncios/$(id)).data.aprobado == true;
     allow read, update, delete: if admin();
@@ -296,13 +297,12 @@ service cloud.firestore {
 
     // Consultar la ficha en cada solicitud corta el acceso aunque el token
     // de una sesión anterior todavía no haya vencido. No se confía en la UI.
-    // Administración: sin documento en administradores sigue habilitada
-    // (comunidades anteriores a esa colección), pero "Inactivo" la corta.
+    // Toda cuenta requiere ficha existente; migrar fichas heredadas antes de publicar.
     function mcCuentaHabilitada(comunidadId) {
       let residente = /databases/$(database)/documents/mi_comunidad_comunidades/$(comunidadId)/residentes/$(request.auth.uid);
       let conserje = /databases/$(database)/documents/mi_comunidad_comunidades/$(comunidadId)/conserjes/$(request.auth.uid);
       let administrador = /databases/$(database)/documents/mi_comunidad_comunidades/$(comunidadId)/administradores/$(request.auth.uid);
-      return (mcEsAdmin() && (!exists(administrador) || get(administrador).data.get('estado', 'Activo') != 'Inactivo')) ||
+      return (mcEsAdmin() && exists(administrador) && get(administrador).data.get('estado', 'Activo') != 'Inactivo') ||
              (mcEsConserje() && exists(conserje) && get(conserje).data.get('estado', 'Activo') != 'Inactivo') ||
              (mcEsResidente() && exists(residente) && get(residente).data.get('estado', 'Activo') != 'Inactivo' &&
               get(residente).data.get('depto', '') == mcMiDepto());
@@ -321,11 +321,9 @@ service cloud.firestore {
       // la regla completa y bloqueaba TODA la app para ese edificio.
       let comunidad = get(/databases/$(database)/documents/mi_comunidad_comunidades/$(comunidadId)).data;
       let licenciaPath = /databases/$(database)/documents/mi_comunidad_licencias/$(comunidadId);
-      // Compatibilidad: edificios anteriores al sistema de licencias siguen
-      // operando hasta que exista una migración comercial explícita.
-      // Una licencia nueva, en cambio, debe estar vigente en el servidor.
+      // La licencia debe existir y estar vigente. No hay excepción por ausencia.
       return comunidad.get('estado', 'Activa') != "Suspendida" &&
-             (!exists(licenciaPath) ||
+             exists(licenciaPath) && (
               (get(licenciaPath).data.get('estado', '') == 'trial' &&
                get(licenciaPath).data.get('trialEndsAt', timestamp.date(1970, 1, 1)) > request.time) ||
               (get(licenciaPath).data.get('estado', '') in ['active', 'past_due'] &&
@@ -339,6 +337,28 @@ service cloud.firestore {
     // permission-denied genérico durante el login.
     function mcEsDeEstaComunidadActiva(comunidadId) {
       return mcEsDeEstaComunidad(comunidadId) && mcEsComunidadActiva(comunidadId) && mcCuentaHabilitada(comunidadId);
+    }
+
+    // Contratos de las altas de documentos y bloques de la interfaz.
+    // documentos: icon/titulo/descripcion/contenido string y ts epoch en ms.
+    // bloquesReserva: lugar/nombre/horaInicio/horaFin, activo bool y ts epoch.
+    function mcDocumentoValido(d) {
+      return d.keys().hasAll(['icon','titulo','descripcion','contenido','ts']) &&
+        d.keys().hasOnly(['icon','titulo','descripcion','contenido','ts']) &&
+        d.icon is string && d.icon.size() > 0 && d.icon.size() <= 40 &&
+        d.titulo is string && d.titulo.size() > 0 && d.titulo.size() <= 150 &&
+        d.descripcion is string && d.descripcion.size() <= 2000 &&
+        d.contenido is string && d.contenido.size() > 0 && d.contenido.size() <= 50000 &&
+        d.ts is int && d.ts > 0;
+    }
+    function mcBloqueReservaValido(d) {
+      return d.keys().hasAll(['lugar','nombre','horaInicio','horaFin','activo','ts']) &&
+        d.keys().hasOnly(['lugar','nombre','horaInicio','horaFin','activo','ts']) &&
+        d.lugar in ['Quincho','Centro de eventos','Piscina','Gimnasio'] &&
+        d.nombre is string && d.nombre.size() > 0 && d.nombre.size() <= 100 &&
+        d.horaInicio is string && d.horaInicio.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$') &&
+        d.horaFin is string && d.horaFin.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$') &&
+        d.activo is bool && d.ts is int && d.ts > 0;
     }
 
     // Un residente informando un pago: solo puede cambiar "estado" a
@@ -483,7 +503,9 @@ service cloud.firestore {
 
         allow create, delete: if false;
 
-        allow update: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        // Altas y cambios de estado ya usan las callables de cuentas.
+        // No existe una edición laboral directa en la interfaz.
+        allow update: if false;
       }
 
       // ---- Módulos operativos del día a día ----
@@ -594,16 +616,9 @@ service cloud.firestore {
         allow read: if mcEsDeEstaComunidadActiva(comunidadId) &&
                        (mcEsAdmin() || mcEsConserje() || (mcEsResidente() && resource.data.depto == mcMiDepto()));
         allow create: if false;
-        allow update: if mcEsDeEstaComunidadActiva(comunidadId) &&
-                         mcEsResidente() && resource.data.depto == mcMiDepto() &&
-                         request.resource.data.depto == resource.data.depto &&
-                         request.resource.data.lugar == resource.data.lugar &&
-                         request.resource.data.fecha == resource.data.fecha &&
-                         request.resource.data.hora == resource.data.hora &&
-                         request.resource.data.bloqueId == resource.data.bloqueId &&
-                         request.resource.data.estado == resource.data.estado &&
-                         resource.data.estado == "Confirmada" && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["invitados"]) &&
-                         request.resource.data.invitados is list && request.resource.data.invitados.size() <= 100;
+        // guardarInvitadosReservaMiComunidad valida cada invitado y la propiedad
+        // dentro de una transacción; ningún cliente escribe esta lista directamente.
+        allow update: if false;
         allow delete: if false;
       }
 
@@ -623,7 +638,12 @@ service cloud.firestore {
       // responder "¿hay disponible?" sin tener que abrir su perfil).
       match /bloquesReserva/{id} {
         allow read: if mcEsDeEstaComunidadActiva(comunidadId);
-        allow create, update, delete: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin() &&
+          mcBloqueReservaValido(request.resource.data);
+        allow update: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin() &&
+          mcBloqueReservaValido(request.resource.data) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['activo']);
+        allow delete: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
       }
 
       // Gastos comunes - los genera administración; el propio residente
@@ -745,7 +765,9 @@ service cloud.firestore {
       // y descarga.
       match /documentos/{id} {
         allow read: if mcEsDeEstaComunidadActiva(comunidadId) && (mcEsAdmin() || mcEsConserje() || mcEsResidente());
-        allow create, delete: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
+        allow create: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin() &&
+          mcDocumentoValido(request.resource.data);
+        allow delete: if mcEsDeEstaComunidadActiva(comunidadId) && mcEsAdmin();
         allow update: if false;
       }
 

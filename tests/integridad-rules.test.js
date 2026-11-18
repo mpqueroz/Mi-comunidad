@@ -9,6 +9,8 @@ before(async()=>{
  env=await initializeTestEnvironment({projectId:'demo-mi-comunidad-integridad-reglas',firestore:{rules:fs.readFileSync(path.join(__dirname,'../firestore.rules'),'utf8')}});
  await env.withSecurityRulesDisabled(async ctx=>{
   const db=ctx.firestore();await db.doc(base).set({estado:'Activa'});
+  await db.doc('mi_comunidad_licencias/integridad').set({estado:'active',paidUntil:require('firebase/firestore').Timestamp.fromMillis(4102444800000)});
+  await db.doc(base+'/administradores/admin').set({estado:'Activo'});
   await db.doc(base+'/residentes/residente').set({estado:'Activo',depto:'101',familiares:[{nombre:'Existente'}],restringidos:[{nombre:'Restricción existente'}]});
   for(const [col,estado]of [['remuneraciones','Pendiente'],['mantenciones','Programada'],['gastosComunes','Pendiente'],['multas','Pendiente']])await db.doc(`${base}/${col}/uno`).set({estado,monto:40000,depto:'101',periodo:'2026-11'});
  });

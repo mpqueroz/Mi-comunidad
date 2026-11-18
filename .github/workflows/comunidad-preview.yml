@@ -1,0 +1,50 @@
+name: Vista previa de Mi Comunidad
+on:
+  pull_request:
+    paths:
+      - 'public/**'
+      - 'firebase.json'
+      - '.github/workflows/comunidad-preview.yml'
+permissions:
+  contents: read
+concurrency:
+  group: mi-comunidad-preview-18
+  cancel-in-progress: false
+jobs:
+  hosting:
+    if: >-
+      github.repository == 'mpqueroz/Mi-comunidad' &&
+      github.event.pull_request.number == 18 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'security/auditoria-blindaje-2026-11'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Instalar herramientas fijadas
+        working-directory: tests
+        run: npm ci --ignore-scripts
+      - name: Preparar Hosting del cliente
+        run: |
+          node <<'JS'
+          const fs = require('node:fs');
+          const { hosting } = JSON.parse(fs.readFileSync('firebase.json', 'utf8'));
+          if (hosting.site !== 'mi-comunidad-md' || hosting.public !== 'public') {
+            throw new Error('Sitio o directorio inesperado');
+          }
+          fs.writeFileSync('firebase.preview.json', JSON.stringify({ hosting }));
+          JS
+      - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - name: Publicar canal temporal de la aplicación
+        run: >-
+          node scripts/firebase-cli.cjs hosting:channel:deploy revision-app-18
+          --project mercado-ciudadano --config firebase.preview.json
+          --only mi-comunidad-md --expires 1d --no-authorized-domains --non-interactive

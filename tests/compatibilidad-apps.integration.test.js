@@ -17,12 +17,15 @@ beforeEach(async()=>{
   await Promise.all([
    d.doc('admins/moderador').set({activo:true}),
    d.doc('usuarios/autor').set({nombre:'Autor',correo:'privado@example.invalid'}),
+   // Espejo comercial ficticio exigido por las reglas publicadas de Almacén.
+   d.doc('almacen_commercial_access/dueno').set({version:1,storeId:'dueno',status:'active',expiresAt:new Date('2099-01-01')}),
    d.doc('stores/dueno').set({nombre:'Negocio ficticio'}),
    d.doc('stores/dueno/team/cajero').set({role:'vendedor'}),
    d.doc('stores/dueno/settings/general').set({name:'Negocio ficticio',currentCashierName:'Inicial'}),
    d.doc('stores/dueno/products/arroz').set({name:'Arroz',price:1500,cost:1000,stock:10}),
    d.doc('stores/dueno/sales/previa').set({total:1500,cost:1000}),
    d.doc('mi_comunidad_comunidades/edificio-compat').set({name:'Edificio ficticio',estado:'Activa'}),
+   d.doc('mi_comunidad_comunidades/edificio-compat/administradores/admin-edificio').set({estado:'Activo'}),
   ]);
  });
 });
@@ -38,7 +41,9 @@ test('Mercado Ciudadano: perfil privado y edición del titular conservados',asyn
 test('Mercado Ciudadano: publicación, moderación y lectura pública completas',async()=>{
  const author=db('autor'),mod=db('moderador'),publicDb=env.unauthenticatedContext().firestore();
  const ad={autorUid:'autor',autorNombre:'Autor',autorVerificado:true,tipo:'servicio',titulo:'Servicio ficticio',descripcion:'Prueba de compatibilidad',region:'Metropolitana',comuna:'Peñalolén',precio:1000,aprobado:false,ratingCount:0,ratingSuma:0,ratingPromedio:0,fechaCreacion:now()};
- await assertSucceeds(author.doc('anuncios/compat').set(ad));
+ await assertFails(author.doc('anuncios/compat').set(ad));
+ // guardarAnuncioMC escribe el anuncio con el SDK del servidor.
+ await env.withSecurityRulesDisabled(c=>c.firestore().doc('anuncios/compat').set(ad));
  await assertFails(publicDb.doc('anuncios/compat').get());
  await assertFails(author.doc('anuncios/compat').update({aprobado:true}));
  await assertSucceeds(mod.doc('anuncios/compat').update({aprobado:true}));

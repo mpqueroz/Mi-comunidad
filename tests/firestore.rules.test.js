@@ -34,6 +34,8 @@ beforeEach(async () => {
   await env.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
     await db.doc(BASE).set({nombre: "Edificio 1", estado: "Activa"});
+    await db.doc(`mi_comunidad_licencias/${C}`).set({estado:'active',paidUntil:require('firebase/firestore').Timestamp.fromMillis(4102444800000)});
+    await db.doc(`${BASE}/administradores/adm1`).set({estado:'Activo'});
     await db.doc(`${BASE}/conserjes/con1`).set({nombre: "Conserje", estado: "Activo"});
     await db.doc(`${BASE}/residentes/res1`).set({
       depto: "101", nombre: "Ana", rut: "11111111-1", telefono: "", estado: "Activo",
@@ -218,11 +220,12 @@ test("visita anunciada solo con los campos de la app y en estado Pendiente", asy
   await assertFails(residente().collection(`${BASE}/visitasProgramadas`).add({...visita, nombre: "x".repeat(151)}));
 });
 
-test("invitados de una reserva deben ser una lista acotada", async () => {
+test("invitados solo se modifican mediante la operación validada del servidor", async () => {
   await env.withSecurityRulesDisabled(async (ctx) => {
     await ctx.firestore().doc(`${BASE}/reservas/r1`).set({depto: "101", lugar: "Quincho", fecha: "2099-01-01", hora: "10:00 - 14:00", bloqueId: "b1", estado: "Confirmada", invitados: []});
   });
-  await assertSucceeds(residente().doc(`${BASE}/reservas/r1`).update({invitados: [{nombre: "Luis", rut: ""}]}));
+  await assertFails(residente().doc(`${BASE}/reservas/r1`).update({invitados: [{nombre: "Luis", rut: ""}]}));
+  await assertFails(adminDb().doc(`${BASE}/reservas/r1`).update({invitados: []}));
   await assertFails(residente().doc(`${BASE}/reservas/r1`).update({invitados: "texto"}));
   await assertFails(residente().doc(`${BASE}/reservas/r1`).update({invitados: Array(101).fill({nombre: "x", rut: ""})}));
 });
@@ -308,6 +311,8 @@ test('licencia solo es consultable por su admin o superadmin y nadie la modifica
 test('regresión compartida: anuncios públicos y almacén propio mantienen acceso aislado',async()=>{
  await env.withSecurityRulesDisabled(async ctx=>{
   await ctx.firestore().doc('anuncios/publico').set({aprobado:true,autorUid:'vendedor'});
+  // El dueño ficticio también debe tener acceso comercial vigente en el espejo.
+  await ctx.firestore().doc('almacen_commercial_access/dueno').set({version:1,storeId:'dueno',status:'active',expiresAt:new Date('2099-01-01')});
   await ctx.firestore().doc('stores/dueno/products/p1').set({nombre:'Producto',stock:1});
  });
  await assertSucceeds(env.unauthenticatedContext().firestore().doc('anuncios/publico').get());
@@ -327,4 +332,39 @@ test("las notas de soporte quedan fuera del alcance del edificio", async () => {
   await assertFails(notas(conserje()).get());
   await assertFails(notas(adminDb()).get());
   await assertFails(notas(adminDb()).set({notas: "Otra"}));
+});
+
+test('documentos: esquema acotado, solo administración publica y el contenido es inmutable', async()=>{
+ const data={icon:'📄',titulo:'Reglamento',descripcion:'Normas',contenido:'Contenido',ts:Date.now()};
+ const ref=adminDb().collection(`${BASE}/documentos`).doc('schema');
+ await assertSucceeds(ref.set(data));
+ await assertSucceeds(residente().doc(ref.path).get());
+ await assertFails(ref.update({contenido:'Otro'}));
+ await assertFails(residente().collection(`${BASE}/documentos`).add(data));
+ await assertFails(conserje().collection(`${BASE}/documentos`).add(data));
+ for(const patch of [{icon:[]},{icon:'x'.repeat(41)},{titulo:3},{titulo:''},{titulo:'x'.repeat(151)},{descripcion:null},{descripcion:'x'.repeat(2001)},{contenido:''},{contenido:'x'.repeat(50001)},{ts:'hoy'},{extra:true}])
+  await assertFails(adminDb().collection(`${BASE}/documentos`).add({...data,...patch}));
+ const {contenido,...missing}=data;await assertFails(adminDb().collection(`${BASE}/documentos`).add(missing));
+ await assertSucceeds(ref.delete());
+});
+test('bloques: valida altas y actualizaciones, conserva horario y permite activar/desactivar',async()=>{
+ const data={lugar:'Quincho',nombre:'Mañana',horaInicio:'10:00',horaFin:'14:00',activo:true,ts:Date.now()};
+ const ref=adminDb().collection(`${BASE}/bloquesReserva`).doc('schema');
+ await assertSucceeds(ref.set(data));await assertSucceeds(ref.update({activo:false}));
+ await assertSucceeds(residente().doc(ref.path).get());
+ await assertFails(residente().doc(ref.path).update({activo:true}));
+ await assertFails(conserje().collection(`${BASE}/bloquesReserva`).add(data));
+ for(const patch of [{nombre:0},{nombre:''},{nombre:'x'.repeat(101)},{lugar:'Cualquier lugar'},{horaInicio:'25:00'},{horaFin:'12:60'},{activo:'true'},{ts:[]},{extra:true}]){
+  await assertFails(adminDb().collection(`${BASE}/bloquesReserva`).add({...data,...patch}));
+  await assertFails(ref.update(patch));
+ }
+ await assertFails(ref.update({horaInicio:'11:00'}));await assertFails(ref.update({ts:Date.now()+100}));
+ const {horaFin,...missing}=data;await assertFails(adminDb().collection(`${BASE}/bloquesReserva`).add(missing));
+ await assertSucceeds(ref.delete());
+});
+test('ficha laboral: ni administración modifica directamente sueldo, estado o campos arbitrarios',async()=>{
+ for(const data of [{sueldo:1000000},{estado:'Activo'},{nombre:'Otro'},{arbitrario:'x'.repeat(10000)}])
+  await assertFails(adminDb().doc(`${BASE}/conserjes/con1`).update(data));
+ await assertSucceeds(adminDb().doc(`${BASE}/conserjes/con1`).get());
+ await assertSucceeds(conserje().doc(`${BASE}/conserjes/con1`).get());
 });
