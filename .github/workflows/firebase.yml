@@ -102,6 +102,11 @@ jobs:
       - name: Correr tests en el emulador
         working-directory: tests
         run: npm test
+      - name: Comprobar acceso con cuentas de ensayo y licencia vencida
+        run: >-
+          node scripts/firebase-cli.cjs emulators:exec --only firestore,auth
+          --project demo-mi-comunidad --config firebase.test.json
+          "node qa/acceso-con-cuentas.cjs"
       - name: Instalar Chromium para comprobar CSP en navegador aislado
         working-directory: tests
         run: npx --no-install playwright install --with-deps --only-shell chromium
